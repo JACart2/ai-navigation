@@ -7,6 +7,8 @@ from navigation_msgs.msg import VelAngle
 from std_msgs.msg import Int8, Bool, String
 import time
 import math
+
+#Should be fixed when doing the ROS2 port. This should probably be made a launch parameter
 cart_port = '/dev/ttyUSB9' #hardcoded depending on computer
 
 # STATES:
@@ -18,44 +20,62 @@ STOPPED = 2
 class MotorEndpoint(object):
 
     def __init__(self):
+        
+        #Going thru class and grouping everything together that seems related
+
         global cart_port
+
+
         self.current_speed = 0.0
         self.new_vel = True
-        self.debug = False
-        self.stop = False
-        self.gentle_stop = False
-        self.delay_print = 0
-        self.brake = int(0)
-        self.drove_since_braking = True
-        self.cmd_msg = None
-        # Time (seconds) to ramp up to full brakes
-        self.brake_time = 3
-        self.node_rate = 10
-        self.state = STOPPED
-        self.stopping_time = 0
-        self.step_size = 255.0/(self.node_rate*self.brake_time)
-
-        self.heartbeat = b''  # Byte array for reading heartbeat from arduino
-        self.delta_time = 0.0
-        self.prev_time  = 0.0
-        self.first_heartbeat = True
-
-        self.obstacle_distance = -1
-        self.brake_time_used = 0
-        self.comfortable_stop_dist = 4.0
-        # init local values to store & change msg params
         self.vel_curr = 0
         self.vel_curr_cart_units = 0
         self.vel = 0
         self.vel_cart_units = 0
         self.angle = 0
+
+
+        self.debug = False
+
+
+        self.stop = False
+        self.gentle_stop = False
+        self.brake = int(0)
+        self.drove_since_braking = True
+        #brake time is never used
+        self.brake_time = 3
+        self.stopping_time = 0
+        self.step_size = 255.0/(self.node_rate*self.brake_time)
+        self.state = STOPPED
+        self.obstacle_distance = -1
+        self.brake_time_used = 0
+        self.comfortable_stop_dist = 4.0
+        # init local values to store & change msg params
         self.steering_tolerance = 50 # default was 45
+
+        self.delay_print = 0
+        self.cmd_msg = None
+        # Time (seconds) to ramp up to full brakes
+        
+        self.node_rate = 10
+        self.heartbeat = b''  # Byte array for reading heartbeat from arduino
+        self.delta_time = 0.0
+        self.prev_time  = 0.0
+        self.first_heartbeat = True
+
+     
+
+       
+  
         """ Set up the node. """
         rospy.init_node('motor_endpoint')
         rospy.loginfo("Starting motor node!")
         #Connect to arduino for sending speed
         self.serial_connected = True
+
+        #This would be useful for us considering it is about arduino stuff
         try:
+            #Need to find out how to do this serial stuff but I guess its the same for ros2, its just a python thing
             self.arduino_ser = serial.Serial(cart_port, 57600, write_timeout=0, timeout=.01)
         except Exception as e:
             rospy.loginfo("==========================================================================")
@@ -63,6 +83,7 @@ class MotorEndpoint(object):
             rospy.loginfo("==========================================================================")
             rospy.logerr("Motor_endpoint: " + str(e))
             serial_connected = False
+        
 
         rospy.loginfo("Speed serial established")
         """
@@ -75,6 +96,8 @@ class MotorEndpoint(object):
         
         rate = rospy.Rate(self.node_rate)
         
+
+        #This loop might be important for when we actually want to use teleop.
         while not rospy.is_shutdown():
             
             if not self.serial_connected:

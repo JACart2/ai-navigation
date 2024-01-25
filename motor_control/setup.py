@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='student',
     maintainer_email='student@todo.todo',
-    description='TODO: Package description',
+    description='Motor control package that interacts with the arduino board.',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={

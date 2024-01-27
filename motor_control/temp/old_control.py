@@ -76,6 +76,7 @@ class MotorEndpoint(object):
         #This would be useful for us considering it is about arduino stuff
         try:
             #Need to find out how to do this serial stuff but I guess its the same for ros2, its just a python thing
+            #we also need to figure out what 57600 means. I dont really know what paramater that is filling.
             self.arduino_ser = serial.Serial(cart_port, 57600, write_timeout=0, timeout=.01)
         except Exception as e:
             rospy.loginfo("==========================================================================")
@@ -188,8 +189,12 @@ class MotorEndpoint(object):
 
             self.new_vel = False
 
+            # Why was this hard coded this way? What is it even doing
             self.vel_cart_units *= 50       # Rough conversion from m/s to cart controller units
             self.vel_curr_cart_units *= 50  # Rough conversion from m/s to cart controller units
+            
+            #i guess this logic makes sense but also i dont understand what "cart controller units" are
+            #and is it possible to get a better estimate?
             if self.vel_cart_units > 254:
                 self.vel_cart_units = 254
             if self.vel_cart_units < -254:

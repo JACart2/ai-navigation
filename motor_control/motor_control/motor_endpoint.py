@@ -52,12 +52,11 @@ class MotorEndpoint(rclpy.node.Node):
             )
             serial_connected = False
 
-        """
-        The main method that actually handles spinning up the node.
-        """
-
 
 def main():
+    """
+    The main method that actually handles spinning up the node."""
+
     rclpy.init()
     node = MotorEndpoint()
 

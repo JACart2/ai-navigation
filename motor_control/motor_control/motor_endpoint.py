@@ -24,15 +24,24 @@ class MotorEndpoint(rclpy.node.Node):
         self.BRAKE_TIME = 3
         self.NODE_RATE = 10
         self.STEERING_TOLERANCE = 50
+        self.serial_connected = False
 
         # We need to look into getting this to be the right value/launch parameter
-        self.cart_port = "/dev/ttyUSB9"
-        self.serial_connected = False
+        # I think we can use this USB port but I wont know til i try
+        # These are launch paramaters for now. They are given default values which are shown in the code blocks below
+        self.declare_parameter("baudrate", "57600")
+        # For this port we can do ls /dev/tty* and find the actual thing
+        self.declare_parameter("arduino_poirt", "/dev/ttyACM0")
+
+        baudrate = self.get_parameter("baudrate").get_parameter_value().integer_value
+        arduino_port = (
+            self.get_parameter("arduino_poirt").get_parameter_value().string_value
+        )
 
         try:
             # Im guessing this 57600 is the "baudrate"... Will need to look into what that actually does
             self.arduino_ser = sr.Serial(
-                self.cart_port, 57600, write_timeout=0, timeout=0.01
+                arduino_port, baudrate=baudrate, write_timeout=0, timeout=0.01
             )
             self.serial_connected = True
             self.get_logger().info(

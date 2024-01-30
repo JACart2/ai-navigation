@@ -1,6 +1,6 @@
 # Motor Control
 
-This package contains 3 folders: motor_control, resource, and test
+This package contains 2 folders: motor_control and resource; along with ROS2 auto-generated files.
 
 ## motor_control
 This contains the motor_endpoint python script that connects the arduino to cooperate with ROS2.

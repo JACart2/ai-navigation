@@ -70,12 +70,11 @@ class MotorEndpoint(rclpy.node.Node):
             VelAngle, "/nav_cmd", self.motion_callback, 10
         )
         self.debug_subscriber = self.create_subscription(
-            Bool, "/realtime_debug_change", self.debug_callback, queue_size=10
+            Bool, "/realtime_debug_change", self.debug_callback, 10
         )
-        self.heart_pub = self.create_publishers(String, "/heartbeat", queue_size=10)
+        self.heart_pub = self.create_publishers(String, "/heartbeat", 10)
 
-        # Figuring out a ros2 equivalent would be useful
-        rate = rospy.Rate(self.node_rate)
+        self.timer = self.create_timer(self.NODE_RATE, self.timer_callback)
 
     """
     Callback for driving commands.

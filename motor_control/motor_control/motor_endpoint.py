@@ -120,7 +120,7 @@ class MotorEndpoint(rclpy.node.Node):
                 self.serial_connected = True
             except Exception as e:
                 self.log_header("MOTOR ENDPOINT: " + str(e))
-                serial_connected = False
+                self.serial_connected = False
                 return
 
     def send_packet(self, throttle, brake, steer_angle):

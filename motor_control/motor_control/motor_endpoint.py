@@ -9,6 +9,7 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 import time
 import serial as sr
 import numpy as np
+import bitstruct
 
 
 # ROS based imports
@@ -106,6 +107,13 @@ class MotorEndpoint(rclpy.node.Node):
             self.stopping_time = time.time()
 
         self.new_vel = True
+
+    def send_packet(self, throttle, brake, steer_angle):
+        data = bytearray(b"\x00" * 5)
+        bitstruct.pack_into(
+            "u8u8u8u8u8", data, 0, 42, 21, abs(throttle), brake, steer_angle + 10
+        )
+        self.arduino_ser.write(data)
 
 
 def main():

@@ -16,6 +16,8 @@ import bitstruct
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
+from navigation_msgs import VelAngle
+from std_msgs import Bool, String
 
 # State constants
 MOVING = 0
@@ -64,13 +66,13 @@ class MotorEndpoint(rclpy.node.Node):
 
         # For now Im just ripping this straight from the old motor endpoint.
         # Need to figure out if we should keep the same subscribers and how to port them if needed
-        self.motion_subscriber = rospy.Subscriber(
-            "/nav_cmd", VelAngle, self.motion_callback, queue_size=10
+        self.motion_subscriber = self.create_subscription(
+            VelAngle, "/nav_cmd", self.motion_callback, 10
         )
-        self.debug_subscriber = rospy.Subscriber(
-            "/realtime_debug_change", Bool, self.debug_callback, queue_size=10
+        self.debug_subscriber = self.create_subscription(
+            Bool, "/realtime_debug_change", self.debug_callback, queue_size=10
         )
-        self.heart_pub = rospy.Publisher("/heartbeat", String, queue_size=10)
+        self.heart_pub = self.create_publishers(String, "/heartbeat", queue_size=10)
 
         # Figuring out a ros2 equivalent would be useful
         rate = rospy.Rate(self.node_rate)

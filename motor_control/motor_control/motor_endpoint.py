@@ -16,8 +16,8 @@ import bitstruct
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from navigation_msgs import VelAngle
-from std_msgs import Bool, String
+from navigation_msgs.msg import VelAngle
+from std_msgs.msg import Bool, String
 
 # State constants
 MOVING = 0

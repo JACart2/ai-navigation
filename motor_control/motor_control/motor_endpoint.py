@@ -76,11 +76,10 @@ class MotorEndpoint(rclpy.node.Node):
 
         self.timer = self.create_timer(self.NODE_RATE, self.timer_callback)
 
-    """
-    Callback for driving commands.
-    """
-
     def motion_callback(self, vel_angle):
+        """
+        Callback for driving commands.
+        """
         self.vel_curr = vel_angle.vel_curr
         self.vel = vel_angle.vel
         self.angle = vel_angle.angle
@@ -108,6 +107,12 @@ class MotorEndpoint(rclpy.node.Node):
             self.stopping_time = time.time()
 
         self.new_vel = True
+
+    def timer_callback(self):
+        """
+        Main loop timer for updating motor's instructions"""
+
+        pass
 
     def send_packet(self, throttle, brake, steer_angle):
         data = bytearray(b"\x00" * 5)

@@ -33,7 +33,7 @@ class MotorEndpoint(rclpy.node.Node):
         #We need to look into getting this to be the right value/launch parameter
         self.cart_port = '/dev/ttyUSB9'
         self.serial_connected = False
-        
+        self.heartbeat = b''
         
         
         
@@ -50,7 +50,13 @@ class MotorEndpoint(rclpy.node.Node):
             self.get_logger().info("==========================================================================")
             serial_connected = False
     
-    
+        # For now Im just ripping this straight from the old motor endpoint.
+        # Need to figure out if we should keep the same subscribers and how to port them if needed
+        self.motion_subscriber = rospy.Subscriber('/nav_cmd', VelAngle, self.motion_callback,
+                                                  queue_size=10)
+        self.debug_subscriber = rospy.Subscriber('/realtime_debug_change', Bool, self.debug_callback, queue_size=10)
+        self.heart_pub = rospy.Publisher('/heartbeat', String, queue_size=10)
+        
     
         """
         The main method that actually handles spinning up the node.

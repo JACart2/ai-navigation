@@ -15,7 +15,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("baudrate", default_value="57600"),
-            DeclareLaunchArgument("arduino_poirt", default_value="dev/ttyUSB9"),
+            DeclareLaunchArgument("arduino_port", default_value="dev/ttyUSB9"),
             Node(
                 package="motor_control",
                 executable="motor_endpoint",
@@ -23,7 +23,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         "baudrate": LaunchConfiguration("baudrate"),
-                        "arduino_poirt": LaunchConfiguration("arduino_poirt"),
+                        "arduino_port": LaunchConfiguration("arduino_port"),
                     }
                 ],
             ),

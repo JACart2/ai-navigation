@@ -33,8 +33,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.BRAKE_TIME = 3
         self.NODE_RATE = 10
         self.STEERING_TOLERANCE = 50
-        self.serial_connected = False
 
+        self.serial_connected = False
         self.heartbeat = b""
 
         # We need to look into getting this to be the right value/launch parameter
@@ -42,26 +42,23 @@ class MotorEndpoint(rclpy.node.Node):
         # These are launch paramaters for now. They are given default values which are shown in the code blocks below
         self.declare_parameter("baudrate", "57600")
         # For this port we can do ls /dev/tty* and find the actual thing
-        self.declare_parameter("arduino_poirt", "/dev/ttyACM0")
+        self.declare_parameter("arduino_port", "/dev/ttyACM0")
 
-        baudrate = self.get_parameter("baudrate").get_parameter_value().integer_value
-        arduino_port = (
-            self.get_parameter("arduino_poirt").get_parameter_value().string_value
+        self.BAUDRATE = (
+            self.get_parameter("baudrate").get_parameter_value().integer_value
+        )
+        self.ARDUINO_PORT = (
+            self.get_parameter("arduino_port").get_parameter_value().string_value
         )
 
         try:
-            # Im guessing this 57600 is the "baudrate"... Will need to look into what that actually does
             self.arduino_ser = sr.Serial(
-                arduino_port, baudrate=baudrate, write_timeout=0, timeout=0.01
+                self.ARDUINO_PORT, baudrate=self.BAUDRATE, write_timeout=0, timeout=0.01
             )
             self.serial_connected = True
-            self.get_logger().info("=" * 70)
-            self.get_logger().info("Connected to arduino")
-            self.get_logger().info("=" * 70)
+            self.log_header("CONNECTED TO ARDUINO")
         except Exception as e:
-            self.get_logger().info("=" * 70)
-            self.get_logger().info("Motor_endpoint: " + str(e))
-            self.get_logger().info("=" * 70)
+            self.log_header("MOTOR ENDPOINT: " + str(e))
             serial_connected = False
 
         # For now Im just ripping this straight from the old motor endpoint.
@@ -111,8 +108,20 @@ class MotorEndpoint(rclpy.node.Node):
     def timer_callback(self):
         """
         Main loop timer for updating motor's instructions"""
-
-        pass
+        if not self.serial_connected:
+            self.log_header("RETRYING SERIAL CONNECTION")
+            try:
+                self.arduino_ser = sr.Serial(
+                    self.ARDUINO_PORT,
+                    baudrate=self.BAUDRATE,
+                    write_timeout=0,
+                    timeout=0.01,
+                )
+                self.serial_connected = True
+            except Exception as e:
+                self.log_header("MOTOR ENDPOINT: " + str(e))
+                serial_connected = False
+                return
 
     def send_packet(self, throttle, brake, steer_angle):
         data = bytearray(b"\x00" * 5)
@@ -120,6 +129,11 @@ class MotorEndpoint(rclpy.node.Node):
             "u8u8u8u8u8", data, 0, 42, 21, abs(throttle), brake, steer_angle + 10
         )
         self.arduino_ser.write(data)
+
+    def log_header(self, msg):
+        self.get_logger().info("=" * 50)
+        self.get_logger().info(f"{msg}")
+        self.get_logger().info("=" * 50)
 
 
 def main():

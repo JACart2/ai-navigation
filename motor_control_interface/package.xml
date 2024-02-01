@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>more_interfaces</name>
+  <name>motor_control_interface</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="lpashurst@hotmail.com">student</maintainer>
@@ -19,5 +19,5 @@
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>
-  
+
 </package>

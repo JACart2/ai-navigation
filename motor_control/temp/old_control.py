@@ -263,6 +263,7 @@ class MotorEndpoint(object):
     
     def pack_send(self, throttle, brake, steer_angle):
         data = bytearray(b'\x00' * 5)
+        
         bitstruct.pack_into('u8u8u8u8u8', data, 0, 42, 21, abs(throttle), brake, steer_angle + 10)
         self.arduino_ser.write(data)
 

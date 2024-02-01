@@ -10,19 +10,20 @@ import time
 import serial as sr
 import numpy as np
 import bitstruct
-
+import math
 
 # ROS based imports
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from navigation_msgs.msg import VelAngle
+from motor_control_interface.msg import VelAngle
 from std_msgs.msg import Bool, String
 
 # State constants
 MOVING = 0
 BRAKING = 1
 STOPPED = 2
+STEERING_CORRECTION = 10
 
 
 class MotorEndpoint(rclpy.node.Node):
@@ -122,11 +123,104 @@ class MotorEndpoint(rclpy.node.Node):
                 self.log_header("MOTOR ENDPOINT: " + str(e))
                 self.serial_connected = False
                 return
+    
+
+    def calculate_endpoint(self):
+        if self.new_vel:
+            #The first time we get a new target speed and angle we must convert it        
+            self.vel_cart_units = self.vel
+            self.vel_curr_cart_units = self.vel_curr
+
+            self.new_vel = False
+
+            # Why was this hard coded this way? What is it even doing
+            self.vel_cart_units *= 50       # Rough conversion from m/s to cart controller units
+            self.vel_curr_cart_units *= 50  # Rough conversion from m/s to cart controller units
+            
+            #i guess this logic makes sense but also i dont understand what "cart controller units" are
+            #and is it possible to get a better estimate?
+            if self.vel_cart_units > 254:
+                self.vel_cart_units = 254
+            if self.vel_cart_units < -254:
+                self.vel_cart_units = -254
+            if self.vel_curr_cart_units > 254:
+                self.vel_curr_cart_units = 254
+            if self.vel_cart_units < 0:
+                rospy.logwarn("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
+        
+        target_speed = int(self.vel_cart_units) #float64
+        current_speed = int(self.vel_curr_cart_units) #float64
+
+        #adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
+        # rospy.loginfo("Angle before adjustment: " + str(self.cmd_msg.angle))
+
+        if(self.angle < -40):
+            self.angle = self.steering_tolerance * -1
+        if(self.angle > 40):
+            self.angle = self.steering_tolerance
+        target_angle = 100 - int(( (self.angle + self.steering_tolerance) / 90 ) * 100)
+        
+        #if debug printing is requested print speed and angle info
+        if self.debug:
+            self.delay_print -= 1
+            if self.delay_print <= 0:
+                self.delay_print = 5
+                rospy.loginfo("Endpoint Angle: " + str(target_angle))
+                rospy.loginfo("Endpoint Speed: " + str(target_speed))
+
+        if self.state == STOPPED:
+            self.brake = 0
+            target_speed = 0
+        elif self.state == BRAKING:
+            if self.obstacle_distance > 0:
+                # there exists an obstacle in the cart's path we need to stop for
+               
+                self.brake_time_used += (1.0/self.node_rate) # 1 sec / rate per sec (10)
+                obstacle_brake_time = self.obstacle_distance/self.vel_curr - (1.0/self.node_rate) # we decrease by one node rate initially to account for rounding
+                
+                y = (0.1) * ((2550) ** (self.brake_time_used/obstacle_brake_time))
+
+                if (y >= 255):
+                    self.full_stop_count += 1
+
+                self.brake = float(min(255, math.ceil(y)))
+            else:
+                # comfortable stop, no obstacle/deadline given
+
+                self.brake_time_used += (1.0/self.node_rate) # 1 sec / rate per sec (10)
+                brake_time = self.comfortable_stop_dist - (1.0/self.node_rate) # we decrease by one node rate initially to account for rounding
+                
+                y = (0.1) * ((2550) ** (self.brake_time_used/brake_time))
+
+                if (y >= 255):
+                    self.full_stop_count += 1
+
+                self.brake = float(min(255, math.ceil(y)))
+            if self.brake >= 255 and self.full_stop_count > 10:  # We have reached maximum braking!
+                self.state = STOPPED
+                # reset brake time used
+                self.brake_time_used = 0
+                self.full_stop_count = 0
+            target_speed = 0
+
+        self.pack_send(target_speed, int(self.brake), target_angle)
+    
 
     def send_packet(self, throttle, brake, steer_angle):
+        """This method is used to send instructions to the arduino that was connected in init.
+
+        Args:
+            throttle (_type_): _description_
+            brake (_type_): _description_
+            steer_angle (_type_): _description_
+        """
+        
+        # This is a buffer used in pack_into essentially making 5 empty bytes
         data = bytearray(b"\x00" * 5)
+        
+        # We are assuming 42 21 is the magic number for the arduino
         bitstruct.pack_into(
-            "u8u8u8u8u8", data, 0, 42, 21, abs(throttle), brake, steer_angle + 10
+            "u8u8u8u8u8", data, 0, 42, 21, abs(throttle), brake, steer_angle + STEERING_CORRECTION
         )
         self.arduino_ser.write(data)
 

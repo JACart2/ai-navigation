@@ -1,0 +1,17 @@
+#Test script for teleop
+#Sends specific messages to cart in order to pass the following tests
+
+#Steering points straight
+#Cart moves forward for (2s/6m)                           # FORWARD/BRAKE
+#Cart brakes then stops
+
+#Cart moves backward for (2s/6m)                          # BACKWARD/BRAKE
+#Cart brakes then stops
+
+#Cart turns wheels all the way right
+#Cart turns wheels back straight
+#Cart turns wheels all the way left                       # STEERING
+#Cart turns wheels straight
+
+#Cart goes straight and turns wheels 30ish degrees right
+#and cart goes forward for (4s/12m) then brakes.          # INTEGRATES ALL OF THEM

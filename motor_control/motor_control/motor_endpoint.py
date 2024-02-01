@@ -27,7 +27,7 @@ STOPPED = 2
 
 class MotorEndpoint(rclpy.node.Node):
     def __init__(self):
-        super().__init__("motor_node")
+        super().__init__("motor_endpoint")
 
         # constants but prolly should make these as launch paramaters
         self.BRAKE_TIME = 3

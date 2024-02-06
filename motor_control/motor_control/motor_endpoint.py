@@ -16,7 +16,7 @@ import math
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from motor_control_interface.msg import vel_curr, vel_angle_planned
+from motor_control_interface.msg import VelCurr, VelAnglePlanned
 from std_msgs.msg import Bool, String
 
 # State constants
@@ -78,15 +78,15 @@ class MotorEndpoint(rclpy.node.Node):
         #     Bool, "/realtime_debug_change", self.debug_callback, 10
         # )
         
-        self.curr_motion_subscriber = self.create_subscription(
-            vel_curr, "/nav_cmd", self.vel_curr_callback, 10
-        )
+        # self.curr_motion_subscriber = self.create_subscription(
+        #     VelCurr, "/nav_cmd", self.vel_curr_callback, 10
+        # )
         
         self.planned_motion_subscriber = self.create_subscription(
-            vel_angle_planned, "/nav_cmd", self.vel_angle_planned_callback, 10
+            VelAnglePlanned, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
         
-        self.heart_pub = self.create_publishers(String, "/heartbeat", 10)
+        self.heart_pub = self.create_publisher(String, "/heartbeat", 10)
 
         self.timer = self.create_timer(self.NODE_RATE, self.timer_callback)
         
@@ -96,6 +96,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.vel_planned = planned_vel_angle.vel_planned
         self.angle_planned = planned_vel_angle.angle_planned
         
+        self.log_header(self.angle_planned)
 
         if self.vel_planned < 0:
             # indicates an obstacle
@@ -261,7 +262,7 @@ class MotorEndpoint(rclpy.node.Node):
         
         # This is a buffer used in pack_into essentially making 5 empty bytes
         data = bytearray(b"\x00" * 5)
-        
+        self.log_header(steer_angle)
         # We are assuming 42 21 is the magic number for the arduino
         bitstruct.pack_into(
             "u8u8u8u8u8", data, 0, 42, 21, abs(throttle), brake, steer_angle + STEERING_CORRECTION

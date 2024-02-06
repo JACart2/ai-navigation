@@ -8,3 +8,5 @@ This contains the launch file.
 This contains the motor_endpoint python script that connects the arduino to cooperate with ROS2.
 ## resource
 This contains the old scripts from Jacart1 and other resources used to transition into ROS2.
+
+##### To find the TTY* port that Arduino uses, run "udevadm monitor -u" before plugging it in, then it should give the information you need.

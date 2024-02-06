@@ -16,7 +16,7 @@ import math
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from motor_control_interface.msg import VelAngle
+from motor_control_interface.msg import vel_curr, vel_angle_planned
 from std_msgs.msg import Bool, String
 
 # State constants
@@ -34,7 +34,13 @@ class MotorEndpoint(rclpy.node.Node):
         self.BRAKE_TIME = 3
         self.NODE_RATE = 10
         self.STEERING_TOLERANCE = 50
-
+        
+        
+        self.state = STOPPED
+        self.obstacle_distance = -1
+        self.brake_time_used = 0
+        
+        
         self.serial_connected = False
         self.heartbeat = b""
 
@@ -64,28 +70,37 @@ class MotorEndpoint(rclpy.node.Node):
 
         # For now Im just ripping this straight from the old motor endpoint.
         # Need to figure out if we should keep the same subscribers and how to port them if needed
-        self.motion_subscriber = self.create_subscription(
-            VelAngle, "/nav_cmd", self.motion_callback, 10
+        
+        
+        
+        
+                #           self.debug_subscriber = self.create_subscription(
+        #     Bool, "/realtime_debug_change", self.debug_callback, 10
+        # )
+        
+        self.curr_motion_subscriber = self.create_subscription(
+            vel_curr, "/nav_cmd", self.vel_curr_callback, 10
         )
-        self.debug_subscriber = self.create_subscription(
-            Bool, "/realtime_debug_change", self.debug_callback, 10
+        
+        self.planned_motion_subscriber = self.create_subscription(
+            vel_angle_planned, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
+        
         self.heart_pub = self.create_publishers(String, "/heartbeat", 10)
 
         self.timer = self.create_timer(self.NODE_RATE, self.timer_callback)
+        
+    
+    def vel_angle_planned_callback(self, planned_vel_angle):
+        
+        self.vel_planned = planned_vel_angle.vel_planned
+        self.angle_planned = planned_vel_angle.angle_planned
+        
 
-    def motion_callback(self, vel_angle):
-        """
-        Callback for driving commands.
-        """
-        self.vel_curr = vel_angle.vel_curr
-        self.vel = vel_angle.vel
-        self.angle = vel_angle.angle
-
-        if self.vel < 0:
+        if self.vel_planned < 0:
             # indicates an obstacle
-            self.obstacle_distance = abs(self.vel)
-            self.vel = 0
+            self.obstacle_distance = abs(self.vel_planned)
+            self.vel_planned = 0
         else:
             # reset obstacle distance and brake time
             self.obstacle_distance = -1
@@ -93,18 +108,49 @@ class MotorEndpoint(rclpy.node.Node):
             self.full_stop_count = 0
 
         if (
-            self.vel > 0
+            self.vel_planned > 0
             and (self.state == STOPPED or self.state == BRAKING)
             and (time.time() - self.stopping_time) > 10
         ):
             self.state = MOVING
             self.brake = 0  # take the foot off the brake
-        elif self.state == MOVING and self.vel <= 0:  # Brakes are hit
+        elif self.state == MOVING and self.vel_planned <= 0:  # Brakes are hit
             self.state = BRAKING
             self.brake = 0  # ramp up braking from 0
             self.stopping_time = time.time()
 
         self.new_vel = True
+        
+    # DONT WORRY AB THIS FOR NOW XD
+    # def vel_curr_callback(self, vel_angle):
+    #     """
+    #     Callback for driving commands.
+    #     """
+    #     self.vel_curr = vel_angle.vel_curr
+
+    #     if self.vel < 0:
+    #         # indicates an obstacle
+    #         self.obstacle_distance = abs(self.vel)
+    #         self.vel = 0
+    #     else:
+    #         # reset obstacle distance and brake time
+    #         self.obstacle_distance = -1
+    #         self.brake_time_used = 0
+    #         self.full_stop_count = 0
+
+    #     if (
+    #         self.vel > 0
+    #         and (self.state == STOPPED or self.state == BRAKING)
+    #         and (time.time() - self.stopping_time) > 10
+    #     ):
+    #         self.state = MOVING
+    #         self.brake = 0  # take the foot off the brake
+    #     elif self.state == MOVING and self.vel <= 0:  # Brakes are hit
+    #         self.state = BRAKING
+    #         self.brake = 0  # ramp up braking from 0
+    #         self.stopping_time = time.time()
+
+    #     self.new_vel = True
 
     def timer_callback(self):
         """
@@ -127,15 +173,17 @@ class MotorEndpoint(rclpy.node.Node):
 
     def calculate_endpoint(self):
         if self.new_vel:
-            #The first time we get a new target speed and angle we must convert it        
-            self.vel_cart_units = self.vel
-            self.vel_curr_cart_units = self.vel_curr
-
+            #The first time we get a new target speed and angle we must convert it    
+            #Need to come back to vel_cart_units later because it involves getting the planned velocity   
+            # self.vel_cart_units = self.vel_planned
+            
+            self.vel_cart_units = self.vel_planned
             self.new_vel = False
 
             # Why was this hard coded this way? What is it even doing
             self.vel_cart_units *= 50       # Rough conversion from m/s to cart controller units
-            self.vel_curr_cart_units *= 50  # Rough conversion from m/s to cart controller units
+            
+            # self.vel_curr_cart_units *= 50  Rough conversion from m/s to cart controller units
             
             #i guess this logic makes sense but also i dont understand what "cart controller units" are
             #and is it possible to get a better estimate?
@@ -146,64 +194,60 @@ class MotorEndpoint(rclpy.node.Node):
             if self.vel_curr_cart_units > 254:
                 self.vel_curr_cart_units = 254
             if self.vel_cart_units < 0:
-                rospy.logwarn("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
+                self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
         
         target_speed = int(self.vel_cart_units) #float64
-        current_speed = int(self.vel_curr_cart_units) #float64
+        # current_speed = int(self.vel_curr_cart_units) float64
 
-        #adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
-        # rospy.loginfo("Angle before adjustment: " + str(self.cmd_msg.angle))
-
-        if(self.angle < -40):
-            self.angle = self.steering_tolerance * -1
-        if(self.angle > 40):
-            self.angle = self.steering_tolerance
-        target_angle = 100 - int(( (self.angle + self.steering_tolerance) / 90 ) * 100)
+        # adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
         
-        #if debug printing is requested print speed and angle info
-        if self.debug:
-            self.delay_print -= 1
-            if self.delay_print <= 0:
-                self.delay_print = 5
-                rospy.loginfo("Endpoint Angle: " + str(target_angle))
-                rospy.loginfo("Endpoint Speed: " + str(target_speed))
+        if(self.angle_planned < -40):
+            self.angle_planned = self.STEERING_TOLERANCE * -1
+        if(self.angle_planned > 40):
+            self.angle_planned = self.STEERING_TOLERANCE
+        target_angle = 100 - int(( (self.angle_planned + self.STEERING_TOLERANCE) / 90 ) * 100)
 
         if self.state == STOPPED:
             self.brake = 0
             target_speed = 0
+            
         elif self.state == BRAKING:
+            
+            target_speed = 0
+    
+            #THIS IS ALL THE MATH FOR THE ACTUAL BREAKING
             if self.obstacle_distance > 0:
                 # there exists an obstacle in the cart's path we need to stop for
                
                 self.brake_time_used += (1.0/self.node_rate) # 1 sec / rate per sec (10)
                 obstacle_brake_time = self.obstacle_distance/self.vel_curr - (1.0/self.node_rate) # we decrease by one node rate initially to account for rounding
                 
-                y = (0.1) * ((2550) ** (self.brake_time_used/obstacle_brake_time))
+                brake_rate = (0.1) * ((2550) ** (self.brake_time_used/obstacle_brake_time))
 
-                if (y >= 255):
+                if (brake_rate >= 255):
                     self.full_stop_count += 1
 
-                self.brake = float(min(255, math.ceil(y)))
+                self.brake = float(min(255, math.ceil(brake_rate)))
             else:
                 # comfortable stop, no obstacle/deadline given
 
                 self.brake_time_used += (1.0/self.node_rate) # 1 sec / rate per sec (10)
                 brake_time = self.comfortable_stop_dist - (1.0/self.node_rate) # we decrease by one node rate initially to account for rounding
                 
-                y = (0.1) * ((2550) ** (self.brake_time_used/brake_time))
+                brake_rate = (0.1) * ((2550) ** (self.brake_time_used/brake_time))
 
-                if (y >= 255):
+                if (brake_rate >= 255):
                     self.full_stop_count += 1
 
-                self.brake = float(min(255, math.ceil(y)))
+                self.brake = float(min(255, math.ceil(brake_rate)))
             if self.brake >= 255 and self.full_stop_count > 10:  # We have reached maximum braking!
                 self.state = STOPPED
                 # reset brake time used
                 self.brake_time_used = 0
                 self.full_stop_count = 0
-            target_speed = 0
+          
 
-        self.pack_send(target_speed, int(self.brake), target_angle)
+        self.send_packet(target_speed, int(self.brake), target_angle)
     
 
     def send_packet(self, throttle, brake, steer_angle):

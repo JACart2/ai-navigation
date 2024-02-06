@@ -1,0 +1,3 @@
+std_msgs/Header header
+float64 vel_planned
+float64 angle_planned

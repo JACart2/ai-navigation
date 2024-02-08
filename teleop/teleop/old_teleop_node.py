@@ -30,16 +30,11 @@
 import rospy
 from geometry_msgs.msg import Twist
 import sys, select, os
-if os.name == 'nt':
-  import msvcrt, time
-else:
-  import tty, termios
+import msvcrt, time
+import tty, termios
 
-BURGER_MAX_LIN_VEL = 0.22
-BURGER_MAX_ANG_VEL = 2.84
-
-WAFFLE_MAX_LIN_VEL = 0.26
-WAFFLE_MAX_ANG_VEL = 1.82
+MAX_LIN_VEL = 0.26
+MAX_ANG_VEL = 1.82
 
 LIN_VEL_STEP_SIZE = 0.01
 ANG_VEL_STEP_SIZE = 0.1
@@ -111,22 +106,11 @@ def constrain(input, low, high):
     return input
 
 def checkLinearLimitVelocity(vel):
-    if turtlebot3_model == "burger":
-      vel = constrain(vel, -BURGER_MAX_LIN_VEL, BURGER_MAX_LIN_VEL)
-    elif turtlebot3_model == "waffle" or turtlebot3_model == "waffle_pi":
-      vel = constrain(vel, -WAFFLE_MAX_LIN_VEL, WAFFLE_MAX_LIN_VEL)
-    else:
-      vel = constrain(vel, -BURGER_MAX_LIN_VEL, BURGER_MAX_LIN_VEL)
-
+    vel = constrain(vel, -MAX_LIN_VEL, MAX_LIN_VEL)
     return vel
 
 def checkAngularLimitVelocity(vel):
-    if turtlebot3_model == "burger":
-      vel = constrain(vel, -BURGER_MAX_ANG_VEL, BURGER_MAX_ANG_VEL)
-    elif turtlebot3_model == "waffle" or turtlebot3_model == "waffle_pi":
-      vel = constrain(vel, -WAFFLE_MAX_ANG_VEL, WAFFLE_MAX_ANG_VEL)
-    else:
-      vel = constrain(vel, -BURGER_MAX_ANG_VEL, BURGER_MAX_ANG_VEL)
+    vel = constrain(vel, -MAX_ANG_VEL, MAX_ANG_VEL)
 
     return vel
 
@@ -134,10 +118,10 @@ if __name__=="__main__":
     if os.name != 'nt':
         settings = termios.tcgetattr(sys.stdin)
 
-    rospy.init_node('turtlebot3_teleop')
-    pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-
     turtlebot3_model = rospy.get_param("model", "burger")
+
+    rospy.init_node('teleop')
+    # pub = rospy.Publisher('nav_cmd', Twist, queue_size=10)
 
     status = 0
     target_linear_vel   = 0.0
@@ -197,6 +181,3 @@ if __name__=="__main__":
         twist.linear.x = 0.0; twist.linear.y = 0.0; twist.linear.z = 0.0
         twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = 0.0
         pub.publish(twist)
-
-    if os.name != 'nt':
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)

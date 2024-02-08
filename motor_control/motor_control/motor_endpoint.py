@@ -13,7 +13,7 @@ import bitstruct
 import math
 
 # ROS based imports
-import tf_transformations
+#import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from motor_control_interface.msg import VelCurr, VelAnglePlanned

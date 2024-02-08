@@ -26,3 +26,16 @@ Third, open a new terminal and you can start up the teleop
 ```
 ros2 run <teleop>
 ```
+## This is how you send the message to the node that you want to turn the thing > 
+```
+ros2 topic pub /nav_cmd motor_control_interface/msg/VelAnglePlanned "header:
+  stamp:
+    sec: 0
+    nanosec: 0
+  frame_id: ''
+vel_planned: 0.0
+angle_planned: 50.0
+"
+```
+
+

@@ -1,0 +1,7 @@
+Requirements for motor_control package:
+
+sudo pip install:
+
+- bitstruct
+- pyserial
+- numpy

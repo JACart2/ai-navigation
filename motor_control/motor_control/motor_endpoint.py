@@ -60,6 +60,7 @@ class MotorEndpoint(rclpy.node.Node):
         # These are launch paramaters for now. They are given default values which are shown in the code blocks below
         self.declare_parameter("baudrate", "57600")
         # For this port we can do ls /dev/tty* and find the actual thing
+        # ttyUSB0   ttyACM0
         self.declare_parameter("arduino_port", "/dev/ttyACM0")
 
         self.BAUDRATE = (
@@ -86,9 +87,9 @@ class MotorEndpoint(rclpy.node.Node):
         #     Bool, "/realtime_debug_change", self.debug_callback, 10
         # )
 
-        self.curr_motion_subscriber = self.create_subscription(
-            VelCurr, "/nav_cmd", self.vel_curr_callback, 10
-        )
+        # self.curr_motion_subscriber = self.create_subscription(
+        #     VelCurr, "/nav_cmd", self.vel_curr_callback, 10
+        # )
 
         self.planned_motion_subscriber = self.create_subscription(
             VelAnglePlanned, "/nav_cmd", self.vel_angle_planned_callback, 10
@@ -103,7 +104,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.vel_planned = planned_vel_angle.vel_planned
         self.angle_planned = planned_vel_angle.angle_planned
 
-        self.log_header(planned_vel_angle)
+        self.log_header(f"Planned Angle: {planned_vel_angle}")
 
         if self.vel_planned < 0:
             # indicates an obstacle
@@ -193,6 +194,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.prev_time = time.time()
 
         try:
+            self.log_header("getting in the heartbeat try")
             self.heartbeat = self.arduino_ser.read_until()
         except Exception as e:
             self.log_header("THE ARDUINO HAS BEEN DISCONNECTED")
@@ -207,7 +209,7 @@ class MotorEndpoint(rclpy.node.Node):
             self.heart_pub.publish(self.heartbeat)
             self.delta_time = time.time() - self.prev_time
             self.log_header("Heartbeat message:")
-            self.log_header(self.heartbeat + "| Time since last message: ")
+            self.log_header(f"{self.heartbeat} | Time since last message: ")
             heartbeat_delta_t = time.time() - self.prev_time
 
             # This check is here because the time between the first and 2nd heartbeat is always ~2.4s
@@ -216,7 +218,7 @@ class MotorEndpoint(rclpy.node.Node):
             if heartbeat_delta_t >= 2.0:
                 self.log_header("TIME BETWEEN HEARTBEATS, > 2.0s | Things may be fine")
 
-            self.log_header(heartbeat_delta_t)
+            self.log_header(f"Heartbeat delta: {heartbeat_delta_t}")
         # This is here to emmulate rate.sleep() from the previous implementation
         return
 
@@ -236,13 +238,13 @@ class MotorEndpoint(rclpy.node.Node):
             # i guess this logic makes sense but also i dont understand what "cart controller units" are
             # and is it possible to get a better estimate?
             if vel_cart_units > 254:
-                self.vel_cart_units = 254
-            if self.vel_cart_units < -254:
+                vel_cart_units = 254
+            if vel_cart_units < -254:
                 vel_cart_units = -254
-            if self.vel_cart_units < 0:
+            if vel_cart_units < 0:
                 self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
 
-        target_speed = int(self.vel_cart_units)  # float64
+        target_speed = int(vel_cart_units)  # float64
 
         # adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
 
@@ -280,7 +282,9 @@ class MotorEndpoint(rclpy.node.Node):
                 # reset brake time used
                 self.brake_time_used = 0
                 self.full_stop_count = 0
-
+        ## DEL THIS
+        if self.brake < 0:
+            self.brake = 0
         self.send_packet(target_speed, int(self.brake), target_angle)
 
     def calculate_endpoint(self):
@@ -390,7 +394,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         # This is a buffer used in pack_into essentially making 5 empty bytes
         data = bytearray(b"\x00" * 5)
-        self.log_header(steer_angle)
+        self.log_header(f"Steer angle: {steer_angle}")
         # We are assuming 42 21 is the magic number for the arduino
         bitstruct.pack_into(
             "u8u8u8u8u8",
@@ -403,6 +407,7 @@ class MotorEndpoint(rclpy.node.Node):
             steer_angle + STEERING_CORRECTION,
         )
         self.arduino_ser.write(data)
+        self.log_header("\nHERE\n")
 
     def log_header(self, msg):
         self.get_logger().info("=" * 50)

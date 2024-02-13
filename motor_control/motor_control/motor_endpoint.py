@@ -53,6 +53,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.prev_time = 0.0
         self.delta_time = 0.0
 
+        self.teleop_mode = True
+
         # We need to look into getting this to be the right value/launch parameter
         # I think we can use this USB port but I wont know til i try
         # These are launch paramaters for now. They are given default values which are shown in the code blocks below
@@ -184,7 +186,10 @@ class MotorEndpoint(rclpy.node.Node):
 
         # Need to do this but better somehow and i dont know what they are doing tbh.
         if self.vel_planned is not None and self.angle_planned is not None:
-            self.calculate_endpoint()
+            if self.teleop_mode:
+                self.teleop_ednpoint()
+            else:
+                self.calculate_endpoint()
         self.prev_time = time.time()
 
         try:
@@ -214,6 +219,69 @@ class MotorEndpoint(rclpy.node.Node):
             self.log_header(heartbeat_delta_t)
         # This is here to emmulate rate.sleep() from the previous implementation
         return
+
+    def teleop_ednpoint(self):
+
+        if self.new_vel:
+            # The first time we get a new target speed and angle we must convert it
+            # Need to come back to vel_cart_units later because it involves getting the planned velocity
+            # self.vel_cart_units = self.vel_planned
+
+            vel_cart_units = self.vel_planned
+            self.new_vel = False
+
+            # Why was this hard coded this way? What is it even doing
+            vel_cart_units *= 50  # Rough conversion from m/s to cart controller units
+
+            # i guess this logic makes sense but also i dont understand what "cart controller units" are
+            # and is it possible to get a better estimate?
+            if vel_cart_units > 254:
+                self.vel_cart_units = 254
+            if self.vel_cart_units < -254:
+                vel_cart_units = -254
+            if self.vel_cart_units < 0:
+                self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
+
+        target_speed = int(self.vel_cart_units)  # float64
+
+        # adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
+
+        if self.angle_planned < -40:
+            self.angle_planned = self.STEERING_TOLERANCE * -1
+        if self.angle_planned > 40:
+            self.angle_planned = self.STEERING_TOLERANCE
+        target_angle = 100 - int(
+            ((self.angle_planned + self.STEERING_TOLERANCE) / 90) * 100
+        )
+
+        if self.state == STOPPED:
+            self.brake = 0
+            target_speed = 0
+
+        elif self.state == BRAKING:
+
+            # comfortable stop, no obstacle/deadline given
+
+            self.brake_time_used += 1.0 / self.NODE_RATE  # 1 sec / rate per sec (10)
+            brake_time = self.comfortable_stop_dist - (
+                1.0 / self.NODE_RATE
+            )  # we decrease by one node rate initially to account for rounding
+
+            brake_rate = (0.1) * ((2550) ** (self.brake_time_used / brake_time))
+
+            if brake_rate >= 255:
+                self.full_stop_count += 1
+
+            self.brake = float(min(255, math.ceil(brake_rate)))
+            if (
+                self.brake >= 255 and self.full_stop_count > 10
+            ):  # We have reached maximum braking!
+                self.state = STOPPED
+                # reset brake time used
+                self.brake_time_used = 0
+                self.full_stop_count = 0
+
+        self.send_packet(target_speed, int(self.brake), target_angle)
 
     def calculate_endpoint(self):
         if self.new_vel:

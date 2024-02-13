@@ -34,14 +34,24 @@ class MotorEndpoint(rclpy.node.Node):
         self.BRAKE_TIME = 3
         self.NODE_RATE = 10
         self.STEERING_TOLERANCE = 50
+        self.COMFORT_STOP_DIST = 4.0
 
+        # Driving vars
         self.state = STOPPED
         self.obstacle_distance = -1
         self.brake_time_used = 0
+        self.brake = 0
+        self.stopping_time = 0
 
+        self.vel_planned = None
+        self.angle_planned = None
+        self.vel_curr = 1
+
+        # Serial vars
         self.serial_connected = False
         self.heartbeat = b""
-        self.prev_time
+        self.prev_time = 0.0
+        self.delta_time = 0.0
 
         # We need to look into getting this to be the right value/launch parameter
         # I think we can use this USB port but I wont know til i try
@@ -118,7 +128,9 @@ class MotorEndpoint(rclpy.node.Node):
         self.new_vel = True
 
     # DONT WORRY AB THIS FOR NOW XD
-    # def vel_curr_callback(self, vel_angle):
+    def vel_curr_callback(self, vel_angle):
+        pass
+
     #     """
     #     Callback for driving commands.
     #     """
@@ -172,7 +184,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         # Need to do this but better somehow and i dont know what they are doing tbh.
         if self.vel_planned is not None and self.angle_planned is not None:
-            self.endpoint_calc()
+            self.calculate_endpoint()
         self.prev_time = time.time()
 
         try:
@@ -259,10 +271,10 @@ class MotorEndpoint(rclpy.node.Node):
                 # there exists an obstacle in the cart's path we need to stop for
 
                 self.brake_time_used += (
-                    1.0 / self.node_rate
+                    1.0 / self.NODE_RATE
                 )  # 1 sec / rate per sec (10)
                 obstacle_brake_time = self.obstacle_distance / self.vel_curr - (
-                    1.0 / self.node_rate
+                    1.0 / self.NODE_RATE
                 )  # we decrease by one node rate initially to account for rounding
 
                 brake_rate = (0.1) * (
@@ -277,10 +289,10 @@ class MotorEndpoint(rclpy.node.Node):
                 # comfortable stop, no obstacle/deadline given
 
                 self.brake_time_used += (
-                    1.0 / self.node_rate
+                    1.0 / self.NODE_RATE
                 )  # 1 sec / rate per sec (10)
-                brake_time = self.comfortable_stop_dist - (
-                    1.0 / self.node_rate
+                brake_time = self.COMFORT_STOP_DIST - (
+                    1.0 / self.NODE_RATE
                 )  # we decrease by one node rate initially to account for rounding
 
                 brake_rate = (0.1) * ((2550) ** (self.brake_time_used / brake_time))

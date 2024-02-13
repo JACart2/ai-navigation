@@ -43,6 +43,7 @@ class MotorEndpoint(rclpy.node.Node):
         
         self.serial_connected = False
         self.heartbeat = b""
+        self.prev_time
 
         # We need to look into getting this to be the right value/launch parameter
         # I think we can use this USB port but I wont know til i try
@@ -96,7 +97,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.vel_planned = planned_vel_angle.vel_planned
         self.angle_planned = planned_vel_angle.angle_planned
         
-        self.log_header(self.angle_planned)
+        self.log_header(planned_vel_angle)
 
         if self.vel_planned < 0:
             # indicates an obstacle
@@ -158,6 +159,8 @@ class MotorEndpoint(rclpy.node.Node):
         Main loop timer for updating motor's instructions"""
         if not self.serial_connected:
             self.log_header("RETRYING SERIAL CONNECTION")
+            
+            # FIXME MAKE THIS IN A METHOD
             try:
                 self.arduino_ser = sr.Serial(
                     self.ARDUINO_PORT,
@@ -169,8 +172,43 @@ class MotorEndpoint(rclpy.node.Node):
             except Exception as e:
                 self.log_header("MOTOR ENDPOINT: " + str(e))
                 self.serial_connected = False
+                
+                #We are doing this instead of rate.sleep() and continue in the original implementation main loop
                 return
-    
+        
+        # Need to do this but better somehow and i dont know what they are doing tbh.
+        if self.vel_planned is not None and self.angle_planned is not None:
+            self.endpoint_calc()
+        self.prev_time = time.time()
+        
+        
+        try:
+            self.heartbeat = self.arduino_ser.read_until()
+        except Exception as e:
+            self.log_header("THE ARDUINO HAS BEEN DISCONNECTED")
+            self.serial_connected = False     
+            
+                # Add a method that attempts to reconnect to the arduino and then return 
+
+        if self.heartbeat != "":
+            
+            # Some of these variables need to be renamed/check on
+            self.heart_pub.publish(self.heartbeat)
+            self.delta_time = time.time() - self.prev_time
+            self.log_header("Heartbeat message:")
+            self.log_header(self.heartbeat + "| Time since last message: ")
+            heartbeat_delta_t = time.time() - self.prev_time
+                
+            # This check is here because the time between the first and 2nd heartbeat is always ~2.4s
+            # I believe this is because of the rest of the setup taking place at the same time
+            # We need to initialize first_heartbeat first
+            if heartbeat_delta_t >= 2.0: 
+                self.log_header("TIME BETWEEN HEARTBEATS, > 2.0s | Things may be fine")
+                        
+            self.log_header(heartbeat_delta_t)
+        # This is here to emmulate rate.sleep() from the previous implementation
+        return
+
 
     def calculate_endpoint(self):
         if self.new_vel:

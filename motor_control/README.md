@@ -19,7 +19,7 @@ sudo apt remove brltty
 
 ## Setup/How to run
 
-1. Ensure (ROS2 humble)[https://docs.ros.org/en/humble/Installation.html] is installed on your machine and navigate to /dev_ws/src by either creating the directory or going into a premade one.
+1. Ensure [ROS2 humble](https://docs.ros.org/en/humble/Installation.html) is installed on your machine and navigate to /dev_ws/src by either creating the directory or going into a premade one.
 ```
 mkdir -p dev_ws/src
 cd dev_ws/src

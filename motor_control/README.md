@@ -26,7 +26,12 @@ Third, open a new terminal and you can start up the teleop
 ```
 ros2 run <teleop>
 ```
-## This is how you send the message to the node that you want to turn the thing > 
+## This is the message to send to the motor_control node when its running.
+It should be noted that the values of vel_planned and angle_planned should be changed based on upon how you would like the cart to act.
+ 
+- Negative values for the angle_planned paramters turn the car right and vice versa for positive values.
+- Negative values passed to vel_planned indicate breaking while positive values indicate acceleration
+
 ```
 ros2 topic pub /nav_cmd motor_control_interface/msg/VelAnglePlanned "header:
   stamp:
@@ -34,7 +39,7 @@ ros2 topic pub /nav_cmd motor_control_interface/msg/VelAnglePlanned "header:
     nanosec: 0
   frame_id: ''
 vel_planned: 0.0
-angle_planned: 50.0
+angle_planned: 0.0
 "
 ```
 

@@ -61,7 +61,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.declare_parameter("baudrate", "57600")
         # For this port we can do ls /dev/tty* and find the actual thing
         # ttyUSB0   ttyACM0
-        self.declare_parameter("arduino_port", "/dev/ttyACM0")
+        self.declare_parameter("arduino_port", "/dev/ttyUSB9")
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -229,22 +229,26 @@ class MotorEndpoint(rclpy.node.Node):
             # Need to come back to vel_cart_units later because it involves getting the planned velocity
             # self.vel_cart_units = self.vel_planned
 
-            vel_cart_units = self.vel_planned
+            self.vel_cart_units = self.vel_planned
             self.new_vel = False
 
             # Why was this hard coded this way? What is it even doing
-            vel_cart_units *= 50  # Rough conversion from m/s to cart controller units
+            self.vel_cart_units *= (
+                50  # Rough conversion from m/s to cart controller units
+            )
 
             # i guess this logic makes sense but also i dont understand what "cart controller units" are
             # and is it possible to get a better estimate?
-            if vel_cart_units > 254:
-                vel_cart_units = 254
-            if vel_cart_units < -254:
-                vel_cart_units = -254
-            if vel_cart_units < 0:
-                self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
+            if self.vel_cart_units > 254:
+                self.vel_cart_units = 254
+            if self.vel_cart_units < -254:
+                self.vel_cart_units = -254
+            if self.vel_cart_units < 0:
+                self.self.log_header(
+                    "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!"
+                )
 
-        target_speed = int(vel_cart_units)  # float64
+        target_speed = int(self.vel_cart_units)  # float64
 
         # adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
 

@@ -34,15 +34,15 @@ cd ..
 colcon build --symlink-install
 source install/setup.bash
 ```
-4. install all of the required packages (noted in requirements.txt)
+4. Install all of the required packages (noted in requirements.txt)
 ```
 sudo pip install <packages>
 ```
-5. run the launch file
+5. Run the launch file
 ```
 ros2 launch <file> <baud_rate> <arduino_port>
 ```
-6.v open a new terminal and you can start up the teleop
+6. open a new terminal and you can start up the teleop
 ```
 ros2 run <teleop>
 ```

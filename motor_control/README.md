@@ -19,24 +19,31 @@ sudo apt remove brltty
 
 ## Setup/How to run
 
-1. Ensure {https://docs.ros.org/en/humble/Installation.html} (ROS2 humble) is installed on your machine and navigate to /dev_ws/src by either creating the directory or going into a premade one.
+1. Ensure [https://docs.ros.org/en/humble/Installation.html](ROS2 humble) is installed on your machine and navigate to /dev_ws/src by either creating the   
+   directory or going into a premade one.
 ```
 mkdir -p dev_ws/src
 cd dev_ws/src
 ```
-2.
-3.
-5.
-6.
-7.  you must install all of the required packages (noted in requirements.txt)
+2. Clone the ai-navigation repository into dev_ws/src folder. After the clone is complete you should cd back into dev_ws.
+```
+git clone https://github.com/JACart2/ai-navigation.git
+cd ..
+```
+3. Build the packages inside of dev_ws and soruce them
+```
+colcon build --symlink-install
+source install/setup.bash
+```
+4. install all of the required packages (noted in requirements.txt)
 ```
 sudo pip install <packages>
 ```
-Second, you must run the launch file
+5. run the launch file
 ```
 ros2 launch <file> <baud_rate> <arduino_port>
 ```
-Third, open a new terminal and you can start up the teleop
+6.v open a new terminal and you can start up the teleop
 ```
 ros2 run <teleop>
 ```

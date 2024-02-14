@@ -9,29 +9,34 @@ class MotorEndpointTest(rclpy.node.Node):
     def __init__(self):
         super().__init__("motor_endpoint_test")
 
-        self.timer = self.create_timer(0.1, self.timer_callback)
+        self.timer = self.create_timer(1, self.timer_callback)
+        self.pub_motion = self.create_publisher(VelAnglePlanned, "/nav_cmd", 10)
 
     def timer_callback(self):
 
-        self.pub_motion = self.create_publisher(VelAnglePlanned, "/nav_cmd", 10)
-
+        self.destroy_timer(self.timer)
         try:
             # This turns the wheel all the way to the right and all the way to the left respectivelly
             planned_turning = VelAnglePlanned()
+            planned_turning.vel_planned = 0.0
+            planned_turning.angle_planned = 0.0
+            self.pub_motion.publish(planned_turning)
+            time.sleep(2)
 
             self.turn_wheel_left(planned_turning, True)
-            time.sleep(1.0)
+            time.sleep(8)
 
             self.turn_wheel_left(planned_turning, False)
 
-            time.sleep(1.0)
+            time.sleep(8)
 
-            self.drive_5_seconds(planned_turning)
+            self.drive_forward(planned_turning)
 
-            time.sleep(5)
+            time.sleep(6)
             planned_turning.vel_planned = 0.0
             self.pub_motion.publish(planned_turning)
-            self.destroy_timer(self.timer)
+            self.get_logger().info("### Test Complete")
+            exit()
 
         except Exception as e:
             print(e)
@@ -39,8 +44,9 @@ class MotorEndpointTest(rclpy.node.Node):
             print("Something went wrong so stopping everything")
             print("!" * 10)
             planned_turning.vel_planned = 0.0
+            planned_turning.angle_planned = 0.0
             self.pub_motion.publish(planned_turning)
-            self.destroy_timer(self.timer)
+            exit()
 
     def turn_wheel_left(self, planned_turning, right):
         planned_turning.vel_planned = 0.0
@@ -52,9 +58,9 @@ class MotorEndpointTest(rclpy.node.Node):
 
         self.pub_motion.publish(planned_turning)
 
-    def drive_5_seconds(self, planned_turning):
+    def drive_forward(self, planned_turning):
         planned_turning.angle_planned = 0.0
-        planned_turning.vel_planned = 1.0
+        planned_turning.vel_planned = 3.0
 
         self.pub_motion.publish(planned_turning)
 

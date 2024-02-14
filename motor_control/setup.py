@@ -18,6 +18,9 @@ setup(
     license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
-        "console_scripts": ["motor_endpoint = motor_control.motor_endpoint:main"],
+        "console_scripts": [
+            "motor_endpoint = motor_control.motor_endpoint:main",
+            "motor_endpoint_test = motor_control.motor_endpoint_test:main",
+        ],
     },
 )

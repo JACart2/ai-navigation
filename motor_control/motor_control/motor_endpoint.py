@@ -32,7 +32,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         # constants but prolly should make these as launch paramaters
         self.BRAKE_TIME = 3
-        self.NODE_RATE = 10
+        self.NODE_RATE = 0.1
         self.STEERING_TOLERANCE = 50
         self.COMFORT_STOP_DIST = 4.0
 
@@ -269,7 +269,7 @@ class MotorEndpoint(rclpy.node.Node):
             # comfortable stop, no obstacle/deadline given
 
             self.brake_time_used += 1.0 / self.NODE_RATE  # 1 sec / rate per sec (10)
-            brake_time = self.comfortable_stop_dist - (
+            brake_time = self.COMFORT_STOP_DIST - (
                 1.0 / self.NODE_RATE
             )  # we decrease by one node rate initially to account for rounding
 

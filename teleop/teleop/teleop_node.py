@@ -4,11 +4,11 @@ import msvcrt, time
 import tty, termios
 from motor_control_interface.msg import VelAnglePlanned
 
-MAX_LIN_VEL = 0.26
-MAX_ANG_VEL = 1.82
+MAX_LIN_VEL = 30
+MAX_ANG_VEL = 30
 
-LIN_VEL_STEP_SIZE = 0.01
-ANG_VEL_STEP_SIZE = 0.1
+LIN_VEL_STEP_SIZE = 0.5
+ANG_VEL_STEP_SIZE = 0.5
 
 msg = """
 Control Your Golf Cart!
@@ -18,8 +18,8 @@ Moving around:
    a    s    d
         x
 
-w/x : increase/decrease linear velocity (Burger : ~ 0.22, Waffle and Waffle Pi : ~ 0.26)
-a/d : increase/decrease angular velocity (Burger : ~ 2.84, Waffle and Waffle Pi : ~ 1.82)
+w/x : increase/decrease linear velocity 
+a/d : increase/decrease angular velocity 
 
 space key, s : force stop
 
@@ -43,8 +43,6 @@ class Teleop(rclpy.node.Node):
         self.status = 0
         self.target_linear_vel = 0.0
         self.target_angular_vel = 0.0
-        self.control_linear_vel = 0.0
-        self.control_angular_vel = 0.0
 
     def getKey(self):
         tty.setraw(sys.stdin.fileno())
@@ -62,16 +60,6 @@ class Teleop(rclpy.node.Node):
             target_linear_vel,
             target_angular_vel,
         )
-
-    def makeSimpleProfile(self, output, input, slop):
-        if input > output:
-            output = min(input, output + slop)
-        elif input < output:
-            output = max(input, output - slop)
-        else:
-            output = input
-
-        return output
 
     def constrain(self, input, low, high):
         if input < low:
@@ -96,64 +84,44 @@ class Teleop(rclpy.node.Node):
             print(msg)
             key = self.getKey()
             if key == "w":
-                target_linear_vel = self.checkLinearLimitVelocity(
-                    target_linear_vel + LIN_VEL_STEP_SIZE
+                self.target_linear_vel = self.checkLinearLimitVelocity(
+                    self.target_linear_vel + LIN_VEL_STEP_SIZE
                 )
-                status = status + 1
-                print(self.vels(target_linear_vel, target_angular_vel))
             elif key == "x":
-                target_linear_vel = self.checkLinearLimitVelocity(
-                    target_linear_vel - LIN_VEL_STEP_SIZE
+                self.target_linear_vel = self.checkLinearLimitVelocity(
+                    self.target_linear_vel - LIN_VEL_STEP_SIZE
                 )
-                status = status + 1
-                print(self.vels(target_linear_vel, target_angular_vel))
             elif key == "a":
-                target_angular_vel = self.checkAngularLimitVelocity(
-                    target_angular_vel + ANG_VEL_STEP_SIZE
+                self.target_angular_vel = self.checkAngularLimitVelocity(
+                    self.target_angular_vel + ANG_VEL_STEP_SIZE
                 )
-                status = status + 1
-                print(self.vels(target_linear_vel, target_angular_vel))
             elif key == "d":
-                target_angular_vel = self.checkAngularLimitVelocity(
-                    target_angular_vel - ANG_VEL_STEP_SIZE
+                self.target_angular_vel = self.checkAngularLimitVelocity(
+                    self.target_angular_vel - ANG_VEL_STEP_SIZE
                 )
-                status = status + 1
-                print(self.vels(target_linear_vel, target_angular_vel))
             elif key == " " or key == "s":
-                target_linear_vel = 0.0
-                control_linear_vel = 0.0
-                target_angular_vel = 0.0
-                control_angular_vel = 0.0
-                print(self.vels(target_linear_vel, target_angular_vel))
-            else:
-                if key == "\x03":
-                    self.destroy_timer(self.timer)
-                    return
-
+                self.target_linear_vel = 0.0
+                self.target_angular_vel = 0.0
+            elif key == "\x03":
+                self.destroy_timer(self.timer)
+                return
+                    
+            print(self.vels(self.target_linear_vel, self.target_angular_vel))
+            self.status += 1
+                
             if status == 20:
                 print(msg)
                 status = 0
-
-            cmd = VelAnglePlanned()
-
-            control_linear_vel = self.makeSimpleProfile(
-                control_linear_vel, target_linear_vel, (LIN_VEL_STEP_SIZE / 2.0)
-            )
-
-            control_angular_vel = self.makeSimpleProfile(
-                control_angular_vel, target_angular_vel, (ANG_VEL_STEP_SIZE / 2.0)
-            )
-
-            cmd.vel_planned = control_linear_vel
-            cmd.angle_planned = control_angular_vel
-            self.nav_pub.publish(cmd)
-        except:
+                    
+        except Exception as e:
             print(e)
 
         finally:
             cmd = VelAnglePlanned()
-            cmd.vel_planned = 0.0
-            cmd.angle_planned = 0.0
+            cmd.vel_planned = self.target_linear_vel
+            if (cmd.vel_planned < 0):
+                cmd.vel_planned = -MAX_LIN_VEL - cmd.vel_planned
+            cmd.angle_planned = self.target_angular_vel
             self.nav_pub.publish(cmd)
 
 

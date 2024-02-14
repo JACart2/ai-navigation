@@ -1,14 +1,14 @@
 import rclpy
+import tf2_geometry_msgs
 import sys, select, os
-import msvcrt, time
 import tty, termios
 from motor_control_interface.msg import VelAnglePlanned
 
-MAX_LIN_VEL = 30
-MAX_ANG_VEL = 30
+MAX_LIN_VEL = 30.0
+MAX_ANG_VEL = 30.0
 
 LIN_VEL_STEP_SIZE = 0.5
-ANG_VEL_STEP_SIZE = 0.5
+ANG_VEL_STEP_SIZE = 1
 
 msg = """
 Control Your Golf Cart!
@@ -18,12 +18,13 @@ Moving around:
    a    s    d
         x
 
-w/x : increase/decrease linear velocity 
-a/d : increase/decrease angular velocity 
+w/x : increase/decrease velocity 
+a/d : turn the wheel left/right
 
 space key, s : force stop
 
 CTRL-C to quit
+
 """
 
 e = """
@@ -38,11 +39,16 @@ class Teleop(rclpy.node.Node):
         self.settings = termios.tcgetattr(sys.stdin)
 
         self.nav_pub = self.create_publisher(VelAnglePlanned, "/nav_cmd", 10)
-        self.timer = self.create_timer(10, self.timer_callback)
+        self.timer = self.create_timer(0.1, self.timer_callback)
 
         self.status = 0
         self.target_linear_vel = 0.0
         self.target_angular_vel = 0.0
+
+    def display(self):
+        print("\n" * 8)
+        print(f"{self.vels(self.target_linear_vel, self.target_angular_vel)}")
+        print(f"{msg}", end="")
 
     def getKey(self):
         tty.setraw(sys.stdin.fileno())
@@ -81,7 +87,7 @@ class Teleop(rclpy.node.Node):
 
     def timer_callback(self):
         try:
-            print(msg)
+            self.display()
             key = self.getKey()
             if key == "w":
                 self.target_linear_vel = self.checkLinearLimitVelocity(
@@ -105,21 +111,22 @@ class Teleop(rclpy.node.Node):
             elif key == "\x03":
                 self.destroy_timer(self.timer)
                 return
-                    
-            print(self.vels(self.target_linear_vel, self.target_angular_vel))
+
             self.status += 1
-                
-            if status == 20:
-                print(msg)
-                status = 0
-                    
-        except Exception as e:
-            print(e)
+
+            if self.status == 20:
+                self.display()
+                self.status = 0
+
+        except:
+            self.get_logger().error(e)
+            self.destroy_timer(self.timer)
+            return
 
         finally:
             cmd = VelAnglePlanned()
             cmd.vel_planned = self.target_linear_vel
-            if (cmd.vel_planned < 0):
+            if cmd.vel_planned < 0:
                 cmd.vel_planned = -MAX_LIN_VEL - cmd.vel_planned
             cmd.angle_planned = self.target_angular_vel
             self.nav_pub.publish(cmd)

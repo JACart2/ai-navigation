@@ -12,6 +12,10 @@ This contains the motor_endpoint python script that connects the arduino to coop
 This contains the old scripts from Jacart1 and other resources used to transition into ROS2.
 
 ##### To find the TTY* port that Arduino uses, run "udevadm monitor -u" before plugging it in, then it should give the information you need.
+##### An issue that has presented itself relating to connecting the arduino port can be fixed by deleting the Brltty package in linux
+```
+sudo apt remove brltty
+```
 
 ## Setup/How to run
 First, you must install all of the required packages (noted in requirements.txt)

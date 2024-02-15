@@ -43,7 +43,6 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
-
         self.manual_control = True
 
         self.vel_planned = None
@@ -77,10 +76,12 @@ class MotorEndpoint(rclpy.node.Node):
             serial_connected = False
 
         # Need to choose a new topic name for current velocity subscriber
-
+        # As of right now this is useless tho because we dont have vel curr
         # self.curr_motion_subscriber = self.create_subscription(
         #     VelCurr, "/nav_cmd", self.vel_curr_callback, 10
         # )
+
+        # Creation of some simple subscribers/publishers/timers
 
         self.planned_motion_subscriber = self.create_subscription(
             VelAnglePlanned, "/nav_cmd", self.vel_angle_planned_callback, 10
@@ -91,12 +92,20 @@ class MotorEndpoint(rclpy.node.Node):
         self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)
 
     def vel_angle_planned_callback(self, planned_vel_angle):
-        """Callback method to get the target velocity and angle."""
+        """
+        Callback method to get the target velocity and angle.
+        This is achieved by using the subscription we created in init to recieved a
+        message (planned_vel_angle) and set the appropriate fields to make the cart drive/turn.
+        """
 
         self.vel_planned = planned_vel_angle.vel_planned
         self.angle_planned = planned_vel_angle.angle_planned
 
         self.log_header(f"Planned Angle: {planned_vel_angle}")
+
+        # This logic should be changed in the future, but basically if the velocity that we plan to go is negative,
+        # then the velocity is interpreted as the distance to an obstacle. The braking using this variable is handled in
+        # calculate endpoint.
 
         if self.vel_planned < 0:
             # indicates an obstacle
@@ -108,6 +117,8 @@ class MotorEndpoint(rclpy.node.Node):
             self.brake_time_used = 0
             self.full_stop_count = 0
 
+        # I dont really understand this that well, or at least the logic behind this if statemnt. Maybe im just not seeing the reasoning
+        # But the check for if its Stopped or breaking doesnt make that much sense to me.
         if (
             self.vel_planned > 0
             and (self.state == STOPPED or self.state == BRAKING)
@@ -123,7 +134,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.new_vel = True
 
     def vel_curr_callback(self, vel_angle):
-        """Callback method to get the current velocity."""
+        """Callback method to get the current velocity. It should be noted that we arent using this method right now
+        because we have no way of getting the current velocity."""
         #     self.vel_curr = vel_angle.vel_curr
 
         #     if self.vel < 0:
@@ -153,6 +165,7 @@ class MotorEndpoint(rclpy.node.Node):
 
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""
+
         if not self.serial_connected:
             self.log_header("RETRYING SERIAL CONNECTION")
 

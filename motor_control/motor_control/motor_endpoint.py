@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """
-This is the python class that allows us to control the golf cart 
-via teleop.
+This is the python class that allows us to control the golf cart.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
@@ -53,7 +52,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.prev_time = 0.0
         self.delta_time = 0.0
 
-        self.teleop_mode = True
+        self.manual_control = True
 
         # We need to look into getting this to be the right value/launch parameter
         # I think we can use this USB port but I wont know til i try
@@ -187,8 +186,8 @@ class MotorEndpoint(rclpy.node.Node):
 
         # Need to do this but better somehow and i dont know what they are doing tbh.
         if self.vel_planned is not None and self.angle_planned is not None:
-            if self.teleop_mode:
-                self.teleop_ednpoint()
+            if self.manual_control:
+                self.manual_endpoint()
             else:
                 self.calculate_endpoint()
         self.prev_time = time.time()
@@ -222,7 +221,7 @@ class MotorEndpoint(rclpy.node.Node):
         # This is here to emmulate rate.sleep() from the previous implementation
         return
 
-    def teleop_ednpoint(self):
+    def manual_endpoint(self):
 
         if self.new_vel:
             # The first time we get a new target speed and angle we must convert it

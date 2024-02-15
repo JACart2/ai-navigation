@@ -22,7 +22,7 @@ from std_msgs.msg import Bool, String
 MOVING = 0
 BRAKING = 1
 STOPPED = 2
-STEERING_CORRECTION = 10
+
 
 
 class MotorEndpoint(rclpy.node.Node):
@@ -34,6 +34,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.NODE_RATE = 0.1
         self.STEERING_TOLERANCE = 50
         self.COMFORT_STOP_DIST = 4.0
+        self.STEERING_CORRECTION = 10
 
         # Driving vars
         self.state = STOPPED
@@ -407,7 +408,7 @@ class MotorEndpoint(rclpy.node.Node):
             21,
             abs(throttle),
             brake,
-            steer_angle + STEERING_CORRECTION,
+            steer_angle + self.STEERING_CORRECTION,
         )
         self.arduino_ser.write(data)
         self.log_header("\nHERE\n")

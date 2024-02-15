@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-This is the python class that allows us to control the golf cart.
+This is the ROS2 node that allows us to control the golf cart.
+It sends messages to the arduino controller based on information received from ROS2 topics.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
@@ -12,7 +13,6 @@ import bitstruct
 import math
 
 # ROS based imports
-# import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from motor_control_interface.msg import VelCurr, VelAnglePlanned
@@ -26,10 +26,12 @@ STOPPED = 2
 
 
 class MotorEndpoint(rclpy.node.Node):
+    """ ROS2 node that handles controlling the motor.
+    """
     def __init__(self):
         super().__init__("motor_endpoint")
 
-        # constants but prolly should make these as launch paramaters
+        # Class constants
         self.BRAKE_TIME = 3
         self.NODE_RATE = 0.1
         self.STEERING_TOLERANCE = 50
@@ -42,6 +44,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
+        
+        self.manual_control = True
 
         self.vel_planned = None
         self.angle_planned = None
@@ -53,14 +57,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.prev_time = 0.0
         self.delta_time = 0.0
 
-        self.manual_control = True
-
-        # We need to look into getting this to be the right value/launch parameter
-        # I think we can use this USB port but I wont know til i try
-        # These are launch paramaters for now. They are given default values which are shown in the code blocks below
         self.declare_parameter("baudrate", "57600")
-        # For this port we can do ls /dev/tty* and find the actual thing
-        # ttyUSB0   ttyACM0
         self.declare_parameter("arduino_port", "/dev/ttyUSB9")
 
         self.BAUDRATE = (
@@ -80,12 +77,8 @@ class MotorEndpoint(rclpy.node.Node):
             self.log_header("MOTOR ENDPOINT: " + str(e))
             serial_connected = False
 
-        # For now Im just ripping this straight from the old motor endpoint.
-        # Need to figure out if we should keep the same subscribers and how to port them if needed
-
-        #           self.debug_subscriber = self.create_subscription(
-        #     Bool, "/realtime_debug_change", self.debug_callback, 10
-        # )
+        
+        # Need to choose a new topic name for current velocity subscriber
 
         # self.curr_motion_subscriber = self.create_subscription(
         #     VelCurr, "/nav_cmd", self.vel_curr_callback, 10
@@ -100,6 +93,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.timer = self.create_timer(self.NODE_RATE, self.timer_callback)
 
     def vel_angle_planned_callback(self, planned_vel_angle):
+        """ Callback method to get the target velocity and angle.
+        """
 
         self.vel_planned = planned_vel_angle.vel_planned
         self.angle_planned = planned_vel_angle.angle_planned
@@ -130,13 +125,10 @@ class MotorEndpoint(rclpy.node.Node):
 
         self.new_vel = True
 
-    # DONT WORRY AB THIS FOR NOW XD
+    
     def vel_curr_callback(self, vel_angle):
-        pass
-
-    #     """
-    #     Callback for driving commands.
-    #     """
+        """ Callback method to get the current velocity.
+        """
     #     self.vel_curr = vel_angle.vel_curr
 
     #     if self.vel < 0:
@@ -162,14 +154,15 @@ class MotorEndpoint(rclpy.node.Node):
     #         self.stopping_time = time.time()
 
     #     self.new_vel = True
+        pass
 
     def timer_callback(self):
+        """ Main loop timer for updating motor's instructions.
         """
-        Main loop timer for updating motor's instructions"""
         if not self.serial_connected:
             self.log_header("RETRYING SERIAL CONNECTION")
 
-            # FIXME MAKE THIS IN A METHOD
+            # FIXME Make a method to do this
             try:
                 self.arduino_ser = sr.Serial(
                     self.ARDUINO_PORT,
@@ -182,17 +175,19 @@ class MotorEndpoint(rclpy.node.Node):
                 self.log_header("MOTOR ENDPOINT: " + str(e))
                 self.serial_connected = False
 
-                # We are doing this instead of rate.sleep() and continue in the original implementation main loop
+                # Wait for the timer to start over in the event of an error
                 return
-
-        # Need to do this but better somehow and i dont know what they are doing tbh.
+        # Check if we have received a target yet
         if self.vel_planned is not None and self.angle_planned is not None:
             if self.manual_control:
+                # Use a different endpoint for driving if ignoring current velocity
                 self.manual_endpoint()
             else:
                 self.calculate_endpoint()
         self.prev_time = time.time()
 
+        # The heartbeat is a message sent from the arduino which provides the steering target, throttle target, 
+        # and brake target as comma separated numbers
         try:
             self.log_header("getting in the heartbeat try")
             self.heartbeat = self.arduino_ser.read_until()
@@ -200,12 +195,10 @@ class MotorEndpoint(rclpy.node.Node):
             self.log_header("THE ARDUINO HAS BEEN DISCONNECTED")
             self.serial_connected = False
 
-            # Add a method that attempts to reconnect to the arduino and then return
+            # FIXME Add a method that attempts to reconnect to the arduino and then return
             return
 
         if self.heartbeat != "":
-
-            # Some of these variables need to be renamed/check on
             self.heart_pub.publish(self.heartbeat)
             self.delta_time = time.time() - self.prev_time
             self.log_header("Heartbeat message:")
@@ -213,32 +206,28 @@ class MotorEndpoint(rclpy.node.Node):
             heartbeat_delta_t = time.time() - self.prev_time
 
             # This check is here because the time between the first and 2nd heartbeat is always ~2.4s
-            # I believe this is because of the rest of the setup taking place at the same time
-            # We need to initialize first_heartbeat first
+            # This is because of the rest of the setup taking place at the same time
             if heartbeat_delta_t >= 2.0:
                 self.log_header("TIME BETWEEN HEARTBEATS, > 2.0s | Things may be fine")
 
             self.log_header(f"Heartbeat delta: {heartbeat_delta_t}")
-        # This is here to emmulate rate.sleep() from the previous implementation
         return
 
     def manual_endpoint(self):
+        """ Alternative endpoint for processing and sending instructions to arduino for use 
+            when current velocity is ignored. This is helpful when using teleop for control.
+        """
 
         if self.new_vel:
-            # The first time we get a new target speed and angle we must convert it
-            # Need to come back to vel_cart_units later because it involves getting the planned velocity
-            # self.vel_cart_units = self.vel_planned
-
             self.vel_cart_units = self.vel_planned
             self.new_vel = False
-
-            # Why was this hard coded this way? What is it even doing
+            
+            # The first time we get a new target velocity we must convert it for the arduino.
+            # May need to get a better estimate later on.
             self.vel_cart_units *= (
                 50  # Rough conversion from m/s to cart controller units
             )
 
-            # i guess this logic makes sense but also i dont understand what "cart controller units" are
-            # and is it possible to get a better estimate?
             if self.vel_cart_units > 254:
                 self.vel_cart_units = 254
             if self.vel_cart_units < -254:
@@ -250,8 +239,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         target_speed = int(self.vel_cart_units)  # float64
 
-        # adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
-
+        # Adjusts the target_angle range from (-45 <-> 45) to (0 <-> 100)
         if self.angle_planned < -40:
             self.angle_planned = self.STEERING_TOLERANCE * -1
         if self.angle_planned > 40:
@@ -266,12 +254,11 @@ class MotorEndpoint(rclpy.node.Node):
 
         elif self.state == BRAKING:
 
-            # comfortable stop, no obstacle/deadline given
-
+            # Comfortable stop, no obstacle/deadline given
             self.brake_time_used += 1.0 / self.NODE_RATE  # 1 sec / rate per sec (10)
             brake_time = self.COMFORT_STOP_DIST - (
                 1.0 / self.NODE_RATE
-            )  # we decrease by one node rate initially to account for rounding
+            )  # Decrease by one node rate initially to account for rounding
 
             brake_rate = (0.1) * ((2550) ** (self.brake_time_used / brake_time))
 
@@ -283,25 +270,25 @@ class MotorEndpoint(rclpy.node.Node):
                 self.brake >= 255 and self.full_stop_count > 10
             ):  # We have reached maximum braking!
                 self.state = STOPPED
-                # reset brake time used
+                # Reset brake time used
                 self.brake_time_used = 0
                 self.full_stop_count = 0
-        ## DEL THIS
+                
+        # Should not be needed, accounts for invalid braking
         if self.brake < 0:
             self.brake = 0
         self.send_packet(target_speed, int(self.brake), target_angle)
 
     def calculate_endpoint(self):
+        """ The endpoint for processing and sending instructions to the arduino controller.
+        """
         if self.new_vel:
-            # The first time we get a new target speed and angle we must convert it
-            # Need to come back to vel_cart_units later because it involves getting the planned velocity
-            # self.vel_cart_units = self.vel_planned
-
             self.vel_cart_units = self.vel_planned
             self.vel_curr_cart_units = self.vel_curr
             self.new_vel = False
 
-            # Why was this hard coded this way? What is it even doing
+            # The first time we get a new target velocity we must convert it for the arduino.
+            # May need to get a better estimate later on.
             self.vel_cart_units *= (
                 50  # Rough conversion from m/s to cart controller units
             )
@@ -310,8 +297,6 @@ class MotorEndpoint(rclpy.node.Node):
                 50  # Rough conversion from m/s to cart controller units
             )
 
-            # i guess this logic makes sense but also i dont understand what "cart controller units" are
-            # and is it possible to get a better estimate?
             if self.vel_cart_units > 254:
                 self.vel_cart_units = 254
             if self.vel_cart_units < -254:
@@ -324,8 +309,7 @@ class MotorEndpoint(rclpy.node.Node):
         target_speed = int(self.vel_cart_units)  # float64
         # current_speed = int(self.vel_curr_cart_units) float64
 
-        # adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
-
+        # Adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
         if self.angle_planned < -40:
             self.angle_planned = self.STEERING_TOLERANCE * -1
         if self.angle_planned > 40:
@@ -342,16 +326,16 @@ class MotorEndpoint(rclpy.node.Node):
 
             target_speed = 0
 
-            # THIS IS ALL THE MATH FOR THE ACTUAL BREAKING
+            # Calculation for braking
             if self.obstacle_distance > 0:
-                # there exists an obstacle in the cart's path we need to stop for
+                # There exists an obstacle in the cart's path we need to stop for
 
                 self.brake_time_used += (
                     1.0 / self.NODE_RATE
                 )  # 1 sec / rate per sec (10)
                 obstacle_brake_time = self.obstacle_distance / self.vel_curr - (
                     1.0 / self.NODE_RATE
-                )  # we decrease by one node rate initially to account for rounding
+                )  # We decrease by one node rate initially to account for rounding
 
                 brake_rate = (0.1) * (
                     (2550) ** (self.brake_time_used / obstacle_brake_time)
@@ -362,14 +346,13 @@ class MotorEndpoint(rclpy.node.Node):
 
                 self.brake = float(min(255, math.ceil(brake_rate)))
             else:
-                # comfortable stop, no obstacle/deadline given
-
+                # Comfortable stop, no obstacle/deadline given
                 self.brake_time_used += (
                     1.0 / self.NODE_RATE
                 )  # 1 sec / rate per sec (10)
                 brake_time = self.COMFORT_STOP_DIST - (
                     1.0 / self.NODE_RATE
-                )  # we decrease by one node rate initially to account for rounding
+                )  # We decrease by one node rate initially to account for rounding
 
                 brake_rate = (0.1) * ((2550) ** (self.brake_time_used / brake_time))
 
@@ -381,19 +364,14 @@ class MotorEndpoint(rclpy.node.Node):
                 self.brake >= 255 and self.full_stop_count > 10
             ):  # We have reached maximum braking!
                 self.state = STOPPED
-                # reset brake time used
+                # Reset brake time used
                 self.brake_time_used = 0
                 self.full_stop_count = 0
 
         self.send_packet(target_speed, int(self.brake), target_angle)
 
     def send_packet(self, throttle, brake, steer_angle):
-        """This method is used to send instructions to the arduino that was connected in init.
-
-        Args:
-            throttle (_type_): _description_
-            brake (_type_): _description_
-            steer_angle (_type_): _description_
+        """ This method is used to send instructions to the arduino that was connected in init.
         """
 
         # This is a buffer used in pack_into essentially making 5 empty bytes
@@ -411,17 +389,18 @@ class MotorEndpoint(rclpy.node.Node):
             steer_angle + self.STEERING_CORRECTION,
         )
         self.arduino_ser.write(data)
-        self.log_header("\nHERE\n")
 
     def log_header(self, msg):
+        """ Helper method to print noticeable log statements.
+        """
         self.get_logger().info("=" * 50)
         self.get_logger().info(f"{msg}")
         self.get_logger().info("=" * 50)
 
 
 def main():
+    """ The main method that actually handles spinning up the node.
     """
-    The main method that actually handles spinning up the node."""
 
     rclpy.init()
     node = MotorEndpoint()

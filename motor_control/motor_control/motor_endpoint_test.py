@@ -32,7 +32,7 @@ class MotorEndpointTest(rclpy.node.Node):
 
             self.drive_forward(planned_turning)
 
-            time.sleep(6)
+            time.sleep(5)
             planned_turning.vel_planned = 0.0
             self.pub_motion.publish(planned_turning)
             self.get_logger().info("### Test Complete")
@@ -60,7 +60,7 @@ class MotorEndpointTest(rclpy.node.Node):
 
     def drive_forward(self, planned_turning):
         planned_turning.angle_planned = 0.0
-        planned_turning.vel_planned = 3.0
+        planned_turning.vel_planned = 1.5
 
         self.pub_motion.publish(planned_turning)
 

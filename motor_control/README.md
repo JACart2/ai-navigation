@@ -11,12 +11,6 @@ This contains the motor_endpoint python script that connects the arduino to coop
 ### resource
 This contains the old scripts from Jacart1 and other resources used to transition into ROS2.
 
-##### To find the TTY* port that Arduino uses, run "udevadm monitor -u" before plugging it in, then it should give the information you need.
-##### An issue that has presented itself relating to connecting the arduino port can be fixed by deleting the Brltty package in linux
-```
-sudo apt remove brltty
-```
-
 ## Setup/How to run
 
 1. Ensure [ROS2 humble](https://docs.ros.org/en/humble/Installation.html) is installed on your machine and navigate to /dev_ws/src by either creating the directory or going into a premade one.
@@ -42,15 +36,25 @@ sudo pip install <packages>
 ```
 ros2 launch <file> <baud_rate> <arduino_port>
 ```
-6. open a new terminal and you can start up the teleop
+6. Open a new terminal and you can start up the teleop
 ```
 ros2 run <teleop>
 ```
+
+### Tips
+
+- To find the TTY* port that Arduino uses, run "udevadm monitor -u" before plugging it in, then it should give the information you need.
+- There is also a linux rule file that always binds the arduino to "ttyUSB9" found in the resouce file.
+- An issue that has presented itself relating to connecting the arduino port can be fixed by deleting the Brltty package in linux
+```
+sudo apt remove brltty
+```
+
 ## This is the message to send to the motor_control node when its running.
 It should be noted that the values of vel_planned and angle_planned should be changed based on upon how you would like the cart to act.
  
 - Negative values for the angle_planned paramters turn the car right and vice versa for positive values.
-- Negative values passed to vel_planned indicate breaking while positive values indicate acceleration
+- Negative values passed to vel_planned indicate braking while positive values indicate acceleration
 
 ```
 ros2 topic pub /nav_cmd motor_control_interface/msg/VelAnglePlanned "header:

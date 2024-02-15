@@ -24,16 +24,15 @@ BRAKING = 1
 STOPPED = 2
 
 
-
 class MotorEndpoint(rclpy.node.Node):
-    """ ROS2 node that handles controlling the motor.
-    """
+    """ROS2 node that handles controlling the motor."""
+
     def __init__(self):
         super().__init__("motor_endpoint")
 
         # Class constants
         self.BRAKE_TIME = 3
-        self.NODE_RATE = 0.1
+        self.NODE_RATE = 10
         self.STEERING_TOLERANCE = 50
         self.COMFORT_STOP_DIST = 4.0
         self.STEERING_CORRECTION = 10
@@ -44,7 +43,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
-        
+
         self.manual_control = True
 
         self.vel_planned = None
@@ -77,7 +76,6 @@ class MotorEndpoint(rclpy.node.Node):
             self.log_header("MOTOR ENDPOINT: " + str(e))
             serial_connected = False
 
-        
         # Need to choose a new topic name for current velocity subscriber
 
         # self.curr_motion_subscriber = self.create_subscription(
@@ -90,11 +88,10 @@ class MotorEndpoint(rclpy.node.Node):
 
         self.heart_pub = self.create_publisher(String, "/heartbeat", 10)
 
-        self.timer = self.create_timer(self.NODE_RATE, self.timer_callback)
+        self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)
 
     def vel_angle_planned_callback(self, planned_vel_angle):
-        """ Callback method to get the target velocity and angle.
-        """
+        """Callback method to get the target velocity and angle."""
 
         self.vel_planned = planned_vel_angle.vel_planned
         self.angle_planned = planned_vel_angle.angle_planned
@@ -125,40 +122,37 @@ class MotorEndpoint(rclpy.node.Node):
 
         self.new_vel = True
 
-    
     def vel_curr_callback(self, vel_angle):
-        """ Callback method to get the current velocity.
-        """
-    #     self.vel_curr = vel_angle.vel_curr
+        """Callback method to get the current velocity."""
+        #     self.vel_curr = vel_angle.vel_curr
 
-    #     if self.vel < 0:
-    #         # indicates an obstacle
-    #         self.obstacle_distance = abs(self.vel)
-    #         self.vel = 0
-    #     else:
-    #         # reset obstacle distance and brake time
-    #         self.obstacle_distance = -1
-    #         self.brake_time_used = 0
-    #         self.full_stop_count = 0
+        #     if self.vel < 0:
+        #         # indicates an obstacle
+        #         self.obstacle_distance = abs(self.vel)
+        #         self.vel = 0
+        #     else:
+        #         # reset obstacle distance and brake time
+        #         self.obstacle_distance = -1
+        #         self.brake_time_used = 0
+        #         self.full_stop_count = 0
 
-    #     if (
-    #         self.vel > 0
-    #         and (self.state == STOPPED or self.state == BRAKING)
-    #         and (time.time() - self.stopping_time) > 10
-    #     ):
-    #         self.state = MOVING
-    #         self.brake = 0  # take the foot off the brake
-    #     elif self.state == MOVING and self.vel <= 0:  # Brakes are hit
-    #         self.state = BRAKING
-    #         self.brake = 0  # ramp up braking from 0
-    #         self.stopping_time = time.time()
+        #     if (
+        #         self.vel > 0
+        #         and (self.state == STOPPED or self.state == BRAKING)
+        #         and (time.time() - self.stopping_time) > 10
+        #     ):
+        #         self.state = MOVING
+        #         self.brake = 0  # take the foot off the brake
+        #     elif self.state == MOVING and self.vel <= 0:  # Brakes are hit
+        #         self.state = BRAKING
+        #         self.brake = 0  # ramp up braking from 0
+        #         self.stopping_time = time.time()
 
-    #     self.new_vel = True
+        #     self.new_vel = True
         pass
 
     def timer_callback(self):
-        """ Main loop timer for updating motor's instructions.
-        """
+        """Main loop timer for updating motor's instructions."""
         if not self.serial_connected:
             self.log_header("RETRYING SERIAL CONNECTION")
 
@@ -186,7 +180,7 @@ class MotorEndpoint(rclpy.node.Node):
                 self.calculate_endpoint()
         self.prev_time = time.time()
 
-        # The heartbeat is a message sent from the arduino which provides the steering target, throttle target, 
+        # The heartbeat is a message sent from the arduino which provides the steering target, throttle target,
         # and brake target as comma separated numbers
         try:
             self.log_header("getting in the heartbeat try")
@@ -214,14 +208,14 @@ class MotorEndpoint(rclpy.node.Node):
         return
 
     def manual_endpoint(self):
-        """ Alternative endpoint for processing and sending instructions to arduino for use 
-            when current velocity is ignored. This is helpful when using teleop for control.
+        """Alternative endpoint for processing and sending instructions to arduino for use
+        when current velocity is ignored. This is helpful when using teleop for control.
         """
 
         if self.new_vel:
             self.vel_cart_units = self.vel_planned
             self.new_vel = False
-            
+
             # The first time we get a new target velocity we must convert it for the arduino.
             # May need to get a better estimate later on.
             self.vel_cart_units *= (
@@ -273,15 +267,14 @@ class MotorEndpoint(rclpy.node.Node):
                 # Reset brake time used
                 self.brake_time_used = 0
                 self.full_stop_count = 0
-                
+
         # Should not be needed, accounts for invalid braking
         if self.brake < 0:
             self.brake = 0
         self.send_packet(target_speed, int(self.brake), target_angle)
 
     def calculate_endpoint(self):
-        """ The endpoint for processing and sending instructions to the arduino controller.
-        """
+        """The endpoint for processing and sending instructions to the arduino controller."""
         if self.new_vel:
             self.vel_cart_units = self.vel_planned
             self.vel_curr_cart_units = self.vel_curr
@@ -371,8 +364,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.send_packet(target_speed, int(self.brake), target_angle)
 
     def send_packet(self, throttle, brake, steer_angle):
-        """ This method is used to send instructions to the arduino that was connected in init.
-        """
+        """This method is used to send instructions to the arduino that was connected in init."""
 
         # This is a buffer used in pack_into essentially making 5 empty bytes
         data = bytearray(b"\x00" * 5)
@@ -391,16 +383,14 @@ class MotorEndpoint(rclpy.node.Node):
         self.arduino_ser.write(data)
 
     def log_header(self, msg):
-        """ Helper method to print noticeable log statements.
-        """
+        """Helper method to print noticeable log statements."""
         self.get_logger().info("=" * 50)
         self.get_logger().info(f"{msg}")
         self.get_logger().info("=" * 50)
 
 
 def main():
-    """ The main method that actually handles spinning up the node.
-    """
+    """The main method that actually handles spinning up the node."""
 
     rclpy.init()
     node = MotorEndpoint()

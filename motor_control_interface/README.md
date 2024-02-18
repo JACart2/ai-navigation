@@ -1,5 +1,13 @@
 # Motor Control Interfaces
-As stated earlier this package houses the messages that are used to communicate with the golf cart
+This package houses the messages that are used to communicate with the motor controller.
 
 ## Messages
-* whatever
+VelAnglePlanned
+```
+float64 vel_planned
+float64 angle_planned
+```
+VelCurr
+```
+float64 vel_curr
+```

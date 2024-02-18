@@ -16,5 +16,5 @@ This package contains the messages that actually allow us to communicate with th
 For help setting up the project and getting it ready to run, see the README in the [motor_control](motor_control/README.md#setuphow-to-run) package.
 
 ## Quick Commands
-- ```ros2 launch motor_control motor_endpoint``` Starts the node that controls the motor
-- ```ros2 run teleop teleop``` Starts the teleop controller
+- ```ros2 launch motor_control motor.launch.py``` Starts the node that controls the motor
+- ```ros2 run teleop teleop_node``` Starts the teleop controller

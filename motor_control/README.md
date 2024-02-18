@@ -34,11 +34,15 @@ sudo pip install <packages>
 ```
 5. Run the launch file
 ```
-ros2 launch <file> <baud_rate> <arduino_port>
+ros2 launch motor_control motor.launch.py
+```
+or
+```
+ros2 launch motor_control motor.launch.py baudrate:=57600 arduino_port:=dev/ttyUSB9
 ```
 6. Open a new terminal and you can start up the teleop
 ```
-ros2 run <teleop>
+ros2 run teleop teleop_node
 ```
 
 ### Tips

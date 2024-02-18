@@ -7,7 +7,7 @@
 ### launch
 This contains the launch file.
 ### motor_control
-This contains the motor_endpoint python script that connects the arduino to cooperate with ROS2.
+This contains the motor_endpoint python code that connects the arduino to cooperate with ROS2.
 ### resource
 This contains the old scripts from Jacart1 and other resources used to transition into ROS2.
 
@@ -49,8 +49,15 @@ ros2 run <teleop>
 ```
 sudo apt remove brltty
 ```
-
-## This is the message to send to the motor_control node when its running.
+## ROS Info
+#### motor_endpoint
+```
+Subs: /nav_cmd
+Pubs: /heartbeat
+Params: baudrate, arduino port
+```
+### Template nav_cmd message
+This is the message to send to the motor_control node when it's running.
 It should be noted that the values of vel_planned and angle_planned should be changed based on upon how you would like the cart to act.
  
 - Negative values for the angle_planned paramters turn the car right and vice versa for positive values.

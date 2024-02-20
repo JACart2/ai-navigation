@@ -56,7 +56,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.delta_time = 0.0
 
         self.declare_parameter("baudrate", 57600)
-        self.declare_parameter("arduino_port", "/dev/ttyUSB9")
+        self.declare_parameter("arduino_port", "/dev/ttyACM0")
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -69,6 +69,9 @@ class MotorEndpoint(rclpy.node.Node):
             self.arduino_ser = sr.Serial(
                 self.ARDUINO_PORT, baudrate=self.BAUDRATE, write_timeout=0, timeout=0.01
             )
+            time.sleep(1)
+            # self.arduino_ser.setDTR(level=0)
+            time.sleep(1)
             self.serial_connected = True
             self.log_header("CONNECTED TO ARDUINO")
         except Exception as e:

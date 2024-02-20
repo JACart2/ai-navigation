@@ -1,8 +1,4 @@
-"""Launch the Zeta rescue system 
-
-You can make any changes you want to this launch file, but it must
-accept the time_limit and use_sim_time command line arguments.
-
+""" Launch the motor control system.
 """
 
 from launch import LaunchDescription
@@ -14,7 +10,7 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     return LaunchDescription(
         [
-            DeclareLaunchArgument("baudrate", default_value="57600"),
+            DeclareLaunchArgument("baudrate", default_value=57600),
             DeclareLaunchArgument("arduino_port", default_value="dev/ttyUSB9"),
             Node(
                 package="motor_control",

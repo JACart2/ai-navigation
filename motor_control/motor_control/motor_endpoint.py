@@ -55,7 +55,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.prev_time = 0.0
         self.delta_time = 0.0
 
-        self.declare_parameter("baudrate", "57600")
+        self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB9")
 
         self.BAUDRATE = (

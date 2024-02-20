@@ -23,7 +23,11 @@ cd dev_ws/src
 git clone https://github.com/JACart2/ai-navigation.git
 cd ..
 ```
-3. Run the launch file
+3. Run the setup script
+```
+./src/ai-navigation/motor_control/resource/startup_script.sh
+```
+4. Run the launch file
 ```
 ros2 launch motor_control motor.launch.py
 ```
@@ -31,24 +35,16 @@ or
 ```
 ros2 launch motor_control motor.launch.py baudrate:=57600 arduino_port:=dev/ttyUSB9
 ```
-4. Open a new terminal and you can start up the teleop
+5. Open a new terminal and you can start up the teleop
 ```
 ros2 run teleop teleop_node
 ```
 
-### Tips
-
-- To find the TTY* port that Arduino uses, run "udevadm monitor -u" before plugging it in, then it should give the information you need.
-- There is also a linux rule file that always binds the arduino to "ttyUSB9" found in the resouce file.
-- An issue that has presented itself relating to connecting the arduino port can be fixed by deleting the Brltty package in linux
-```
-sudo apt remove brltty
-```
 ## ROS Info
 #### motor_endpoint
 ```
-Subs: /nav_cmd
-Pubs: /heartbeat
+Subscribes to: /nav_cmd
+Publishes to: /heartbeat
 Params: baudrate, arduino port
 ```
 ### Template nav_cmd message

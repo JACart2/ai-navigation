@@ -1,13 +1,13 @@
 # ai-navigation
-ROS2 Code for JACart2
+ROS2 Code for JACart2 - Please read the following before continuing
 
 ## Structure
 
 ### motor_control
-Contains the code for controlling the arduino board and processes navigation instructions. The first step in getting the cart setup.
+Contains the code for controlling the arduino board and processes navigation instructions. This package houses [the first steps](motor_control/README.md) in getting the cart setup. It is recommened to follow all of the instructions located here before continuing.
 
 ### teleop
-Used to manually control the cart using keyboard input. Requires the motor_endpoint to be running first.
+Used to manually control the cart using keyboard input. Requires the motor_endpoint documented in [the motor control](motor_control/README.md) package to be running first.
 
 ### motor_control_interface
 This package contains the messages that actually allow us to communicate with the motor control nodes

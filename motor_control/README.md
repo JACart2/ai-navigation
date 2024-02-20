@@ -13,7 +13,7 @@ This contains the old scripts from Jacart1 and other resources used to transitio
 
 ## Setup/How to run
 
-1. Ensure [ROS2 humble](https://docs.ros.org/en/humble/Installation.html) is installed on your machine and navigate to /dev_ws/src by either creating the directory or going into a premade one.
+1. Ensure [ROS2 humble](https://docs.ros.org/en/humble/Installation/Alternatives/Ubuntu-Development-Setup.html) is installed on your machine and navigate to /dev_ws/src by either creating the directory or going into a premade one.
 ```
 mkdir -p dev_ws/src
 cd dev_ws/src
@@ -23,16 +23,7 @@ cd dev_ws/src
 git clone https://github.com/JACart2/ai-navigation.git
 cd ..
 ```
-3. Build the packages inside of dev_ws and soruce them
-```
-colcon build --symlink-install
-source install/setup.bash
-```
-4. Install all of the required packages (noted in requirements.txt)
-```
-sudo pip install <packages>
-```
-5. Run the launch file
+3. Run the launch file
 ```
 ros2 launch motor_control motor.launch.py
 ```
@@ -40,7 +31,7 @@ or
 ```
 ros2 launch motor_control motor.launch.py baudrate:=57600 arduino_port:=dev/ttyUSB9
 ```
-6. Open a new terminal and you can start up the teleop
+4. Open a new terminal and you can start up the teleop
 ```
 ros2 run teleop teleop_node
 ```

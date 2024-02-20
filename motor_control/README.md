@@ -23,11 +23,12 @@ cd dev_ws/src
 git clone https://github.com/JACart2/ai-navigation.git
 cd ..
 ```
-3. Run the setup script
+3. Run the setup script from the dev_ws directory.
 ```
 ./src/ai-navigation/motor_control/resource/startup_script.sh
 ```
-4. Run the launch file
+4. Turn on the cart and connect the laptop via the USB-C cable located in the rear of the cart
+5. Run the launch file
 ```
 ros2 launch motor_control motor.launch.py
 ```
@@ -35,8 +36,9 @@ or
 ```
 ros2 launch motor_control motor.launch.py baudrate:=57600 arduino_port:=dev/ttyUSB9
 ```
-5. Open a new terminal and you can start up the teleop
+6. Open a new terminal and you can start up the teleop
 ```
+source install/setup.bash
 ros2 run teleop teleop_node
 ```
 

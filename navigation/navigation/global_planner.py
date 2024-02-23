@@ -13,10 +13,21 @@ import math
 import networkx as nx
 
 # ROS based imports
+import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
+
+
 import rclpy
 from motor_control_interface.msg import VelCurr, VelAnglePlanned
 from geometry_msgs.msg import Pose, Point, PoseStamped, PointStamped, TwistStamped
+from visualization_msgs.msg import Marker
+from std_msgs.msg import String, Header, Float32
+from navigation_interface.msg import (
+    VehicleState,
+    LatLongPoint,
+    LocalPointsArray,
+    LatLongArray,
+)
 
 
 class GlobalPlanner(rclpy.node.Node):
@@ -32,12 +43,55 @@ class GlobalPlanner(rclpy.node.Node):
         self.destination_node = None
         self.yaw = None
 
-        # Graphing things
+        # Graphing variables
         self.global_graph = nx.DiGraph()
         self.logic_graph = None
         # File name needs to be a launch paramter
         file_name = None
         self.load_file(file_name)
+
+        # ROS publisher information
+        # Listen for cart position changes
+        self.pose_sub = self.create_subscription(
+            PoseStamped, "/limited_pose", self.pose_callback, 10
+        )
+
+        # Listen for standard destination requests
+        # self.dest_req_sub = rospy.Subscriber('/destination_request', String, self.request_callback, queue_size=10)
+
+        # Listen for vehicle state changes
+        self.vehicle_state_sub = self.create_subscription(
+            VehicleState, "/vehicle_state", self.state_change, 10
+        )
+
+        # Clicked destination requests, accepted from RViz clicked points, disabled when building maps
+        self.click_req_sub = self.create_subscription(
+            PointStamped, "/clicked_point", self.point_callback, 10
+        )
+
+        # Listen for velocity/speed of cart
+        self.vel_sub = self.create_subscription(
+            Float32, "/estimated_vel_mps", self.vel_callback, 10
+        )
+
+        # This is here temporarily to test GPS_Util
+        self.lat_long_req = self.create_subscription(
+            LatLongPoint, "/gps_request", self.gps_request_cb, 10
+        )
+
+        self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
+
+        # Publish the path to allow mind.py to begin navigation
+        self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
+
+        # Publishes the path but in GPS coordinates
+        self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
+
+        # Published the current cart position but in GPS coordinates TODO move to local planner
+        self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
+
+        # How often to update the gps position of the cart
+        self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
 
     # Load the graph file as the global graph
     def load_file(self, file_name):
@@ -147,8 +201,8 @@ class GlobalPlanner(rclpy.node.Node):
             self.path_pub.publish(points_arr)
 
         except nx.NetworkXNoPath:
-            rospy.logerr("Unable to find a path to the desired destination")
-            rospy.logerr(
+            self.log_header("Unable to find a path to the desired destination")
+            self.log_header(
                 "Debug info: Starting Node: "
                 + str(self.current_cart_node)
                 + " End node: "
@@ -157,9 +211,9 @@ class GlobalPlanner(rclpy.node.Node):
             if not nx.has_path(
                 self.global_graph, self.current_cart_node, destination_point
             ):
-                rospy.logerr("NetworkX can't find a connection")
+                self.log_header("NetworkX can't find a connection")
             else:
-                rospy.logerr("NetworkX can find a connection")
+                self.log_header("NetworkX can find a connection")
 
     def determine_lane(self, cart_node):
         """A function for determining which lane the cart is in, or should be in. (Note lanes being directions in the directed graph)
@@ -402,7 +456,7 @@ class GlobalPlanner(rclpy.node.Node):
             msg.pose.orientation.z,
             msg.pose.orientation.w,
         )
-        self.orientation = euler_from_quaternion(cart_quat)
+        self.orientation = tf_transformations.euler_from_quaternion(cart_quat)
 
     # We've received a clicked point from RViz, calculate a path to it
     def point_callback(self, msg):
@@ -515,6 +569,8 @@ class GlobalPlanner(rclpy.node.Node):
             self.anchor_theta = simple_gps_util.calibrate_util(
                 test_local, anchor_local, test_gps, anchor_gps
             )
+
+            # FIXME THIS NEEDS TO BE LOOKED INTO
             rospy.set_param("anchor_theta", float(self.anchor_theta))
             rospy.loginfo(
                 "Calibrated GPS Utility With Heading Offset: "
@@ -551,6 +607,7 @@ class GlobalPlanner(rclpy.node.Node):
         marker.color.b = 0.0
         marker.color.a = 1.0
 
+        # FIXME THIS NEEDS TO BE LOOKED INTO
         marker.lifetime = rospy.Duration.from_sec(10)
 
         marker.pose.position.x = local_point.x

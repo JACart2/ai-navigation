@@ -8,11 +8,11 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 import time
 import serial as sr
 import numpy as np
-import bitstruct
 import math
 import networkx as nx
+from navigation import simple_gps_util 
 
-# ROS based imports
+# ROS based import
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
@@ -42,12 +42,18 @@ class GlobalPlanner(rclpy.node.Node):
         self.prev_cart_node = None
         self.destination_node = None
         self.yaw = None
+        self.navigating = False
+
+        
+        # FIXME MAKE THIS A LAUNCH PARAM (i dont feel like doing it rn xD)
+        self.anchor_gps = [38.433939, -78.862157]
+
 
         # Graphing variables
         self.global_graph = nx.DiGraph()
         self.logic_graph = None
         # File name needs to be a launch paramter
-        file_name = None
+        file_name = r"/home/student/Downloads/home_loop.gml"
         self.load_file(file_name)
 
         # ROS publisher information
@@ -74,7 +80,7 @@ class GlobalPlanner(rclpy.node.Node):
             Float32, "/estimated_vel_mps", self.vel_callback, 10
         )
 
-        # This is here temporarily to test GPS_Util
+        # This is to orient the gps.
         self.lat_long_req = self.create_subscription(
             LatLongPoint, "/gps_request", self.gps_request_cb, 10
         )
@@ -102,13 +108,15 @@ class GlobalPlanner(rclpy.node.Node):
             is where the file path can be found
         """
 
+        #THIS NEEDS TO BE FIXED. ADDED SOME TRY EXCPETS
         try:
             self.global_graph = nx.read_gml(file_name)
             for node in self.global_graph:
                 self.global_graph.node[node]["active"] = True
-        except:
+        except Exception as e:
+            print(e)
             self.log_header(
-                "Unable to launch graph file pointed to in the constants file in .../cart_planning/launch"
+                f"Unable to launch graph file pointed to in the constants file in {file_name}"
             )
 
     def calc_nav(self, point):
@@ -528,7 +536,7 @@ class GlobalPlanner(rclpy.node.Node):
         # Publish here
         self.gps_path_pub.publish(gps_path)
 
-    def output_pos_gps(self, event):
+    def output_pos_gps(self):
         """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution
         rather than GPS which can be relatively inaccurate.
 
@@ -571,12 +579,12 @@ class GlobalPlanner(rclpy.node.Node):
             )
 
             # FIXME THIS NEEDS TO BE LOOKED INTO
-            rospy.set_param("anchor_theta", float(self.anchor_theta))
-            rospy.loginfo(
-                "Calibrated GPS Utility With Heading Offset: "
-                + str(self.anchor_theta)
-                + " degrees"
-            )
+            # rospy.set_param("anchor_theta", float(self.anchor_theta))
+            # rospy.loginfo(
+            #     "Calibrated GPS Utility With Heading Offset: "
+            #     + str(self.anchor_theta)
+            #     + " degrees"
+            # )
             self.gps_calibrated = True
 
         # the anchor point is the latitude/longitude for the pcd origin
@@ -607,9 +615,9 @@ class GlobalPlanner(rclpy.node.Node):
         marker.color.b = 0.0
         marker.color.a = 1.0
 
-        # FIXME THIS NEEDS TO BE LOOKED INTO
-        marker.lifetime = rospy.Duration.from_sec(10)
-
+        # FIXME THIS NEEDS TO BE LOOKED INTO. I think its right but i dont know.
+        marker.lifetime = rclpy.duration.Duration(seconds=10)
+    
         marker.pose.position.x = local_point.x
         marker.pose.position.y = local_point.y
         marker.pose.position.z = 0.0

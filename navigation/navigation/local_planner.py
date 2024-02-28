@@ -139,9 +139,11 @@ class LocalPlanner(rclpy.node.Node):
 
     def stop_cb(self, msg):
         self.stop_requests[str[msg.sender_id.data].lower()] = [msg.stop, msg.distance]
+        self.log(f'{str(msg.sender_id.data).lower()} requested stop: {str(msg.stop)} with distance {str(msg.distance)}')
 
     def speed_cb(self, msg):
         self.cur_speed = msg.data / self.SECONDS
+        self.log(f'Speed changed to {str(self.global_speed)}')
 
     def vel_cb(self, msg):
         if msg.data < 1.0:
@@ -161,6 +163,13 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
+        self.log(f'Path received: {str(msg)}')
+
+    def log(self, log):
+        self.get_logger().info(f'{log}')
+
+    def log_header(self, log):
+        self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
 
 
 def main():

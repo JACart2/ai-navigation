@@ -249,7 +249,7 @@ class LocalPlanner(rclpy.node.Node):
             rate = 1.0 / 30.0 # 30 cycles per second
 
             # TODO - Can we make this a timer that gets called then destoryed?
-            
+
             # Continue to loop while we have not hit the target destination, and the path is still valid
             while last_index > target_ind and self.path_valid:
                 target_speed = self.global_speed            
@@ -440,7 +440,7 @@ def create_pose_stamped(point):
 def create_marker(x, y, frame_id):
     marker = Marker()
     marker.header.frame_id = frame_id
-    marker.header.stamp = rospy.Time.now()
+    marker.header.stamp = time.time()
     marker.ns = "my_namespace"
     marker.id = 0
     marker.type = 1 #cube

@@ -13,7 +13,9 @@ import math
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from nav_msgs.msg import Path
-from navigation_msgs.msg import LocalPointsArray, VehicleState, Stop
+from navigation_interface.msg import LocalPointsArray, VehicleState, Stop
+
+# This needs to relflect the fac
 from motor_control_interface.msg import VelAngle
 from std_msgs.msg import Float32, String, UInt64
 from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose, Twist

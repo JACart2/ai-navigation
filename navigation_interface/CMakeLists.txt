@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/LatLongArray.msg"
   "msg/LocalPointsArray.msg"
   "msg/VehicleState.msg"
+  "msg/Stop.msg"
 
   DEPENDENCIES geometry_msgs 
   DEPENDENCIES std_msgs

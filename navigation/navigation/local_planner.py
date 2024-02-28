@@ -18,7 +18,6 @@ from navigation_interface.msg import (
     LocalPointsArray,
     VehicleState,
     Stop,
-    WaypointsArray,
 )
 
 # We need to figure out how they are using VelAngle so we can use VelAngle/Vel

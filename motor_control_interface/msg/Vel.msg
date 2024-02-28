@@ -1,2 +1,2 @@
 std_msgs/Header header
-float64 vel_curr
+float64 vel

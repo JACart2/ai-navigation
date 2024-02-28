@@ -15,7 +15,7 @@ import math
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from motor_control_interface.msg import VelCurr, VelAnglePlanned
+from motor_control_interface.msg import Vel, VelAngle
 from std_msgs.msg import Bool, String
 
 # State constants
@@ -81,13 +81,13 @@ class MotorEndpoint(rclpy.node.Node):
         # Need to choose a new topic name for current velocity subscriber
         # As of right now this is useless tho because we dont have vel curr
         # self.curr_motion_subscriber = self.create_subscription(
-        #     VelCurr, "/nav_cmd", self.vel_curr_callback, 10
+        #     Vel, "/nav_cmd", self.vel_curr_callback, 10
         # )
 
         # Creation of some simple subscribers/publishers/timers
 
         self.planned_motion_subscriber = self.create_subscription(
-            VelAnglePlanned, "/nav_cmd", self.vel_angle_planned_callback, 10
+            VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
 
         self.heart_pub = self.create_publisher(String, "/heartbeat", 10)
@@ -101,8 +101,8 @@ class MotorEndpoint(rclpy.node.Node):
         message (planned_vel_angle) and set the appropriate fields to make the cart drive/turn.
         """
 
-        self.vel_planned = planned_vel_angle.vel_planned
-        self.angle_planned = planned_vel_angle.angle_planned
+        self.vel_planned = planned_vel_angle.vel
+        self.angle_planned = planned_vel_angle.angle
 
         self.log_header(f"Planned Angle: {planned_vel_angle}")
 
@@ -136,7 +136,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         self.new_vel = True
 
-    def vel_curr_callback(self, vel_angle):
+    def vel_curr_callback(self, vel):
         """Callback method to get the current velocity. It should be noted that we arent using this method right now
         because we have no way of getting the current velocity."""
         #     self.vel_curr = vel_angle.vel_curr

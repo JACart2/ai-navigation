@@ -51,19 +51,19 @@ Params: baudrate, arduino port
 ```
 ### Template nav_cmd message
 This is the message to send to the motor_control node when it's running.
-It should be noted that the values of vel_planned and angle_planned should be changed based on upon how you would like the cart to act.
+It should be noted that the values of vel and angle should be changed based on upon how you would like the cart to act.
  
-- Negative values for the angle_planned paramters turn the car right and vice versa for positive values.
-- Negative values passed to vel_planned indicate braking while positive values indicate acceleration
+- Negative values for the angle paramters turn the car right and vice versa for positive values.
+- Negative values passed to vel indicate braking while positive values indicate acceleration
 
 ```
-ros2 topic pub /nav_cmd motor_control_interface/msg/VelAnglePlanned "header:
+ros2 topic pub /nav_cmd motor_control_interface/msg/VelAngle "header:
   stamp:
     sec: 0
     nanosec: 0
   frame_id: ''
-vel_planned: 0.0
-angle_planned: 0.0
+vel: 0.0
+angle: 0.0
 "
 ```
 

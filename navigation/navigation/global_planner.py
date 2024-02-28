@@ -36,7 +36,13 @@ class GlobalPlanner(rclpy.node.Node):
         self.global_graph = nx.DiGraph()
         self.logic_graph = None
         # File name needs to be a launch paramter
-        file_name = None
+
+        #FIXME we need to figure out where to put these graphs files
+        self.declare_parameter("graph_file", "")
+
+        file_name = (
+            self.get_parameter("graph_file").get_parameter_value().string_value
+        )
         self.load_file(file_name)
 
     # Load the graph file as the global graph

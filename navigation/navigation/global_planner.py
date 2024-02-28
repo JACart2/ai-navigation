@@ -10,7 +10,7 @@ import serial as sr
 import numpy as np
 import math
 import networkx as nx
-from navigation import simple_gps_util 
+from navigation import simple_gps_util
 
 # ROS based import
 import tf_transformations
@@ -36,6 +36,7 @@ class GlobalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("global_planner")
 
+        print("XD")
         # Current waypoint of cart
         self.current_pos = None
         self.current_cart_node = None
@@ -44,16 +45,15 @@ class GlobalPlanner(rclpy.node.Node):
         self.yaw = None
         self.navigating = False
 
-        
         # FIXME MAKE THIS A LAUNCH PARAM (i dont feel like doing it rn xD)
         self.anchor_gps = [38.433939, -78.862157]
-
 
         # Graphing variables
         self.global_graph = nx.DiGraph()
         self.logic_graph = None
+
         # File name needs to be a launch paramter
-        file_name = r"/home/student/Downloads/home_loop.gml"
+        file_name = r"/cs/home/stu/ashurslp/home_loop.gml"
         self.load_file(file_name)
 
         # ROS publisher information
@@ -108,11 +108,11 @@ class GlobalPlanner(rclpy.node.Node):
             is where the file path can be found
         """
 
-        #THIS NEEDS TO BE FIXED. ADDED SOME TRY EXCPETS
         try:
             self.global_graph = nx.read_gml(file_name)
+
             for node in self.global_graph:
-                self.global_graph.node[node]["active"] = True
+                self.global_graph.nodes[node]["active"] = True
         except Exception as e:
             print(e)
             self.log_header(
@@ -617,7 +617,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         # FIXME THIS NEEDS TO BE LOOKED INTO. I think its right but i dont know.
         marker.lifetime = rclpy.duration.Duration(seconds=10)
-    
+
         marker.pose.position.x = local_point.x
         marker.pose.position.y = local_point.y
         marker.pose.position.z = 0.0

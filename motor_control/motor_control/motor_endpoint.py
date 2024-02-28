@@ -243,9 +243,7 @@ class MotorEndpoint(rclpy.node.Node):
             if self.vel_cart_units < -254:
                 self.vel_cart_units = -254
             if self.vel_cart_units < 0:
-                self.self.log_header(
-                    "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!"
-                )
+                self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
 
         target_speed = int(self.vel_cart_units)  # float64
 

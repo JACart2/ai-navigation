@@ -21,9 +21,10 @@ from navigation_interface.msg import (
     WaypointsArray,
 )
 
-# For now motor_control import will be commented out. We need to figure out how they are using VelAngle so we can use VelAnglePlanned/VelCurr
+# We need to figure out how they are using VelAngle so we can use VelAngle/Vel
 # Also the respecitive methods need to be ported over.
-# from motor_control_interface.msg import VelAngle
+from motor_control_interface.msg import Vel, VelAngle
+
 from std_msgs.msg import Float32, String, UInt64
 from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose, Twist
 from visualization_msgs.msg import Marker

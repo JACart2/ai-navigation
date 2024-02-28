@@ -53,7 +53,11 @@ class GlobalPlanner(rclpy.node.Node):
         self.logic_graph = None
 
         # File name needs to be a launch paramter
-        file_name = r"/cs/home/stu/ashurslp/home_loop.gml"
+
+        # FIXME we need to figure out where to put these graphs files
+        self.declare_parameter("graph_file", "")
+
+        file_name = self.get_parameter("graph_file").get_parameter_value().string_value
         self.load_file(file_name)
 
         # ROS publisher information

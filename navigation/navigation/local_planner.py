@@ -8,15 +8,22 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 import time
 import numpy as np
 import math
+from navigation import pure_pursuit, cubic_spline_planner
 
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from nav_msgs.msg import Path
-from navigation_interface.msg import LocalPointsArray, VehicleState, Stop
+from navigation_interface.msg import (
+    LocalPointsArray,
+    VehicleState,
+    Stop,
+    WaypointsArray,
+)
 
-# This needs to relflect the fac
-from motor_control_interface.msg import VelAngle
+# For now motor_control import will be commented out. We need to figure out how they are using VelAngle so we can use VelAnglePlanned/VelCurr
+# Also the respecitive methods need to be ported over.
+# from motor_control_interface.msg import VelAngle
 from std_msgs.msg import Float32, String, UInt64
 from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose, Twist
 from visualization_msgs.msg import Marker
@@ -86,7 +93,8 @@ class LocalPlanner(rclpy.node.Node):
         )
 
         # Send out speed and steering requests to motor endpoint
-        self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
+        # FIXME THIS PUBLISHER IS NEVER ACTUALLY BEING CALLED IN THE METHOD. THIS NEEDS TO BE FIXED.
+        # self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
 
         # Publish points on the map in rviz
         self.points_pub = self.create_publisher(Path, "/points", 10)
@@ -111,10 +119,10 @@ class LocalPlanner(rclpy.node.Node):
 
         ## Timers
         # Calculate ETA
-        self.eta_timer = self.create_timer(5, self.calc_eta)
+        self.eta_timer = self.create_timer(1, self.calc_eta)
 
         # Main loop
-        self.timer = self.create_timer(5, self.timer_cb)
+        self.timer = self.create_timer(0.5, self.timer_cb)
 
     def timer_cb(self):
         if self.new_path:

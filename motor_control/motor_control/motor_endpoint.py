@@ -151,7 +151,8 @@ class MotorEndpoint(rclpy.node.Node):
         #         self.brake_time_used = 0
         #         self.full_stop_count = 0
 
-        #     if (
+        #     if (bsdfhiushflj hiushe ti hsdiulfh sidhf ihuieshti uohiuhsetu hriu
+    
         #         self.vel > 0
         #         and (self.state == STOPPED or self.state == BRAKING)
         #         and (time.time() - self.stopping_time) > 10

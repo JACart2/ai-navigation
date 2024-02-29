@@ -36,7 +36,6 @@ class GlobalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("global_planner")
 
-        print("XD")
         # Current waypoint of cart
         self.current_pos = None
         self.current_cart_node = None

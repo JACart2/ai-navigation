@@ -231,7 +231,7 @@ class LocalPlanner(rclpy.node.Node):
             initial_v = twist.linear.x
 
             #??? TODO state has to be where we start
-            state = State(x=pose.position.x, y=pose.position.y, yaw=angles[2], v=initial_v)
+            state = pure_pursuit.State(x=pose.position.x, y=pose.position.y, yaw=angles[2], v=initial_v)
 
             # last_index represents the last point in the cubic spline, the destination
             last_index = len(cx) - 1
@@ -422,12 +422,12 @@ class LocalPlanner(rclpy.node.Node):
         self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
 
 ## Helper class and methods
-class State:
-    def __init__(self, x=0.0, y=0.0, yaw=0.0, v=0.0):
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-        self.v = v
+# class State:
+#     def __init__(self, x=0.0, y=0.0, yaw=0.0, v=0.0):
+#         self.x = x
+#         self.y = y
+#         self.yaw = yaw
+#         self.v = v
 
 def create_pose_stamped(point):
     stamped = PoseStamped()

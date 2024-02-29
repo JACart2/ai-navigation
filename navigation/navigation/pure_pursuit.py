@@ -5,14 +5,15 @@ Path tracking simulation with pure pursuit steering control and PID speed contro
 author: Atsushi Sakai (@Atsushi_twi)
 
 """
+
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 
-k = 0.1    # look forward gain
+k = 0.1  # look forward gain
 Lfc = 3.0  # look-ahead distance
-Kp = 1.0   # speed propotional gain
-dt = 0.1   # [s]
+Kp = 1.0  # speed propotional gain
+dt = 0.1  # [s]
 L = 1.676  # [m] wheel base of vehicle
 
 
@@ -48,8 +49,8 @@ def pure_pursuit_control(state, cx, cy, pind):
 
     ind = calc_target_index(state, cx, cy, pind)
 
-#    if pind >= ind:
-#        ind = pind
+    #    if pind >= ind:
+    #        ind = pind
 
     if ind < len(cx):
         tx = cx[ind]
@@ -76,12 +77,14 @@ def calc_target_index(state, cx, cy, pind):
     # search nearest point index
     dx = [state.x - icx for icx in cx]
     dy = [state.y - icy for icy in cy]
-    d = [abs(math.sqrt(idx ** 2 + idy ** 2)) for (idx, idy) in zip(dx, dy)]
-    #max_int
-    min_cost = 9999999999    
+    d = [abs(math.sqrt(idx**2 + idy**2)) for (idx, idy) in zip(dx, dy)]
+    # max_int
+    min_cost = 9999999999
     for i in d:
         if i < min_cost:
-            if d.index(i) < pind + 100 and d.index(i) > pind - 50: #this if statement helps the calculation only focus on points closely ahead or behind it, avoids jumping way ahead in the path
+            if (
+                d.index(i) < pind + 100 and d.index(i) > pind - 50
+            ):  # this if statement helps the calculation only focus on points closely ahead or behind it, avoids jumping way ahead in the path
                 min_cost = i
     ind = d.index(min_cost)
     L = 0.0
@@ -92,7 +95,7 @@ def calc_target_index(state, cx, cy, pind):
     while Lf > L and (ind + 1) < len(cx):
         dx = cx[ind + 1] - cx[ind]
         dy = cy[ind + 1] - cy[ind]
-        L += math.sqrt(dx ** 2 + dy ** 2)
+        L += math.sqrt(dx**2 + dy**2)
         ind += 1
 
     return ind
@@ -100,9 +103,9 @@ def calc_target_index(state, cx, cy, pind):
 
 def main():
     #  target course
-    #cx = np.arange(0, 50, 0.1)
-    #cy = [math.sin(ix / 5.0) * ix / 2.0 for ix in cx]
-    #print len(cx), len(cy)
+    # cx = np.arange(0, 50, 0.1)
+    # cy = [math.sin(ix / 5.0) * ix / 2.0 for ix in cx]
+    # print len(cx), len(cy)
     cx = [0, 7, 15, 15, 15, 20]
     cy = [0, 0, 0, 5, 15, 20]
 
@@ -165,6 +168,5 @@ def main():
         plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

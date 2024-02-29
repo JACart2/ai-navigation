@@ -146,7 +146,7 @@ class LocalPlanner(rclpy.node.Node):
     def speed_cb(self, msg):
         if msg.data < 1.0:
             self.cur_speed = 1.8  # Magic number :)
-        else:
+        else:   # FIXME - Replace with rolling weighted average for smoothing
             self.poll_sample += 1
             self.raw_speed += msg.data
             if self.poll_sample >= 5:

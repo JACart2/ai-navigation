@@ -306,7 +306,7 @@ class LocalPlanner(rclpy.node.Node):
         self.motion_pub.publish(plan_msg)
 
 
-    def update(self, state, a, delta):
+    def update(self, state, targ_speed, delta):
         """ Updates the carts position by a given state and delta
         """
         pose = self.cur_pose
@@ -317,9 +317,9 @@ class LocalPlanner(rclpy.node.Node):
             self.delay_print -= 1
             if self.delay_print <= 0:
                 self.delay_print = 50
-                self.log(f'Target Speed: {str(a)}')
+                self.log(f'Target Speed: {str(targ_speed)}')
                 self.log(f'Current Speed: {str(cur_speed)}')
-        plan_msg.vel = a # Speed we want from pure pursuit controller
+        plan_msg.vel = targ_speed # Speed we want from pure pursuit controller
         plan_msg.angle = (delta * 180) / math.pi
 
         display_angle = Float32()

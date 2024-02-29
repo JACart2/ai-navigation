@@ -83,7 +83,7 @@ class LocalPlanner(rclpy.node.Node):
 
         # Change speed
         self.speed_req_sub = self.create_subscriber(
-            Float32, "/speed", self.speed_req_cb, 10
+            Float32, "/speed", self.tar_speed_cb, 10
         )
 
         ## Publisher
@@ -139,7 +139,7 @@ class LocalPlanner(rclpy.node.Node):
         self.stop_requests[str[msg.sender_id.data].lower()] = [msg.stop, msg.distance]
         self.log(f'{str(msg.sender_id.data).lower()} requested stop: {str(msg.stop)} with distance {str(msg.distance)}')
 
-    def speed_cb(self, msg):
+    def tar_speed_cb(self, msg):
         self.tar_speed = msg.data / self.SECONDS
         self.log(f'Speed changed to {str(self.tar_speed)}')
 
@@ -223,10 +223,9 @@ class LocalPlanner(rclpy.node.Node):
 
             quat = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
             angles = tf.euler_from_quaternion(quat)
-            initial_v = self.cur_vel
 
             #??? TODO state has to be where we start
-            state = pure_pursuit.State(x=pose.position.x, y=pose.position.y, yaw=angles[2], v=initial_v)
+            state = pure_pursuit.State(x=pose.position.x, y=pose.position.y, yaw=angles[2], v=self.cur_vel)
 
             # last_index represents the last point in the cubic spline, the destination
             last_index = len(cx) - 1

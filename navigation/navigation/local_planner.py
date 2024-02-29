@@ -22,10 +22,10 @@ from navigation_interface.msg import (
 
 # We need to figure out how they are using VelAngle so we can use VelAngle/Vel
 # Also the respecitive methods need to be ported over.
-from motor_control_interface.msg import Vel, VelAngle
+from motor_control_interface.msg import VelAngle
 
 from std_msgs.msg import Float32, String, UInt64, Header
-from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose, Twist
+from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 
@@ -42,7 +42,7 @@ class LocalPlanner(rclpy.node.Node):
 
         # driving variables
         self.tar_speed = self.METERS / self.SECONDS # Target speed?
-        self.raw_speed = 0
+        self.raw_speed = 0 # Sum speed before averaging?
         self.cur_speed = 0 # Real estiamted speed?
 
         self.new_path = False
@@ -55,7 +55,7 @@ class LocalPlanner(rclpy.node.Node):
 
         # ros variables
         self.cur_pose = Pose()  # current position in local coordinates
-        self.cur_twist = Twist()  # current velocity (linear x value)
+        self.cur_vel = 0.0 # current linear velocity from localization
 
         ## subscribers
         # The points to use for a path coming from global planner
@@ -95,10 +95,6 @@ class LocalPlanner(rclpy.node.Node):
         # Send out speed and steering requests to motor endpoint
         self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
 
-        # Send out velocity estimate to motor endpoint
-        # FIXME - Update with correct topic name
-        self.vel_state_pub = self.create_publisher(Vel, "/nav_vel", 10)
-
         # Publish points on the map in rviz
         self.points_pub = self.create_publisher(Path, "/points", 10)
 
@@ -134,7 +130,7 @@ class LocalPlanner(rclpy.node.Node):
             self.create_path()
 
     def twist_cb(self, msg):
-        self.cur_twist = msg.twist
+        self.cur_vel = msg.twist.linear.x
 
     def pose_cb(self, msg):
         self.cur_pose = msg.pose
@@ -147,7 +143,7 @@ class LocalPlanner(rclpy.node.Node):
         self.tar_speed = msg.data / self.SECONDS
         self.log(f'Speed changed to {str(self.tar_speed)}')
 
-    def vel_cb(self, msg):
+    def speed_cb(self, msg):
         if msg.data < 1.0:
             self.cur_speed = 1.8  # Magic number :)
         else:
@@ -224,11 +220,10 @@ class LocalPlanner(rclpy.node.Node):
 
             # initial state
             pose = self.cur_pose
-            twist = self.cur_twist
 
             quat = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
             angles = tf.euler_from_quaternion(quat)
-            initial_v = twist.linear.x
+            initial_v = self.cur_vel
 
             #??? TODO state has to be where we start
             state = pure_pursuit.State(x=pose.position.x, y=pose.position.y, yaw=angles[2], v=initial_v)
@@ -309,10 +304,6 @@ class LocalPlanner(rclpy.node.Node):
         plan_msg.vel = 0
         plan_msg.angle = 0
 
-        cur_msg = Vel()
-        cur_msg.vel = 0
-
-        self.vel_state_pub.publish(cur_msg)
         self.motion_pub.publish(plan_msg)
 
 
@@ -320,11 +311,9 @@ class LocalPlanner(rclpy.node.Node):
         """ Updates the carts position by a given state and delta
         """
         pose = self.cur_pose
-        twist = self.cur_twist
-        cur_speed = twist.linear.x
+        cur_speed = self.cur_vel
 
         plan_msg = VelAngle()
-        cur_msg = Vel()
         if self.debug:
             self.delay_print -= 1
             if self.delay_print <= 0:
@@ -333,7 +322,6 @@ class LocalPlanner(rclpy.node.Node):
                 self.log(f'Current Speed: {str(cur_speed)}')
         plan_msg.vel = a # Speed we want from pure pursuit controller
         plan_msg.angle = (delta * 180) / math.pi
-        cur_msg.vel = cur_speed
 
         display_angle = Float32()
         display_angle.data = plan_msg.angle
@@ -347,7 +335,6 @@ class LocalPlanner(rclpy.node.Node):
                 if x[1] > 0: # obstacle distance is given
                     plan_msg.vel = -x[1]
 
-        self.vel_state_pub.publish(cur_msg)
         self.motion_pub.publish(plan_msg)
 
         state.x = pose.position.x
@@ -358,7 +345,7 @@ class LocalPlanner(rclpy.node.Node):
 
         state.yaw = angles[2]
 
-        state.v = twist.linear.x
+        state.v = self.cur_vel
         
         return state
         

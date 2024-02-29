@@ -22,8 +22,7 @@ def generate_launch_description():
             package="navigation",
             executable="local_planner",
             output="screen",
-           
-            
+
         )
         ]
     )

@@ -45,6 +45,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
+        #FIXME FOR THIS IS SET TO MANUAL BUT SHOULD PROLLY BE A LAUNCH PARAM.
         self.manual_control = True
 
         self.vel = 0

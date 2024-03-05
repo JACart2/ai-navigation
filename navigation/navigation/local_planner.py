@@ -41,10 +41,10 @@ class LocalPlanner(rclpy.node.Node):
         self.SECONDS = 3.6
 
         # driving variables
-        self.cur_vel = 0.0 # current linear velocity from localization
-        self.tar_speed = self.METERS / self.SECONDS # Target speed?
-        
-        self.cur_speed = 0 # Another estimate of speed used for eta calculations
+        self.cur_vel = 0.0  # current linear velocity from localization
+        self.tar_speed = self.METERS / self.SECONDS  # Target speed?
+
+        self.cur_speed = 0  # Another estimate of speed used for eta calculations
 
         self.new_path = False
         self.path_valid = False
@@ -136,17 +136,19 @@ class LocalPlanner(rclpy.node.Node):
 
     def stop_cb(self, msg):
         self.stop_requests[str[msg.sender_id.data].lower()] = [msg.stop, msg.distance]
-        self.log(f'{str(msg.sender_id.data).lower()} requested stop: {str(msg.stop)} with distance {str(msg.distance)}')
+        self.log(
+            f"{str(msg.sender_id.data).lower()} requested stop: {str(msg.stop)} with distance {str(msg.distance)}"
+        )
 
     def tar_speed_cb(self, msg):
         self.tar_speed = msg.data / self.SECONDS
-        self.log(f'Speed changed to {str(self.tar_speed)}')
+        self.log(f"Speed changed to {str(self.tar_speed)}")
 
     def speed_cb(self, msg):
         if msg.data < 1.0:
             self.cur_speed = 1.8  # Magic number :)
-        else:   # Rolling average for speed estimates, to smooth the changes
-            self.cur_speed = .8 * self.cur_speed + .2 * msg.data
+        else:  # Rolling average for speed estimates, to smooth the changes
+            self.cur_speed = 0.8 * self.cur_speed + 0.2 * msg.data
 
     def global_path_cb(self, msg):
         self.local_points = []
@@ -155,15 +157,17 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
-        self.log(f'Path received: {str(msg)}')
+        self.log(f"Path received: {str(msg)}")
 
     def create_path(self):
-        """ Creates a path for the cart with a set of local_points
+        """Creates a path for the cart with a set of local_points
         Adds 15 more points between the google points
         Intermediate points are added for a better fitting spline
         """
         # Increase the "resolution" of the path with 15 intermediate points
-        local_points_plus = self.local_points # geometry_util.add_intermediate_points(self.local_points, 15.0)
+        local_points_plus = (
+            self.local_points
+        )  # geometry_util.add_intermediate_points(self.local_points, 15.0)
         # TODO - decipher the comment above
 
         ax = []
@@ -172,7 +176,7 @@ class LocalPlanner(rclpy.node.Node):
         # Create a Path object for displaying the raw path (no spline) in RViz
         display_points = Path()
         display_points.header = Header()
-        display_points.header.frame_id = '/map'
+        display_points.header.frame_id = "/map"
 
         # Set the beginning of the navigation the first point
         last_index = 0
@@ -189,12 +193,14 @@ class LocalPlanner(rclpy.node.Node):
         # If the path doesn't have any successive points to navigate through, don't try
         if len(ax) > 2:
             # Create a cubic spline from the raw path
-            cx, cy, cyaw, ck, cs = cubic_spline_planner.calc_spline_course(ax, ay, ds=0.1)
+            cx, cy, cyaw, ck, cs = cubic_spline_planner.calc_spline_course(
+                ax, ay, ds=0.1
+            )
 
             # Create Path object which displays the cubic spline in RViz
             path = Path()
             path.header = Header()
-            path.header.frame_id = '/map'
+            path.header.frame_id = "/map"
 
             # Add cubic spline points to path
             for i in range(0, len(cx)):
@@ -202,7 +208,7 @@ class LocalPlanner(rclpy.node.Node):
                 curve_point.x = cx[i]
                 curve_point.y = cy[i]
                 path.poses.append(create_pose_stamped(curve_point))
-            
+
             self.path_pub.publish(path)
 
             # Set the current state of the cart to navigating
@@ -215,11 +221,18 @@ class LocalPlanner(rclpy.node.Node):
             # initial state
             pose = self.cur_pose
 
-            quat = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+            quat = (
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w,
+            )
             angles = tf.euler_from_quaternion(quat)
 
-            #??? TODO state has to be where we start
-            state = pure_pursuit.State(x=pose.position.x, y=pose.position.y, yaw=angles[2], v=self.cur_vel)
+            # ??? TODO state has to be where we start
+            state = pure_pursuit.State(
+                x=pose.position.x, y=pose.position.y, yaw=angles[2], v=self.cur_vel
+            )
 
             # last_index represents the last point in the cubic spline, the destination
             last_index = len(cx) - 1
@@ -233,23 +246,25 @@ class LocalPlanner(rclpy.node.Node):
 
             # Publish the ETA to the destination before we get started
             self.calc_eta(None)
-            rate = 1.0 / 30.0 # 30 cycles per second
+            rate = 1.0 / 30.0  # 30 cycles per second
 
             # TODO - Can we make this a timer that gets called then destoryed?
 
             # Continue to loop while we have not hit the target destination, and the path is still valid
             while last_index > target_ind and self.path_valid:
-                target_speed = self.global_speed            
-                ai = target_speed#pure_pursuit.PIDControl(target_speed, state.v)
-                di, target_ind = pure_pursuit.pure_pursuit_control(state, cx, cy, target_ind)
+                target_speed = self.global_speed
+                ai = target_speed  # pure_pursuit.PIDControl(target_speed, state.v)
+                di, target_ind = pure_pursuit.pure_pursuit_control(
+                    state, cx, cy, target_ind
+                )
 
-                #publish our desired position
-                mkr = create_marker(cx[target_ind], cy[target_ind], '/map')
+                # publish our desired position
+                mkr = create_marker(cx[target_ind], cy[target_ind], "/map")
                 self.target_pub.publish(mkr)
 
                 # Arrow that represents steering angle
-                arrow = create_marker(0, 0, '/base_link')
-                arrow.type = 0 #arrow
+                arrow = create_marker(0, 0, "/base_link")
+                arrow.type = 0  # arrow
                 arrow.scale.x = 2.0
                 arrow.scale.y = 1.0
                 arrow.scale.z = 1.0
@@ -277,7 +292,7 @@ class LocalPlanner(rclpy.node.Node):
             self.path_valid = False
             self.log_header("It appears the cart is already at the destination")
 
-        #Check if we've reached the destination, if so we should change the cart state to finished
+        # Check if we've reached the destination, if so we should change the cart state to finished
         self.log("Done navigating")
         self.current_state = VehicleState()
         self.current_state.is_navigating = False
@@ -289,8 +304,10 @@ class LocalPlanner(rclpy.node.Node):
             self.log("Reached Destination succesfully without interruption")
             self.arrived_pub.publish(notify_server)
         else:
-            self.log("Already at destination, or there may be no path to get to the destination or navigation was interrupted.")
-        
+            self.log(
+                "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
+            )
+
         # Update the internal state of the vehicle
         self.vehicle_state_pub.publish(self.current_state)
         plan_msg = VelAngle()
@@ -299,10 +316,8 @@ class LocalPlanner(rclpy.node.Node):
 
         self.motion_pub.publish(plan_msg)
 
-
     def update(self, state, a, delta):
-        """ Updates the carts position by a given state and delta
-        """
+        """Updates the carts position by a given state and delta"""
         pose = self.cur_pose
         cur_speed = self.cur_vel
 
@@ -311,21 +326,21 @@ class LocalPlanner(rclpy.node.Node):
             self.delay_print -= 1
             if self.delay_print <= 0:
                 self.delay_print = 50
-                self.log(f'Target Speed: {str(a)}')
-                self.log(f'Current Speed: {str(cur_speed)}')
-        plan_msg.vel = a # Speed we want from pure pursuit controller
+                self.log(f"Target Speed: {str(a)}")
+                self.log(f"Current Speed: {str(cur_speed)}")
+        plan_msg.vel = a  # Speed we want from pure pursuit controller
         plan_msg.angle = (delta * 180) / math.pi
 
         display_angle = Float32()
         display_angle.data = plan_msg.angle
-        
+
         self.steering_pub.publish(display_angle)
 
         # Check if any node wants us to stop
         for x in self.stop_requests.values():
-            if x[0]: # stop requested
+            if x[0]:  # stop requested
                 plan_msg.vel = 0
-                if x[1] > 0: # obstacle distance is given
+                if x[1] > 0:  # obstacle distance is given
                     plan_msg.vel = -x[1]
 
         self.motion_pub.publish(plan_msg)
@@ -333,23 +348,28 @@ class LocalPlanner(rclpy.node.Node):
         state.x = pose.position.x
         state.y = pose.position.y
 
-        quat = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+        quat = (
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z,
+            pose.orientation.w,
+        )
         angles = tf.euler_from_quaternion(quat)
 
         state.yaw = angles[2]
 
         state.v = self.cur_vel
-        
+
         return state
-        
 
     def calc_eta(self, event):
-        """ Calculates the Estimated Time of Arrival to the destination
-        """
+        """Calculates the Estimated Time of Arrival to the destination"""
         # Attempt an update only while driving
         if self.current_state.is_navigating:
             # Where are we at and how much further must we go
-            current_node = self.get_closest_point(self.cur_pose.position.x, self.cur_pose.position.y)
+            current_node = self.get_closest_point(
+                self.cur_pose.position.x, self.cur_pose.position.y
+            )
             distance_remaining = self.calc_trip_dist(self.local_points, current_node)
 
             # Remaining time in seconds
@@ -364,21 +384,26 @@ class LocalPlanner(rclpy.node.Node):
             self.eta_pub.publish(eta_msg)
 
     def calc_trip_dist(self, points_list, start):
-        """ Calculates the trip distance from the "start" index to the end of the "points_list"
+        """Calculates the trip distance from the "start" index to the end of the "points_list"
 
         Args:
             points_list(List): The list of path points to calculate the distance of
-            start(int): The index of which to start calculating the trip distance  
+            start(int): The index of which to start calculating the trip distance
         """
         sum = 0
         for i in range(start, len(points_list) - 1):
-            sum += self.calc_dist(points_list[i].x, points_list[i].y, points_list[i + 1].x, points_list[i + 1].y)
+            sum += self.calc_dist(
+                points_list[i].x,
+                points_list[i].y,
+                points_list[i + 1].x,
+                points_list[i + 1].y,
+            )
             prev_node = i
-        
+
         return sum
 
     def get_closest_point(self, pos_x, pos_y):
-        """ Get the closest point along the raw path from pos_x, pos_y
+        """Get the closest point along the raw path from pos_x, pos_y
 
         Args:
             pos_x(float): The x position of search center
@@ -387,7 +412,9 @@ class LocalPlanner(rclpy.node.Node):
         min_node = 0
         min_dist = float("inf")
         for i in range(len(self.local_points)):
-            dist = self.calc_dist(pos_x, pos_y, self.local_points[i].x, self.local_points[i].y)
+            dist = self.calc_dist(
+                pos_x, pos_y, self.local_points[i].x, self.local_points[i].y
+            )
             if dist < min_dist:
                 min_dist = dist
                 min_node = i
@@ -396,10 +423,12 @@ class LocalPlanner(rclpy.node.Node):
         return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
 
     def log(self, log):
-        self.get_logger().info(f'{log}')
+        self.get_logger().info(f"{log}")
 
     def log_header(self, log):
-        self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
+        # self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
+        self.log(log)
+
 
 ## Helper class and methods
 # class State:
@@ -409,12 +438,14 @@ class LocalPlanner(rclpy.node.Node):
 #         self.yaw = yaw
 #         self.v = v
 
+
 def create_pose_stamped(point):
     stamped = PoseStamped()
     stamped.header = Header()
-    stamped.header.frame_id = '/map'
+    stamped.header.frame_id = "/map"
     stamped.pose.position = point
     return stamped
+
 
 def create_marker(x, y, frame_id):
     marker = Marker()
@@ -422,8 +453,8 @@ def create_marker(x, y, frame_id):
     marker.header.stamp = time.time()
     marker.ns = "my_namespace"
     marker.id = 0
-    marker.type = 1 #cube
-    marker.action = 0 #add
+    marker.type = 1  # cube
+    marker.action = 0  # add
     marker.pose.position.x = x
     marker.pose.position.y = y
     marker.pose.position.z = 0
@@ -441,6 +472,7 @@ def create_marker(x, y, frame_id):
     marker.color.b = 0.0
 
     return marker
+
 
 def main():
     """The main method that actually handles spinning up the node."""

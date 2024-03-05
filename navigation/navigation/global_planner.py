@@ -43,7 +43,15 @@ class GlobalPlanner(rclpy.node.Node):
         self.yaw = None
         self.navigating = False
         self.calculating_nav = False
+        self.orientation = (0.0, 0.0, 0.0)
 
+        self.cur_speed = 0.0
+
+        self.vel_polls = 0
+
+        self.gps_calibrated = False
+
+        self.minimize_travel = True  # TODO - Consider removing or setting another way
 
         # FIXME MAKE THIS A LAUNCH PARAM (i dont feel like doing it rn xD)
         self.anchor_gps = [38.433939, -78.862157]
@@ -137,8 +145,8 @@ class GlobalPlanner(rclpy.node.Node):
         # Make a destination request when we don't know where the cart is at yet
         if self.current_pos is None:
             self.current_pos = PoseStamped()
-            self.current_pos.pose.position.x = 0
-            self.current_pos.pose.position.y = 0
+            self.current_pos.pose.position.x = 0.0
+            self.current_pos.pose.position.y = 0.0
 
         # Our current position in local coordinates and closest node to our position
         current_cart_pos = self.current_pos.pose.position
@@ -207,7 +215,8 @@ class GlobalPlanner(rclpy.node.Node):
             self.calculating_nav = False
 
             # Convert the path to GPS to give to Networking
-            self.output_path_gps(points_arr)
+            if self.gps_calibrated:
+                self.output_path_gps(points_arr)
 
             # Publish the local points so Mind.py can begin the navigation
             self.path_pub.publish(points_arr)

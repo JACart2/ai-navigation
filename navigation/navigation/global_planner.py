@@ -91,7 +91,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
 
-        # Publish the path to allow mind.py to begin navigation
+        # Publish the path for local planner to begin navigating
         self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
 
         # Publishes the path but in GPS coordinates

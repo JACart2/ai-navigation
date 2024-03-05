@@ -41,8 +41,8 @@ class GlobalTester(rclpy.node.Node):
         )
 
         self.pose = PoseStamped()
-        self.pose.pose.position.x = 5.0
-        self.pose.pose.position.y = 10.0
+        self.pose.pose.position.x = 45.0
+        self.pose.pose.position.y = 60.0
 
         self.vel = Float32()
         self.vel.data = 0.0
@@ -60,7 +60,8 @@ class GlobalTester(rclpy.node.Node):
         self.state_pub.publish(self.state)
 
     def path_cb(self, msg):
-        self.rviz_path_pub.publish(msg.localpoints)
+        # self.rviz_path_pub.publish(msg.localpoints)
+        self.get_logger().info(f"{str(msg)}")
 
 
 def main():

@@ -27,6 +27,7 @@ setup(
         "console_scripts": [
             "global_planner = navigation.global_planner:main",
             "local_planner = navigation.local_planner:main",
+            "global_tester = navigation.test_global:main",
         ],
     },
 )

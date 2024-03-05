@@ -41,21 +41,20 @@ class LocalPlanner(rclpy.node.Node):
         self.SECONDS = 3.6
 
         # driving variables
+        self.cur_vel = 0.0 # current linear velocity from localization
         self.tar_speed = self.METERS / self.SECONDS # Target speed?
-        self.raw_speed = 0 # Sum speed before averaging?
-        self.cur_speed = 0 # Real estiamted speed?
+        
+        self.cur_speed = 0 # Another estimate of speed used for eta calculations
 
         self.new_path = False
         self.path_valid = False
         self.local_points = []
-        self.poll_sample = 0
 
         self.current_state = VehicleState()
         self.stop_requests = {}
 
         # ros variables
         self.cur_pose = Pose()  # current position in local coordinates
-        self.cur_vel = 0.0 # current linear velocity from localization
 
         ## subscribers
         # The points to use for a path coming from global planner
@@ -146,13 +145,8 @@ class LocalPlanner(rclpy.node.Node):
     def speed_cb(self, msg):
         if msg.data < 1.0:
             self.cur_speed = 1.8  # Magic number :)
-        else:   # FIXME - Replace with rolling weighted average for smoothing
-            self.poll_sample += 1
-            self.raw_speed += msg.data
-            if self.poll_sample >= 5:
-                self.cur_speed = self.raw_speed / self.poll_sample
-                self.raw_speed = 0
-                self.poll_sample = 0
+        else:   # Rolling average for speed estimates, to smooth the changes
+            self.cur_speed = .8 * self.cur_speed + .2 * msg.data
 
     def global_path_cb(self, msg):
         self.local_points = []
@@ -306,7 +300,7 @@ class LocalPlanner(rclpy.node.Node):
         self.motion_pub.publish(plan_msg)
 
 
-    def update(self, state, targ_speed, delta):
+    def update(self, state, a, delta):
         """ Updates the carts position by a given state and delta
         """
         pose = self.cur_pose
@@ -317,9 +311,9 @@ class LocalPlanner(rclpy.node.Node):
             self.delay_print -= 1
             if self.delay_print <= 0:
                 self.delay_print = 50
-                self.log(f'Target Speed: {str(targ_speed)}')
+                self.log(f'Target Speed: {str(a)}')
                 self.log(f'Current Speed: {str(cur_speed)}')
-        plan_msg.vel = targ_speed # Speed we want from pure pursuit controller
+        plan_msg.vel = a # Speed we want from pure pursuit controller
         plan_msg.angle = (delta * 180) / math.pi
 
         display_angle = Float32()

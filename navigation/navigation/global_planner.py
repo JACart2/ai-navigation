@@ -18,7 +18,6 @@ import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 
 import rclpy
-from motor_control_interface.msg import VelCurr, VelAnglePlanned
 from geometry_msgs.msg import Pose, Point, PoseStamped, PointStamped, TwistStamped
 from visualization_msgs.msg import Marker
 from std_msgs.msg import String, Header, Float32
@@ -43,6 +42,8 @@ class GlobalPlanner(rclpy.node.Node):
         self.destination_node = None
         self.yaw = None
         self.navigating = False
+        self.calculating_nav = False
+
 
         # FIXME MAKE THIS A LAUNCH PARAM (i dont feel like doing it rn xD)
         self.anchor_gps = [38.433939, -78.862157]
@@ -57,7 +58,7 @@ class GlobalPlanner(rclpy.node.Node):
         self.declare_parameter("graph_file", "")
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file(file_name)
+        self.load_file("./src/ai-navigation/navigation/navigation/drive_build.gml")
 
         # ROS publisher information
         # Listen for cart position changes
@@ -189,17 +190,17 @@ class GlobalPlanner(rclpy.node.Node):
 
             # Set all nodes to a state of not being a part of the coming path
             for node in self.global_graph:
-                self.global_graph.node[node]["active"] = False
+                self.global_graph.nodes[node]["active"] = False
 
             # Convert our list of nodes along the path to the destination to a list of Point messages
             points_arr = LocalPointsArray()
 
             # Begin conversion and set nodes belonging to the path to active
             for node in nodelist:
-                self.global_graph.node[node]["active"] = True
+                self.global_graph.nodes[node]["active"] = True
                 new_point = Pose()
-                new_point.position.x = self.global_graph.node[node]["pos"][0]
-                new_point.position.y = self.global_graph.node[node]["pos"][1]
+                new_point.position.x = self.global_graph.nodes[node]["pos"][0]
+                new_point.position.y = self.global_graph.nodes[node]["pos"][1]
                 points_arr.localpoints.append(new_point)
 
             # Allows for class changes again
@@ -251,7 +252,7 @@ class GlobalPlanner(rclpy.node.Node):
         node_angles = {}
         for node in closest_nodes:
             # If the node is to far away from the actual cart(10 meters) somehow, disregard it
-            node_pos = self.global_graph.node[node]["pos"]
+            node_pos = self.global_graph.nodes[node]["pos"]
             cart_pos = (
                 self.current_pos.pose.position.x,
                 self.current_pos.pose.position.y,
@@ -260,16 +261,16 @@ class GlobalPlanner(rclpy.node.Node):
             if distance > 10:
                 continue
             # A node is active if and only if the cart traverses or is supposed to traverse the node at some point during its trip
-            if self.global_graph.node[node]["active"]:
+            if self.global_graph.nodes[node]["active"]:
                 for u, v in self.global_graph.out_edges(node):
                     # Calculate the angle of our node to its outgoing neighbor
                     dy = (
-                        self.global_graph.node[v]["pos"][1]
-                        - self.global_graph.node[u]["pos"][1]
+                        self.global_graph.nodes[v]["pos"][1]
+                        - self.global_graph.nodes[u]["pos"][1]
                     )
                     dx = (
-                        self.global_graph.node[v]["pos"][0]
-                        - self.global_graph.node[u]["pos"][0]
+                        self.global_graph.nodes[v]["pos"][0]
+                        - self.global_graph.nodes[u]["pos"][0]
                     )
                     node_angle = math.atan2(dy, dx)
 
@@ -278,11 +279,11 @@ class GlobalPlanner(rclpy.node.Node):
 
                     # If node qualifies as being correct in the lane(not requiring a turn of more than half pi radians) assign a distance to it
                     if abs(cart_angle - node_angle) < math.pi / 2:
-                        node_pos = self.global_graph.node[node]["pos"]
+                        node_pos = self.global_graph.nodes[node]["pos"]
 
                         # If there is a close valid node to the cart, use it for distance calculations
                         if cart_node is not None:
-                            cart_pos = self.global_graph.node[cart_node]["pos"]
+                            cart_pos = self.global_graph.nodes[cart_node]["pos"]
                         node_angles[node] = self.dis(
                             node_pos[0], node_pos[1], cart_pos[0], cart_pos[1]
                         )
@@ -296,7 +297,7 @@ class GlobalPlanner(rclpy.node.Node):
     def reset_node_activity(self):
         """Resets all nodes active status to True this makes them all game for the cart to determine which is closest/most appropriate"""
         for node in self.global_graph.nodes:
-            self.global_graph.node[node]["active"] = True
+            self.global_graph.nodes[node]["active"] = True
 
     def get_nodes_in_radius(self, center_node, radius=3):
         """Obtains nodes in a given radius from a node representing center.
@@ -313,7 +314,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         # If there is a center node to go by find in its radius neighbors
         if center_node is not None:
-            center_node_pos = self.global_graph.node[center_node]["pos"]
+            center_node_pos = self.global_graph.nodes[center_node]["pos"]
         else:
             # If there is no known or at least reliable center node use the carts current position
             center_node_pos = (
@@ -323,7 +324,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         # Loop through each node determine if in proximity
         for node in self.global_graph.nodes:
-            node_pos = self.global_graph.node[node]["pos"]
+            node_pos = self.global_graph.nodes[node]["pos"]
 
             # Distance between this node in iteration and center node or cart position
             dist = self.dis(
@@ -349,12 +350,12 @@ class GlobalPlanner(rclpy.node.Node):
         # Find nodes within 3 meters of destination node
         close_nodes = [destination]
         local_logic_graph = self.global_graph
-        dest_node_pos = local_logic_graph.node[destination]["pos"]
+        dest_node_pos = local_logic_graph.nodes[destination]["pos"]
 
         # Begin determining which nodes are close and eliminate any nodes that are more efficient just because they are next to the destination node
         for node in self.global_graph.nodes:
             inefficient = True
-            node_pos = local_logic_graph.node[node]["pos"]
+            node_pos = local_logic_graph.nodes[node]["pos"]
 
             # Is node close enough and also not incident to the destination
             dist = self.dis(
@@ -408,14 +409,14 @@ class GlobalPlanner(rclpy.node.Node):
 
         for node in local_logic_graph.nodes:
             # Position of each node in the graph
-            node_posx = local_logic_graph.node[node]["pos"][0]
-            node_posy = local_logic_graph.node[node]["pos"][1]
+            node_posx = local_logic_graph.nodes[node]["pos"][0]
+            node_posy = local_logic_graph.nodes[node]["pos"][1]
 
             dist = self.dis(node_posx, node_posy, x, y)
 
             # Buffer, if we are trying to find the node closest to the cart, lets not count nodes the cart isnt actively following
             if cart_trans:
-                if dist < min_dist and local_logic_graph.node[node]["active"]:
+                if dist < min_dist and local_logic_graph.nodes[node]["active"]:
                     min_node = node
                     min_dist = dist
             else:

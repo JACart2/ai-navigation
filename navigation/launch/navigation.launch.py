@@ -10,7 +10,7 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     return LaunchDescription(
         [
-            DeclareLaunchArgument("graph_file"),
+            DeclareLaunchArgument("graph_file", default_value="/home/student/dev_ws/src/ai-navigation/navigation/navigation/drive_build.gml"),
 
             Node(
                 package="navigation",

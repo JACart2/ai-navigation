@@ -110,6 +110,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         # How often to update the gps position of the cart
         self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
+        self.get_logger().info("Begin")
 
     # Load the graph file as the global graph
     def load_file(self, file_name):
@@ -220,6 +221,9 @@ class GlobalPlanner(rclpy.node.Node):
 
             # Publish the local points so Mind.py can begin the navigation
             self.path_pub.publish(points_arr)
+            self.get_logger().info(
+                f"Publishing Path: {str(self.current_cart_node)} to {str(destination_point)}"
+            )
 
         except nx.NetworkXNoPath:
             self.log_header("Unable to find a path to the desired destination")

@@ -4,23 +4,14 @@ This is the ROS 2 node that fakes localization data for the purpose of testing g
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
-# Python based imports
-import time
-import numpy as np
 
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from nav_msgs.msg import Path
-from navigation_interface.msg import (
-    LocalPointsArray,
-    VehicleState,
-    Stop,
-)
-
-from std_msgs.msg import Float32, String, UInt64, Header
-from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose, PoseArray
-from visualization_msgs.msg import Marker
+from navigation_interface.msg import LocalPointsArray, VehicleState
+from std_msgs.msg import Float32
+from geometry_msgs.msg import PoseStamped, PointStamped
+from visualization_msgs.msg import MarkerArray, Marker
 import tf_transformations as tf
 
 
@@ -31,37 +22,76 @@ class GlobalTester(rclpy.node.Node):
         super().__init__("global_tester")
 
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
+        self.tar_pub = self.create_publisher(PointStamped, "clicked_point", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
         self.state_pub = self.create_publisher(VehicleState, "/vehicle_state", 10)
 
-        self.rviz_path_pub = self.create_publisher(PoseArray, "/visual_path", 10)
+        self.rviz_path_pub = self.create_publisher(MarkerArray, "/visual_path", 10)
 
         self.path_sub = self.create_subscription(
             LocalPointsArray, "/global_path", self.path_cb, 10
         )
 
+        # Cart position
         self.pose = PoseStamped()
-        self.pose.pose.position.x = 45.0
-        self.pose.pose.position.y = 60.0
+        self.pose.pose.position.x = 82.23206329345703
+        self.pose.pose.position.y = 132.16149291992187
 
+        # Target position
+        self.target = PointStamped()
+        self.target.point.x = 49.95549774169922
+        self.target.point.y = 68.27464294433594
+
+        # Cart velocity
         self.vel = Float32()
         self.vel.data = 0.0
 
+        # Cart state
         self.state = VehicleState()
         self.state.stopped = True
         self.state.reached_destination = False
         self.state.is_navigating = False
 
-        self.timer = self.create_timer(0.5, self.timer_cb)
+        self.timer = self.create_timer(3.0, self.timer_cb)
+        self.get_logger().info("Begin")
 
     def timer_cb(self):
         self.pose_pub.publish(self.pose)
+        self.tar_pub.publish(self.target)
         self.vel_pub.publish(self.vel)
         self.state_pub.publish(self.state)
 
     def path_cb(self, msg):
-        # self.rviz_path_pub.publish(msg.localpoints)
-        self.get_logger().info(f"{str(msg)}")
+        # This array is used to delete the preexisting markerarrays before publishing
+        delarr = MarkerArray()
+        delmark = Marker()
+        delmark.action = 3
+        delarr.markers.append(delmark)
+        self.rviz_path_pub.publish(delarr)
+
+        arr = MarkerArray()
+        id = 0
+        for p in msg.localpoints:
+            temp = Marker()
+            temp.pose = p
+            temp.header.frame_id = "world"
+            temp.id = id
+            id += 1
+            temp.scale.x = 1.0
+            temp.scale.y = 1.0
+            temp.scale.z = 1.0
+            temp.color.r = 0.0
+            temp.color.g = 0.0
+            temp.color.b = 1.0
+            temp.color.a = 1.0
+            temp.type = 2
+            temp.action = 0
+            arr.markers.append(temp)
+        arr.markers[0].color.g = 50.0
+        arr.markers[-1].color.r = 50.0
+        self.rviz_path_pub.publish(arr)
+        self.get_logger().info("Publishing")
+        # self.get_logger().info(f"{str(msg)}")
 
 
 def main():

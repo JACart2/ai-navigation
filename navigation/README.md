@@ -61,6 +61,7 @@ point:
 
 ## ROS Info
 #### navigation
+
 Subscribes to:
 - /limited_pose [PoseStamped](https://docs.ros.org/en/noetic/api/geometry_msgs/html/msg/PoseStamped.html)
 - /vehicle_state [VehicleState](../navigation_interface/msg/VehicleState.msg)

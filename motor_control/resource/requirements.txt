@@ -1,3 +1,4 @@
 bitstruct
 pyserial
 numpy
+networkx

@@ -1,6 +1,6 @@
 # Navigation
 
-* This package's [structure](#structure) contains 2 folders: navigation and resource; along with ROS2 auto-generated files.
+* This package's [structure](#structure) contains 3 folders: navigation, resource, and launch; along with ROS2 auto-generated files.
 * [Here](#setuphow-to-run) is a tutorial.
 
 ## Structure
@@ -10,6 +10,8 @@ This contains the launch file.
 This contains the navigation python code that allows the JACART2 to navigate.
 ### resource
 This contains the old scripts from Jacart1 and other resources used to transition into ROS2.
+### launch
+This contains the launch file.
 
 ## Running the test script
 Ensure that you have completed the initial setup that is outlined in [ai-navigation README](../../ai-navigation/README.md#setup) before continuing on to these steps.

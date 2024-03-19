@@ -75,7 +75,7 @@ Subscribes to:
 
 
 Publishes to: 
-- "/display_gps [Marker](https://docs.ros.org/en/noetic/api/visualization_msgs/html/msg/Marker.html)
+- /display_gps [Marker](https://docs.ros.org/en/noetic/api/visualization_msgs/html/msg/Marker.html)
 - /global_path [LocalPointsArray](../navigation_interface/msg/LocalPointsArray.msg)
 - /gps_global_path [PointStamped](../navigation_interface/msg/LatLongArray.msg)
 - /gps_send [LatLongPoint](../navigation_interface/msg/LatLongPoint.msg)

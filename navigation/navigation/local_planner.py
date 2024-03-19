@@ -58,30 +58,30 @@ class LocalPlanner(rclpy.node.Node):
 
         ## subscribers
         # The points to use for a path coming from global planner
-        self.global_path_sub = self.create_subscriber(
+        self.global_path_sub = self.create_subscription(
             LocalPointsArray, "/global_path", self.global_path_cb, 10
         )
 
         # The linear and angular velocity of the cart from NDT Matching
-        self.twist_sub = self.create_subscriber(
+        self.twist_sub = self.create_subscription(
             TwistStamped, "/estimate_twist", self.twist_cb, 10
         )
 
         # The position of the cart from NDT Matching
-        self.pose_sub = self.create_subscriber(
+        self.pose_sub = self.create_subscription(
             PoseStamped, "/ndt_pose", self.pose_cb, 10
         )
 
         # Current speed of the cart in M/s
-        self.speed_sub = self.create_subscriber(
+        self.speed_sub = self.create_subscription(
             Float32, "/estimated_vel_mps", self.speed_cb, 10
         )
 
         # Stop requests
-        self.stop_sub = self.create_subscriber(Stop, "/stop", self.stop_cb, 10)
+        self.stop_sub = self.create_subscription(Stop, "/stop", self.stop_cb, 10)
 
         # Change speed
-        self.speed_req_sub = self.create_subscriber(
+        self.speed_req_sub = self.create_subscription(
             Float32, "/speed", self.tar_speed_cb, 10
         )
 

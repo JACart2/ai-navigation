@@ -19,11 +19,10 @@ def generate_launch_description():
              
             ),
             Node(
-            package="navigation",
-            executable="local_planner",
-            output="screen",
-
-        )
+                package="navigation",
+                executable="local_planner",
+                output="screen",
+            )
         ]
     )
 

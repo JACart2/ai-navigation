@@ -245,7 +245,7 @@ class LocalPlanner(rclpy.node.Node):
             target_ind = pure_pursuit.calc_target_index(state, cx, cy, 0)
 
             # Publish the ETA to the destination before we get started
-            self.calc_eta(None)
+            self.calc_eta()
             rate = 1.0 / 30.0  # 30 cycles per second
 
             # TODO - Can we make this a timer that gets called then destoryed?
@@ -362,7 +362,7 @@ class LocalPlanner(rclpy.node.Node):
 
         return state
 
-    def calc_eta(self, event):
+    def calc_eta(self):
         """Calculates the Estimated Time of Arrival to the destination"""
         # Attempt an update only while driving
         if self.current_state.is_navigating:

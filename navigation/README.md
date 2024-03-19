@@ -64,7 +64,7 @@ point:
 ```
 
 ## ROS Info
-#### navigation
+#### Global Planner
 
 Subscribes to:
 - /limited_pose [PoseStamped](https://docs.ros.org/en/noetic/api/geometry_msgs/html/msg/PoseStamped.html)
@@ -77,6 +77,19 @@ Subscribes to:
 Publishes to: 
 - /display_gps [Marker](https://docs.ros.org/en/noetic/api/visualization_msgs/html/msg/Marker.html)
 - /global_path [LocalPointsArray](../navigation_interface/msg/LocalPointsArray.msg)
-- /gps_global_path [PointStamped](../navigation_interface/msg/LatLongArray.msg)
+- /gps_global_path [LatLongArray](../navigation_interface/msg/LatLongArray.msg)
 - /gps_send [LatLongPoint](../navigation_interface/msg/LatLongPoint.msg)
 
+#### Local Planner
+Subscribes to:
+- /global_path [LocalPointsArray](../navigation_interface/msg/LocalPointsArray.msg)
+- /estimate_twist [TwistStamped]
+- /ndt_pose [PoseStamped]
+- /estimated_vel_mps Float32
+- /stop [Stop]
+- /speed Float32
+
+Publishes to: 
+- /vehicle_state [VehicleState](../navigation_interface/msg/VehicleState.msg)
+- /nav_cmd [VelAngle]
+- ...todo

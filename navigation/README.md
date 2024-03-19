@@ -16,7 +16,11 @@ This contains the launch file.
 ## Running the test script
 Ensure that you have completed the initial setup that is outlined in [ai-navigation README](../../ai-navigation/README.md#setup) before continuing on to these steps.
 
-1. ros2 run navigation test_global
+1. rviz2 -d src/ai-navigation/navigation/test/visualize_path.rviz
+2. ros2 run navigation global_planner
+3. ros2 run navigation global_tester
+
+This will open an rviz window to visualize the path, run global_planner to create a path when given a start and end point, and a test node that simulates position and input data.
 
 ## Setup/How to Run
 Ensure that you have completed the initial setup that is outlined in [ai-navigation README](../../ai-navigation/README.md#setup) before continuing on to these steps.

@@ -15,8 +15,10 @@ import math
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from motor_control_interface.msg import VelCurr, VelAnglePlanned
+from motor_control_interface.msg import VelAngle
 from std_msgs.msg import Bool, String
+from geometry_msgs.msg import TwistStamped
+
 
 # State constants
 MOVING = 0
@@ -43,11 +45,13 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
+        #FIXME FOR THIS IS SET TO MANUAL BUT SHOULD PROLLY BE A LAUNCH PARAM.
         self.manual_control = True
 
+        self.vel = 0
         self.vel_planned = None
         self.angle_planned = None
-        self.vel_curr = 1
+        self.vel_curr = 0
 
         # Serial vars
         self.serial_connected = False
@@ -78,17 +82,17 @@ class MotorEndpoint(rclpy.node.Node):
             self.log_header("MOTOR ENDPOINT: " + str(e))
             serial_connected = False
 
-        # Need to choose a new topic name for current velocity subscriber
-        # As of right now this is useless tho because we dont have vel curr
-        # self.curr_motion_subscriber = self.create_subscription(
-        #     VelCurr, "/nav_cmd", self.vel_curr_callback, 10
-        # )
-
         # Creation of some simple subscribers/publishers/timers
 
         self.planned_motion_subscriber = self.create_subscription(
-            VelAnglePlanned, "/nav_cmd", self.vel_angle_planned_callback, 10
+            VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
+
+        # The linear and angular velocity of the cart from NDT Matching
+        self.twist_sub = self.create_subscriber(
+            TwistStamped, "/estimate_twist", self.vel_curr_callback, 10
+        )
+
 
         self.heart_pub = self.create_publisher(String, "/heartbeat", 10)
 
@@ -101,8 +105,8 @@ class MotorEndpoint(rclpy.node.Node):
         message (planned_vel_angle) and set the appropriate fields to make the cart drive/turn.
         """
 
-        self.vel_planned = planned_vel_angle.vel_planned
-        self.angle_planned = planned_vel_angle.angle_planned
+        self.vel_planned = planned_vel_angle.vel
+        self.angle_planned = planned_vel_angle.angle
 
         self.log_header(f"Planned Angle: {planned_vel_angle}")
 
@@ -136,35 +140,11 @@ class MotorEndpoint(rclpy.node.Node):
 
         self.new_vel = True
 
-    def vel_curr_callback(self, vel_angle):
+    def vel_curr_callback(self, vel_twist):
         """Callback method to get the current velocity. It should be noted that we arent using this method right now
         because we have no way of getting the current velocity."""
-        #     self.vel_curr = vel_angle.vel_curr
-
-        #     if self.vel < 0:
-        #         # indicates an obstacle
-        #         self.obstacle_distance = abs(self.vel)
-        #         self.vel = 0
-        #     else:
-        #         # reset obstacle distance and brake time
-        #         self.obstacle_distance = -1
-        #         self.brake_time_used = 0
-        #         self.full_stop_count = 0
-
-        #     if (
-        #         self.vel > 0
-        #         and (self.state == STOPPED or self.state == BRAKING)
-        #         and (time.time() - self.stopping_time) > 10
-        #     ):
-        #         self.state = MOVING
-        #         self.brake = 0  # take the foot off the brake
-        #     elif self.state == MOVING and self.vel <= 0:  # Brakes are hit
-        #         self.state = BRAKING
-        #         self.brake = 0  # ramp up braking from 0
-        #         self.stopping_time = time.time()
-
-        #     self.new_vel = True
-        pass
+        if (vel_twist != None):
+            self.vel_curr = vel_twist.twist.linear.x
 
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""
@@ -243,9 +223,7 @@ class MotorEndpoint(rclpy.node.Node):
             if self.vel_cart_units < -254:
                 self.vel_cart_units = -254
             if self.vel_cart_units < 0:
-                self.self.log_header(
-                    "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!"
-                )
+                self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
 
         target_speed = int(self.vel_cart_units)  # float64
 
@@ -292,6 +270,7 @@ class MotorEndpoint(rclpy.node.Node):
     def calculate_endpoint(self):
         """The endpoint for processing and sending instructions to the arduino controller."""
         if self.new_vel:
+
             self.vel_cart_units = self.vel_planned
             self.vel_curr_cart_units = self.vel_curr
             self.new_vel = False
@@ -306,17 +285,19 @@ class MotorEndpoint(rclpy.node.Node):
                 50  # Rough conversion from m/s to cart controller units
             )
 
+            # Planned velocity checks
             if self.vel_cart_units > 254:
                 self.vel_cart_units = 254
             if self.vel_cart_units < -254:
                 self.vel_cart_units = -254
+
+            # Current velocity checks
             if self.vel_curr_cart_units > 254:
                 self.vel_curr_cart_units = 254
             if self.vel_cart_units < 0:
                 self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
 
         target_speed = int(self.vel_cart_units)  # float64
-        # current_speed = int(self.vel_curr_cart_units) float64
 
         # Adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
         if self.angle_planned < -40:
@@ -342,6 +323,8 @@ class MotorEndpoint(rclpy.node.Node):
                 self.brake_time_used += (
                     1.0 / self.NODE_RATE
                 )  # 1 sec / rate per sec (10)
+
+
                 obstacle_brake_time = self.obstacle_distance / self.vel_curr - (
                     1.0 / self.NODE_RATE
                 )  # We decrease by one node rate initially to account for rounding
@@ -352,8 +335,6 @@ class MotorEndpoint(rclpy.node.Node):
 
                 if brake_rate >= 255:
                     self.full_stop_count += 1
-
-                self.brake = float(min(255, math.ceil(brake_rate)))
             else:
                 # Comfortable stop, no obstacle/deadline given
                 self.brake_time_used += (
@@ -368,7 +349,8 @@ class MotorEndpoint(rclpy.node.Node):
                 if brake_rate >= 255:
                     self.full_stop_count += 1
 
-                self.brake = float(min(255, math.ceil(brake_rate)))
+            #This was originally in the if else statemnt... (At the bottom of both)
+            self.brake = float(min(255, math.ceil(brake_rate)))  
             if (
                 self.brake >= 255 and self.full_stop_count > 10
             ):  # We have reached maximum braking!

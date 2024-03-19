@@ -82,7 +82,7 @@ class global_planner(object):
         # Listen for velocity/speed of cart
         self.vel_sub = rospy.Subscriber('/estimated_vel_mps', Float32, self.vel_callback)
 
-        # This is here temporarily to test GPS_Util
+        # This is how we orrient the GPS
         self.lat_long_req = rospy.Subscriber('/gps_request', LatLongPoint, self.gps_request_cb, queue_size=10)
         
         self.display_pub = rospy.Publisher('/display_gps', Marker, queue_size=10)

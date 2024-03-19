@@ -2,12 +2,12 @@
 This package houses the messages that are used to communicate with the motor controller.
 
 ## Messages
-VelAnglePlanned
+VelAngle
 ```
-float64 vel_planned
-float64 angle_planned
+float64 vel
+float64 angle
 ```
-VelCurr
+Vel
 ```
-float64 vel_curr
+float64 vel
 ```

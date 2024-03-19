@@ -27,8 +27,7 @@ find_package(rosidl_default_generators REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/VelAnglePlanned.msg"
-  "msg/VelCurr.msg"
+  "msg/VelAngle.msg"
   DEPENDENCIES geometry_msgs
   DEPENDENCIES std_msgs
   DEPENDENCIES sensor_msgs

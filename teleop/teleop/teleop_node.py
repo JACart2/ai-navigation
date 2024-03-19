@@ -2,7 +2,7 @@ import rclpy
 import tf2_geometry_msgs
 import sys, select, os
 import tty, termios
-from motor_control_interface.msg import VelAnglePlanned
+from motor_control_interface.msg import VelAngle
 
 MAX_LIN_VEL = 30.0  # Max velocity
 MAX_ANG_VEL = 30.0  # Max turn angle
@@ -42,7 +42,7 @@ class Teleop(rclpy.node.Node):
 
         self.settings = termios.tcgetattr(sys.stdin)
 
-        self.nav_pub = self.create_publisher(VelAnglePlanned, "/nav_cmd", 10)
+        self.nav_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
         self.timer = self.create_timer(0.1, self.timer_callback)
 
         self.status = 0
@@ -135,12 +135,12 @@ class Teleop(rclpy.node.Node):
             return
 
         finally:
-            cmd = VelAnglePlanned()
-            cmd.vel_planned = self.target_linear_vel
-            if cmd.vel_planned < 0:
+            cmd = VelAngle()
+            cmd.vel = self.target_linear_vel
+            if cmd.vel < 0:
                 # With how the cart treats negative velocities, small numbers mean faster braking, so we invert it
-                cmd.vel_planned = -MAX_LIN_VEL - cmd.vel_planned
-            cmd.angle_planned = self.target_angular_vel
+                cmd.vel = -MAX_LIN_VEL - cmd.vel
+            cmd.angle = self.target_angular_vel
             self.nav_pub.publish(cmd)
 
 

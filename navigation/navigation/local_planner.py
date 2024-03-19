@@ -151,6 +151,8 @@ class LocalPlanner(rclpy.node.Node):
             self.cur_speed = 0.8 * self.cur_speed + 0.2 * msg.data
 
     def global_path_cb(self, msg):
+        """This gets the whole path from global planner 
+        and puts the points inside of the local points array"""
         self.local_points = []
         for local_point in msg.localpoints:
             self.local_points.append(local_point.position)
@@ -209,6 +211,7 @@ class LocalPlanner(rclpy.node.Node):
                 curve_point.y = cy[i]
                 path.poses.append(create_pose_stamped(curve_point))
 
+            # It would be nice to figure out why and what this is being published to
             self.path_pub.publish(path)
 
             # Set the current state of the cart to navigating

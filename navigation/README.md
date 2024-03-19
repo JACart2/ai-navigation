@@ -10,8 +10,6 @@ This contains the launch file.
 This contains the navigation python code that allows the JACART2 to navigate.
 ### resource
 This contains the old scripts from Jacart1 and other resources used to transition into ROS2.
-### launch
-This contains the launch file.
 
 ## Running the test script
 Ensure that you have completed the initial setup that is outlined in [ai-navigation README](../../ai-navigation/README.md#setup) before continuing on to these steps.

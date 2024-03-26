@@ -11,6 +11,8 @@ import numpy as np
 import bitstruct
 import math
 
+import steering_position_calc as spc
+
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
@@ -81,7 +83,7 @@ class SimulatedMotor(rclpy.node.Node):
         """The endpoint for processing and sending instructions to the arduino controller."""
 
         cur_time = time.time()
-        self.x, self.y = update(
+        self.x, self.y = spc.calc_new_pos(
             cur_time - self.prev_time, self.x, self.y, self.vel, self.angle
         )
 

@@ -35,8 +35,8 @@ class SimulatedMotor(rclpy.node.Node):
         self.vel = 0.0
         self.angle = 0.0
 
-        self.x = 0.0
-        self.y = 0.0
+        self.x = 82.23206329345703
+        self.y = 132.16149291992187
 
         self.new_vel = False
 
@@ -125,7 +125,6 @@ class SimulatedMotor(rclpy.node.Node):
         arr.markers[0].color.g = 50.0
         arr.markers[-1].color.r = 50.0
         self.rviz_path_pub.publish(arr)
-        self.get_logger().info("Publishing")
 
 
 def main():

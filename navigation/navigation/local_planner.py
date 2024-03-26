@@ -122,6 +122,12 @@ class LocalPlanner(rclpy.node.Node):
         # Main loop
         self.timer = self.create_timer(0.5, self.timer_cb)
 
+        plan_msg = VelAngle()
+        plan_msg.vel = 5.0
+        plan_msg.angle = 5.0
+
+        self.motion_pub.publish(plan_msg)
+
     def timer_cb(self):
         if self.new_path:
             self.path_valid = True
@@ -151,7 +157,7 @@ class LocalPlanner(rclpy.node.Node):
             self.cur_speed = 0.8 * self.cur_speed + 0.2 * msg.data
 
     def global_path_cb(self, msg):
-        """This gets the whole path from global planner 
+        """This gets the whole path from global planner
         and puts the points inside of the local points array"""
         self.local_points = []
         for local_point in msg.localpoints:

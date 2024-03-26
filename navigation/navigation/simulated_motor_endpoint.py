@@ -11,11 +11,12 @@ import numpy as np
 import bitstruct
 import math
 
-import steering_position_calc as spc
+from navigation import steering_position_calc
 
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
+
 from motor_control_interface.msg import VelAngle
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Float32
@@ -27,7 +28,7 @@ class SimulatedMotor(rclpy.node.Node):
     """ROS2 node that handles controlling the motor."""
 
     def __init__(self):
-        super().__init__("simulated_motor")
+        super().__init__("motor_simulator")
 
         # Class constants
         self.NODE_RATE = 10
@@ -75,6 +76,9 @@ class SimulatedMotor(rclpy.node.Node):
         # Check if we have received a target yet
         if self.new_vel:
             self.calculate_endpoint()
+        self.get_logger().info(
+            f"x:{self.x}, y:{self.y}, vel:{self.vel}, angle:{self.angle}"
+        )
         self.prev_time = time.time()
 
         return
@@ -83,7 +87,7 @@ class SimulatedMotor(rclpy.node.Node):
         """The endpoint for processing and sending instructions to the arduino controller."""
 
         cur_time = time.time()
-        self.x, self.y = spc.calc_new_pos(
+        self.x, self.y = steering_position_calc.calc_new_pos(
             cur_time - self.prev_time, self.x, self.y, self.vel, self.angle
         )
 
@@ -94,7 +98,7 @@ class SimulatedMotor(rclpy.node.Node):
 
         vel = Float32()
         vel.data = self.vel
-        self.vel_pub.publish(self.vel)
+        self.vel_pub.publish(vel)
 
     def path_cb(self, msg):
         # This array is used to delete the preexisting markerarrays before publishing

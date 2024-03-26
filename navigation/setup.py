@@ -28,6 +28,7 @@ setup(
             "global_planner = navigation.global_planner:main",
             "local_planner = navigation.local_planner:main",
             "global_tester = navigation.test_global:main",
+            "motor_simulator = navigation.simulated_motor_endpoint:main",
         ],
     },
 )

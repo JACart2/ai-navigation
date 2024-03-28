@@ -36,8 +36,8 @@ class LocalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("local_planner")
 
-        # driving constants
-        self.METERS = 10.0
+        # driving constants THIS USED TO BE 10 and 3.6 respectively
+        self.METERS = 30.0
         self.SECONDS = 3.6
 
         # driving variables
@@ -130,10 +130,7 @@ class LocalPlanner(rclpy.node.Node):
         # self.motion_pub.publish(plan_msg)
 
     def timer_cb(self):
-        if self.new_path:
-            self.path_valid = True
-            self.new_path = False
-            self.create_path()
+        self.create_path()
 
     def twist_cb(self, msg):
         self.cur_vel = msg.twist.linear.x
@@ -173,107 +170,117 @@ class LocalPlanner(rclpy.node.Node):
         Adds 15 more points between the google points
         Intermediate points are added for a better fitting spline
         """
-        # Increase the "resolution" of the path with 15 intermediate points
-        local_points_plus = (
-            self.local_points
-        )  # geometry_util.add_intermediate_points(self.local_points, 15.0)
-        # TODO - decipher the comment abovef
+        if self.new_path:
+            self.path_valid = True
+            self.new_path = False
+            # Increase the "resolution" of the path with 15 intermediate points
+            local_points_plus = (
+                self.local_points
+            )  # geometry_util.add_intermediate_points(self.local_points, 15.0)
+            # TODO - decipher the comment above
 
-        ax = []
-        ay = []
+            ax = []
+            ay = []
 
-        # Create a Path object for displaying the raw path (no spline) in RViz
-        display_points = Path()
-        display_points.header = Header()
-        display_points.header.frame_id = "/map"
+            # Create a Path object for displaying the raw path (no spline) in RViz
+            display_points = Path()
+            display_points.header = Header()
+            display_points.header.frame_id = "/map"
 
-        # Set the beginning of the navigation the first point
-        last_index = 0
-        target_ind = 0
+            # Set the beginning of the navigation the first point
+            self.last_index = 0
+            self.target_ind = 0
 
-        # Creates a list of the x's and y's to be used when calculating the spline
-        for p in local_points_plus:
-            display_points.poses.append(create_pose_stamped(p))
-            ax.append(p.x)
-            ay.append(p.y)
+            # Creates a list of the x's and y's to be used when calculating the spline
+            for p in local_points_plus:
+                display_points.poses.append(create_pose_stamped(p))
+                ax.append(p.x)
+                ay.append(p.y)
 
-        self.points_pub.publish(display_points)
+            self.points_pub.publish(display_points)
 
-        # If the path doesn't have any successive points to navigate through, don't try
-        if len(ax) > 2:
-            # Create a cubic spline from the raw path
-            cx, cy, cyaw, ck, cs = cubic_spline_planner.calc_spline_course(
-                ax, ay, ds=0.1
-            )
+            # If the path doesn't have any successive points to navigate through, don't try
+            if len(ax) > 2:
+                # Create a cubic spline from the raw path
+                self.cx, self.cy, self.cyaw, self.ck, self.cs = (
+                    cubic_spline_planner.calc_spline_course(ax, ay, ds=0.1)
+                )
 
-            # Create Path object which displays the cubic spline in RViz
-            path = Path()
-            path.header = Header()
-            path.header.frame_id = "/map"
+                # Create Path object which displays the cubic spline in RViz
+                path = Path()
+                path.header = Header()
+                path.header.frame_id = "/map"
 
-            # Add cubic spline points to path
-            for i in range(0, len(cx)):
-                curve_point = Point()
-                curve_point.x = cx[i]
-                curve_point.y = cy[i]
-                path.poses.append(create_pose_stamped(curve_point))
+                # Add cubic spline points to path
+                for i in range(0, len(self.cx)):
+                    curve_point = Point()
+                    curve_point.x = self.cx[i]
+                    curve_point.y = self.cy[i]
+                    path.poses.append(create_pose_stamped(curve_point))
 
-            # It would be nice to figure out why and what this is being published to
-            self.path_pub.publish(path)
+                # It would be nice to figure out why and what this is being published to
+                self.path_pub.publish(path)
 
-            # Set the current state of the cart to navigating
-            self.current_state = VehicleState()
-            self.current_state.is_navigating = True
-            self.vehicle_state_pub.publish(self.current_state)
+                # Set the current state of the cart to navigating
+                self.current_state = VehicleState()
+                self.current_state.is_navigating = True
+                self.vehicle_state_pub.publish(self.current_state)
 
-            target_speed = self.tar_speed
+                # target_speed = self.tar_speed
 
-            # initial state
-            pose = self.cur_pose
+                # initial state
+                pose = self.cur_pose
 
-            quat = (
-                pose.orientation.x,
-                pose.orientation.y,
-                pose.orientation.z,
-                pose.orientation.w,
-            )
-            angles = tf.euler_from_quaternion(quat)
+                quat = (
+                    pose.orientation.x,
+                    pose.orientation.y,
+                    pose.orientation.z,
+                    pose.orientation.w,
+                )
+                angles = tf.euler_from_quaternion(quat)
 
-            # ??? TODO state has to be where we start
-            state = pure_pursuit.State(
-                x=pose.position.x, y=pose.position.y, yaw=angles[2], v=self.cur_vel
-            )
+                # ??? TODO state has to be where we start
+                self.state = pure_pursuit.State(
+                    x=pose.position.x, y=pose.position.y, yaw=angles[2], v=self.cur_vel
+                )
 
-            # last_index represents the last point in the cubic spline, the destination
-            last_index = len(cx) - 1
-            timedelta = 0.0
-            x = [state.x]
-            y = [state.y]
-            yaw = [state.yaw]
-            v = [state.v]
-            t = [0.0]
-            target_ind = pure_pursuit.calc_target_index(state, cx, cy, 0)
+                # last_index represents the last point in the cubic spline, the destination
+                self.last_index = len(self.cx) - 1
+                self.timedelta = 0.0
+                self.x = [self.state.x]
+                self.y = [self.state.y]
+                self.yaw = [self.state.yaw]
+                self.v = [self.state.v]
+                self.t = [0.0]
+                self.target_ind = pure_pursuit.calc_target_index(
+                    self.state, self.cx, self.cy, 0
+                )
 
-            # Publish the ETA to the destination before we get started
-            self.calc_eta()
-            rate = 1.0 / 30.0  # 30 cycles per second
+                # Publish the ETA to the destination before we get started
+                self.calc_eta()
+                rate = 1.0 / 30.0  # 30 cycles per second
 
-            # TODO - Can we make this a timer that gets called then destoryed?
+                # TODO - Can we make this a timer that gets called then destoryed?
 
+            else:
+                self.path_valid = False
+                self.log_header("It appears the cart is already at the destination")
+
+        if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
-            while last_index > target_ind and self.path_valid:
+            if self.last_index > self.target_ind and self.path_valid:
                 # self.get_logger().info("IN THE LOOP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 self.get_logger().info(
                     f"Cur pos: {self.cur_pose.position},   Tar pos: {self.local_points[-1]}"
                 )
                 target_speed = self.tar_speed
                 ai = target_speed  # pure_pursuit.PIDControl(target_speed, state.v)
-                di, target_ind = pure_pursuit.pure_pursuit_control(
-                    state, cx, cy, target_ind
+                di, self.target_ind = pure_pursuit.pure_pursuit_control(
+                    self.state, self.cx, self.cy, self.target_ind
                 )
 
                 # publish our desired position
-                mkr = create_marker(cx[target_ind], cy[target_ind], "/map")
+                mkr = create_marker(self.cx[self.target_ind], self.cy[self.target_ind], "/map")
                 self.target_pub.publish(mkr)
 
                 # Arrow that represents steering angle
@@ -293,43 +300,38 @@ class LocalPlanner(rclpy.node.Node):
                 arrow.pose.orientation.w = quater[3]
                 self.target_twist_pub.publish(arrow)
 
-                self.log_header("update is about to be called")
-                state = self.update(state, ai, di)
+                # self.log_header("update is about to be called")
+                self.state = self.update(self.state, ai, di)
 
-                x.append(state.x)
-                y.append(state.y)
-                yaw.append(state.yaw)
-                v.append(state.v)
-                t.append(timedelta)
-                # sleep(rate)
-                time.sleep(rate)
-        else:
-            self.path_valid = False
-            self.log_header("It appears the cart is already at the destination")
+                self.x.append(self.state.x)
+                self.y.append(self.state.y)
+                self.yaw.append(self.state.yaw)
+                self.v.append(self.state.v)
+                self.t.append(self.timedelta)
+            else:
+                # Check if we've reached the destination, if so we should change the cart state to finished
+                self.log("Done navigating")
+                self.current_state = VehicleState()
+                self.current_state.is_navigating = False
+                self.current_state.reached_destination = True
+                notify_server = String()
 
-        # Check if we've reached the destination, if so we should change the cart state to finished
-        self.log("Done navigating")
-        self.current_state = VehicleState()
-        self.current_state.is_navigating = False
-        self.current_state.reached_destination = True
-        notify_server = String()
+                # Let operator know why current path has stopped
+                if self.path_valid:
+                    self.log("Reached Destination succesfully without interruption")
+                    self.arrived_pub.publish(notify_server)
+                else:
+                    self.log(
+                        "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
+                    )
 
-        # Let operator know why current path has stopped
-        if self.path_valid:
-            self.log("Reached Destination succesfully without interruption")
-            self.arrived_pub.publish(notify_server)
-        else:
-            self.log(
-                "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
-            )
+                # Update the internal state of the vehicle
+                self.vehicle_state_pub.publish(self.current_state)
+                plan_msg = VelAngle()
+                plan_msg.vel = 0.0
+                plan_msg.angle = 0.0
 
-        # Update the internal state of the vehicle
-        self.vehicle_state_pub.publish(self.current_state)
-        plan_msg = VelAngle()
-        plan_msg.vel = 0.0
-        plan_msg.angle = 0.0
-
-        self.motion_pub.publish(plan_msg)
+                self.motion_pub.publish(plan_msg)
 
     def update(self, state, a, delta):
         """Updates the carts position by a given state and delta"""

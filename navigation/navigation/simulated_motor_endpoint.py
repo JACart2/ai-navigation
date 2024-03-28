@@ -39,6 +39,7 @@ class SimulatedMotor(rclpy.node.Node):
 
         self.x = 82.23206329345703
         self.y = 132.16149291992187
+        self.phi = 0.0
 
         self.new_vel = False
 
@@ -52,6 +53,9 @@ class SimulatedMotor(rclpy.node.Node):
 
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
+        self.local_pose_pub = self.create_publisher(
+            PoseStamped, "/ndt_pose", 10
+        )  # pose estimate for the sake of local planner
 
         self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)
 
@@ -81,6 +85,22 @@ class SimulatedMotor(rclpy.node.Node):
         self.get_logger().info(
             f"x:{self.x}, y:{self.y}, vel:{self.vel}, angle:{self.angle}"
         )
+        pose = PoseStamped()
+        pose.header.frame_id = "world"
+        pose.pose.position.x = self.x
+        pose.pose.position.y = self.y
+        x, y, z, w = quaternion_from_euler(0.0, 0.0, self.phi)
+        pose.pose.orientation.x = x
+        pose.pose.orientation.y = y
+        pose.pose.orientation.z = z
+        pose.pose.orientation.w = w
+
+        self.pose_pub.publish(pose)
+        self.local_pose_pub.publish(pose)
+
+        vel = Float32()
+        vel.data = self.vel
+        self.vel_pub.publish(vel)
         self.prev_time = time.time()
 
         return
@@ -89,25 +109,9 @@ class SimulatedMotor(rclpy.node.Node):
         """The endpoint for processing and sending instructions to the arduino controller."""
 
         cur_time = time.time()
-        self.x, self.y, phi = steering_position_calc.calc_new_pos(
+        self.x, self.y, self.phi = steering_position_calc.calc_new_pos(
             cur_time - self.prev_time, self.x, self.y, self.vel, self.angle
         )
-
-        pose = PoseStamped()
-        pose.header.frame_id = "world"
-        pose.pose.position.x = self.x
-        pose.pose.position.y = self.y
-        x, y, z, w = quaternion_from_euler(0.0, 0.0, phi)
-        pose.pose.orientation.x = x
-        pose.pose.orientation.y = y
-        pose.pose.orientation.z = z
-        pose.pose.orientation.w = w
-
-        self.pose_pub.publish(pose)
-
-        vel = Float32()
-        vel.data = self.vel
-        self.vel_pub.publish(vel)
 
     # def path_cb(self, msg):
     #     # This array is used to delete the preexisting markerarrays before publishing

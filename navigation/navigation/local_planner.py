@@ -262,6 +262,10 @@ class LocalPlanner(rclpy.node.Node):
 
             # Continue to loop while we have not hit the target destination, and the path is still valid
             while last_index > target_ind and self.path_valid:
+                # self.get_logger().info("IN THE LOOP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                self.get_logger().info(
+                    f"Cur pos: {self.cur_pose.position},   Tar pos: {self.local_points[-1]}"
+                )
                 target_speed = self.tar_speed
                 ai = target_speed  # pure_pursuit.PIDControl(target_speed, state.v)
                 di, target_ind = pure_pursuit.pure_pursuit_control(

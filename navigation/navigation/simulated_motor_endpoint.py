@@ -89,7 +89,7 @@ class SimulatedMotor(rclpy.node.Node):
         """The endpoint for processing and sending instructions to the arduino controller."""
 
         cur_time = time.time()
-        self.x, self.y = steering_position_calc.calc_new_pos(
+        self.x, self.y, phi = steering_position_calc.calc_new_pos(
             cur_time - self.prev_time, self.x, self.y, self.vel, self.angle
         )
 
@@ -97,7 +97,7 @@ class SimulatedMotor(rclpy.node.Node):
         pose.header.frame_id = "world"
         pose.pose.position.x = self.x
         pose.pose.position.y = self.y
-        x, y, z, w = quaternion_from_euler(0.0, 0.0, self.angle)
+        x, y, z, w = quaternion_from_euler(0.0, 0.0, phi)
         pose.pose.orientation.x = x
         pose.pose.orientation.y = y
         pose.pose.orientation.z = z

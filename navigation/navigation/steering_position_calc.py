@@ -14,15 +14,15 @@
 import numpy as np
 import time
 
-LF = 1.25             # Front distance from the center of mass of the cart.
-LB = 1.25             # Back distance from the center of mass of the cart.
-LW = 1                # Half of the width of the cart.
+LF = 1.25  # Front distance from the center of mass of the cart.
+LB = 1.25  # Back distance from the center of mass of the cart.
+LW = 1  # Half of the width of the cart.
 prev_phi = 0
 
 
 def calc_new_pos(deltaT, x, y, vel_mps, steering_angle):
     """
-        Compute new position
+    Compute new position
     """
     global LB
     global LF
@@ -30,7 +30,6 @@ def calc_new_pos(deltaT, x, y, vel_mps, steering_angle):
     global prev_phi
 
     steering = np.deg2rad(steering_angle)
-
 
     # Calculate heading of the vehicle.
     beta = np.arctan(LB * np.tan(steering_angle) / (LB + LF))
@@ -41,17 +40,20 @@ def calc_new_pos(deltaT, x, y, vel_mps, steering_angle):
     new_x = x + vel_mps * deltaT * np.cos(beta + phi)
     new_y = y + vel_mps * deltaT * np.sin(beta + phi)
 
-    return new_x, new_y
+    return new_x, new_y, phi
 
 
 def main():
     x = y = 0
     while True:
 
-        new_x, new_y = calc_new_pos(deltaT=0.05,x=x, y=y, vel_mps=0.5, steering_angle=20.0)
+        new_x, new_y = calc_new_pos(
+            deltaT=0.05, x=x, y=y, vel_mps=0.5, steering_angle=20.0
+        )
         print(new_x, new_y)
         x = new_x
         y = new_y
+
 
 if __name__ == "__main__":
     main()

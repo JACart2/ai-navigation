@@ -122,11 +122,12 @@ class LocalPlanner(rclpy.node.Node):
         # Main loop
         self.timer = self.create_timer(0.5, self.timer_cb)
 
-        plan_msg = VelAngle()
-        plan_msg.vel = 5.0
-        plan_msg.angle = 5.0
+        # plan_msg = VelAngle()
+        # plan_msg.vel = 5.0
+        # plan_msg.angle = 5.0
 
-        self.motion_pub.publish(plan_msg)
+        # self.log_header("IM AT THE END OF INIT")
+        # self.motion_pub.publish(plan_msg)
 
     def timer_cb(self):
         if self.new_path:
@@ -176,7 +177,7 @@ class LocalPlanner(rclpy.node.Node):
         local_points_plus = (
             self.local_points
         )  # geometry_util.add_intermediate_points(self.local_points, 15.0)
-        # TODO - decipher the comment above
+        # TODO - decipher the comment abovef
 
         ax = []
         ay = []
@@ -245,7 +246,7 @@ class LocalPlanner(rclpy.node.Node):
 
             # last_index represents the last point in the cubic spline, the destination
             last_index = len(cx) - 1
-            time = 0.0
+            timedelta = 0.0
             x = [state.x]
             y = [state.y]
             yaw = [state.yaw]
@@ -261,7 +262,7 @@ class LocalPlanner(rclpy.node.Node):
 
             # Continue to loop while we have not hit the target destination, and the path is still valid
             while last_index > target_ind and self.path_valid:
-                target_speed = self.global_speed
+                target_speed = self.tar_speed
                 ai = target_speed  # pure_pursuit.PIDControl(target_speed, state.v)
                 di, target_ind = pure_pursuit.pure_pursuit_control(
                     state, cx, cy, target_ind
@@ -272,7 +273,7 @@ class LocalPlanner(rclpy.node.Node):
                 self.target_pub.publish(mkr)
 
                 # Arrow that represents steering angle
-                arrow = create_marker(0, 0, "/base_link")
+                arrow = create_marker(0.0, 0.0, "/base_link")
                 arrow.type = 0  # arrow
                 arrow.scale.x = 2.0
                 arrow.scale.y = 1.0
@@ -288,13 +289,14 @@ class LocalPlanner(rclpy.node.Node):
                 arrow.pose.orientation.w = quater[3]
                 self.target_twist_pub.publish(arrow)
 
+                self.log_header("update is about to be called")
                 state = self.update(state, ai, di)
 
                 x.append(state.x)
                 y.append(state.y)
                 yaw.append(state.yaw)
                 v.append(state.v)
-                t.append(time)
+                t.append(timedelta)
                 # sleep(rate)
                 time.sleep(rate)
         else:
@@ -320,23 +322,25 @@ class LocalPlanner(rclpy.node.Node):
         # Update the internal state of the vehicle
         self.vehicle_state_pub.publish(self.current_state)
         plan_msg = VelAngle()
-        plan_msg.vel = 0
-        plan_msg.angle = 0
+        plan_msg.vel = 0.0
+        plan_msg.angle = 0.0
 
         self.motion_pub.publish(plan_msg)
 
     def update(self, state, a, delta):
         """Updates the carts position by a given state and delta"""
+
+        # self.log_header("update is being called")
         pose = self.cur_pose
         cur_speed = self.cur_vel
 
         plan_msg = VelAngle()
-        if self.debug:
-            self.delay_print -= 1
-            if self.delay_print <= 0:
-                self.delay_print = 50
-                self.log(f"Target Speed: {str(a)}")
-                self.log(f"Current Speed: {str(cur_speed)}")
+        # if self.debug:
+        #     self.delay_print -= 1
+        #     if self.delay_print <= 0:
+        #         self.delay_print = 50
+        #         self.log(f"Target Speed: {str(a)}")
+        #         self.log(f"Current Speed: {str(cur_speed)}")
         plan_msg.vel = a  # Speed we want from pure pursuit controller
         plan_msg.angle = (delta * 180) / math.pi
 
@@ -348,7 +352,7 @@ class LocalPlanner(rclpy.node.Node):
         # Check if any node wants us to stop
         for x in self.stop_requests.values():
             if x[0]:  # stop requested
-                plan_msg.vel = 0
+                plan_msg.vel = 0.0
                 if x[1] > 0:  # obstacle distance is given
                     plan_msg.vel = -x[1]
 
@@ -379,17 +383,19 @@ class LocalPlanner(rclpy.node.Node):
             current_node = self.get_closest_point(
                 self.cur_pose.position.x, self.cur_pose.position.y
             )
-            distance_remaining = self.calc_trip_dist(self.local_points, current_node)
 
-            # Remaining time in seconds
-            remaining_time = distance_remaining / self.cur_speed
+            # distance_remaining = self.calc_trip_dist(self.local_points, current_node)
+
+            # # Remaining time in seconds
+            # remaining_time = distance_remaining / self.cur_speed
             eta_msg = UInt64()
 
-            # Calculate the ETA to the end
-            arrival_time = time.time() + remaining_time
+            # # Calculate the ETA to the end
+            # arrival_time = time.time() + remaining_time
 
-            # Convert the time to milliseconds
-            eta_msg.data = int(arrival_time * (1000))
+            # # Convert the time to milliseconds
+            # eta_msg.data = int(arrival_time * (1000))
+            eta_msg.data = 0
             self.eta_pub.publish(eta_msg)
 
     def calc_trip_dist(self, points_list, start):
@@ -459,14 +465,14 @@ def create_pose_stamped(point):
 def create_marker(x, y, frame_id):
     marker = Marker()
     marker.header.frame_id = frame_id
-    marker.header.stamp = time.time()
+    # marker.header.stamp = Time(seconds=time.time())
     marker.ns = "my_namespace"
     marker.id = 0
     marker.type = 1  # cube
     marker.action = 0  # add
     marker.pose.position.x = x
     marker.pose.position.y = y
-    marker.pose.position.z = 0
+    marker.pose.position.z = 0.0
 
     marker.pose.orientation.x = 0.0
     marker.pose.orientation.y = 0.0

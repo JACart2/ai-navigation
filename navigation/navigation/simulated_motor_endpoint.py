@@ -16,6 +16,7 @@ from navigation import steering_position_calc
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
+from tf_transformations import quaternion_from_euler
 
 from motor_control_interface.msg import VelAngle
 from geometry_msgs.msg import PoseStamped
@@ -45,9 +46,9 @@ class SimulatedMotor(rclpy.node.Node):
         self.planned_motion_subscriber = self.create_subscription(
             VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
-        self.path_sub = self.create_subscription(
-            LocalPointsArray, "/global_path", self.path_cb, 10
-        )
+        # self.path_sub = self.create_subscription(
+        #     LocalPointsArray, "/global_path", self.path_cb, 10
+        # )
 
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
@@ -61,6 +62,7 @@ class SimulatedMotor(rclpy.node.Node):
         message (planned_vel_angle) and set the appropriate fields to make the cart drive/turn.
         """
 
+        print("IM getting a vel angle")
         self.vel = planned_vel_angle.vel
         self.angle = planned_vel_angle.angle
 
@@ -92,43 +94,50 @@ class SimulatedMotor(rclpy.node.Node):
         )
 
         pose = PoseStamped()
+        pose.header.frame_id = "world"
         pose.pose.position.x = self.x
         pose.pose.position.y = self.y
+        x, y, z, w = quaternion_from_euler(0.0, 0.0, self.angle)
+        pose.pose.orientation.x = x
+        pose.pose.orientation.y = y
+        pose.pose.orientation.z = z
+        pose.pose.orientation.w = w
+
         self.pose_pub.publish(pose)
 
         vel = Float32()
         vel.data = self.vel
         self.vel_pub.publish(vel)
 
-    def path_cb(self, msg):
-        # This array is used to delete the preexisting markerarrays before publishing
-        delarr = MarkerArray()
-        delmark = Marker()
-        delmark.action = 3
-        delarr.markers.append(delmark)
-        self.rviz_path_pub.publish(delarr)
+    # def path_cb(self, msg):
+    #     # This array is used to delete the preexisting markerarrays before publishing
+    #     delarr = MarkerArray()
+    #     delmark = Marker()
+    #     delmark.action = 3
+    #     delarr.markers.append(delmark)
+    #     self.rviz_path_pub.publish(delarr)
 
-        arr = MarkerArray()
-        id = 0
-        for p in msg.localpoints:
-            temp = Marker()
-            temp.pose = p
-            temp.header.frame_id = "world"
-            temp.id = id
-            id += 1
-            temp.scale.x = 1.0
-            temp.scale.y = 1.0
-            temp.scale.z = 1.0
-            temp.color.r = 0.0
-            temp.color.g = 0.0
-            temp.color.b = 1.0
-            temp.color.a = 1.0
-            temp.type = 2
-            temp.action = 0
-            arr.markers.append(temp)
-        arr.markers[0].color.g = 50.0
-        arr.markers[-1].color.r = 50.0
-        self.rviz_path_pub.publish(arr)
+    #     arr = MarkerArray()
+    #     id = 0
+    #     for p in msg.localpoints:
+    #         temp = Marker()
+    #         temp.pose = p
+    #         temp.header.frame_id = "world"
+    #         temp.id = id
+    #         id += 1
+    #         temp.scale.x = 1.0
+    #         temp.scale.y = 1.0
+    #         temp.scale.z = 1.0
+    #         temp.color.r = 0.0
+    #         temp.color.g = 0.0
+    #         temp.color.b = 1.0
+    #         temp.color.a = 1.0
+    #         temp.type = 2
+    #         temp.action = 0
+    #         arr.markers.append(temp)
+    #     arr.markers[0].color.g = 50.0
+    #     arr.markers[-1].color.r = 50.0
+    #     self.rviz_path_pub.publish(arr)
 
 
 def main():

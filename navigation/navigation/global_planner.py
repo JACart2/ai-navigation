@@ -93,9 +93,9 @@ class GlobalPlanner(rclpy.node.Node):
         )
 
         # This is to orient the gps.
-        self.lat_long_req = self.create_subscription(
-            LatLongPoint, "/gps_request", self.gps_request_cb, 10
-        )
+        # self.lat_long_req = self.create_subscription(
+        #     LatLongPoint, "/gps_request", self.gps_request_cb, 10
+        # )
 
         self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
 
@@ -109,7 +109,7 @@ class GlobalPlanner(rclpy.node.Node):
         self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
 
         # How often to update the gps position of the cart
-        self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
+        # self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
         self.get_logger().info("Begin")
 
     # Load the graph file as the global graph
@@ -515,135 +515,135 @@ class GlobalPlanner(rclpy.node.Node):
             self.vel_polls = 0
             self.cur_speed = 0
 
-    def output_path_gps(self, path, single=False):
-        """Function for converting the list of points along a path to latitude and longitude
+    # def output_path_gps(self, path, single=False):
+    #     """Function for converting the list of points along a path to latitude and longitude
 
-        Args:
-            path (LocalPointsArray message): List of X,Y points along the path
-            single (Boolean): Whether or not you're sending a path with a single point or not (e.g. see output_pos_gps below)
-        """
-        gps_path = LatLongArray()
+    #     Args:
+    #         path (LocalPointsArray message): List of X,Y points along the path
+    #         single (Boolean): Whether or not you're sending a path with a single point or not (e.g. see output_pos_gps below)
+    #     """
+    #     gps_path = LatLongArray()
 
-        for pose in path.localpoints:
-            # Testing conversion back to latitude/longitude
-            stock_point = Point()
+    #     for pose in path.localpoints:
+    #         # Testing conversion back to latitude/longitude
+    #         stock_point = Point()
 
-            # Correct the angle of the points from offset of map
-            stock_point.x = pose.position.x
-            stock_point.y = pose.position.y
-            stock_point = simple_gps_util.heading_correction(
-                0, 0, -(self.anchor_theta), stock_point
-            )
+    #         # Correct the angle of the points from offset of map
+    #         stock_point.x = pose.position.x
+    #         stock_point.y = pose.position.y
+    #         stock_point = simple_gps_util.heading_correction(
+    #             0, 0, -(self.anchor_theta), stock_point
+    #         )
 
-            # Convert to latitude and longitude
-            lat, lon = simple_gps_util.xy2latlon(
-                stock_point.x, stock_point.y, self.anchor_gps[0], self.anchor_gps[1]
-            )
+    #         # Convert to latitude and longitude
+    #         lat, lon = simple_gps_util.xy2latlon(
+    #             stock_point.x, stock_point.y, self.anchor_gps[0], self.anchor_gps[1]
+    #         )
 
-            final_pose = LatLongPoint()
-            final_pose.latitude = lat
-            final_pose.longitude = lon
+    #         final_pose = LatLongPoint()
+    #         final_pose.latitude = lat
+    #         final_pose.longitude = lon
 
-            # If we only care about a single point (e.g. cart position) send it off
-            if single:
-                return final_pose
+    #         # If we only care about a single point (e.g. cart position) send it off
+    #         if single:
+    #             return final_pose
 
-            gps_path.gpspoints.append(final_pose)
+    #         gps_path.gpspoints.append(final_pose)
 
-        # Publish here
-        self.gps_path_pub.publish(gps_path)
+    #     # Publish here
+    #     self.gps_path_pub.publish(gps_path)
 
-    def output_pos_gps(self):
-        """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution
-        rather than GPS which can be relatively inaccurate.
+    # def output_pos_gps(self):
+    #     """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution
+    #     rather than GPS which can be relatively inaccurate.
 
-        """
-        if self.navigating:
-            package_point = LocalPointsArray()
-            cart_pos = self.current_pos.pose
-            package_point.localpoints.append(cart_pos)
+    #     """
+    #     if self.navigating:
+    #         package_point = LocalPointsArray()
+    #         cart_pos = self.current_pos.pose
+    #         package_point.localpoints.append(cart_pos)
 
-            point_in_gps = self.output_path_gps(package_point, single=True)
+    #         point_in_gps = self.output_path_gps(package_point, single=True)
 
-            self.gps_pose_pub.publish(point_in_gps)
+    #         self.gps_pose_pub.publish(point_in_gps)
 
-    def gps_request_cb(self, msg):
-        """Converts a GPS point from Lat, Long to UTM coordinate system using AlvinXY. Also displays the GPS once converted, in RViz
-        Note: Information on calibrating can be found here:
-        https://git.cs.jmu.edu/av-xlabs-19/robotics/ai-navigation/wikis/Setting-Up-a-New-Driving-Environment#4-calibrating-the-gps-utility-for-the-new-map
+    # def gps_request_cb(self, msg):
+    #     """Converts a GPS point from Lat, Long to UTM coordinate system using AlvinXY. Also displays the GPS once converted, in RViz
+    #     Note: Information on calibrating can be found here:
+    #     https://git.cs.jmu.edu/av-xlabs-19/robotics/ai-navigation/wikis/Setting-Up-a-New-Driving-Environment#4-calibrating-the-gps-utility-for-the-new-map
 
-        Args:
-            msg (ROS LatLongPoint Message): Message containing the latitude and longitude to convert and navigate to
-        """
-        local_point = Point()
+    #     Args:
+    #         msg (ROS LatLongPoint Message): Message containing the latitude and longitude to convert and navigate to
+    #     """
+    #     local_point = Point()
 
-        anchor_gps = self.anchor_gps
+    #     anchor_gps = self.anchor_gps
 
-        # Calibrate GPS Utility if not yet calibrated
-        if not self.gps_calibrated:
-            # A test point on the map X, Y
-            test_local = self.test_location_local
+    #     # Calibrate GPS Utility if not yet calibrated
+    #     if not self.gps_calibrated:
+    #         # A test point on the map X, Y
+    #         test_local = self.test_location_local
 
-            # Origin of the map X, Y
-            anchor_local = self.anchor_local
+    #         # Origin of the map X, Y
+    #         anchor_local = self.anchor_local
 
-            # That same test point but in latitude, longitude from Google Maps
-            test_gps = self.test_location_gps
+    #         # That same test point but in latitude, longitude from Google Maps
+    #         test_gps = self.test_location_gps
 
-            # Get the calibrated heading and set
-            self.anchor_theta = simple_gps_util.calibrate_util(
-                test_local, anchor_local, test_gps, anchor_gps
-            )
+    #         # Get the calibrated heading and set
+    #         self.anchor_theta = simple_gps_util.calibrate_util(
+    #             test_local, anchor_local, test_gps, anchor_gps
+    #         )
 
-            # FIXME THIS NEEDS TO BE LOOKED INTO
-            # rospy.set_param("anchor_theta", float(self.anchor_theta))
-            # rospy.loginfo(
-            #     "Calibrated GPS Utility With Heading Offset: "
-            #     + str(self.anchor_theta)
-            #     + " degrees"
-            # )
-            self.gps_calibrated = True
+    #         # FIXME THIS NEEDS TO BE LOOKED INTO
+    #         # rospy.set_param("anchor_theta", float(self.anchor_theta))
+    #         # rospy.loginfo(
+    #         #     "Calibrated GPS Utility With Heading Offset: "
+    #         #     + str(self.anchor_theta)
+    #         #     + " degrees"
+    #         # )
+    #         self.gps_calibrated = True
 
-        # the anchor point is the latitude/longitude for the pcd origin
-        x, y = simple_gps_util.latlon2xy(
-            msg.latitude, msg.longitude, anchor_gps[0], anchor_gps[1]
-        )
+    #     # the anchor point is the latitude/longitude for the pcd origin
+    #     x, y = simple_gps_util.latlon2xy(
+    #         msg.latitude, msg.longitude, anchor_gps[0], anchor_gps[1]
+    #     )
 
-        local_point.x = x
-        local_point.y = y
+    #     local_point.x = x
+    #     local_point.y = y
 
-        # Currect the heading of the point by map offset around origin
-        local_point = simple_gps_util.heading_correction(
-            0, 0, self.anchor_theta, local_point
-        )
-        self.calc_nav(local_point)
+    #     # Currect the heading of the point by map offset around origin
+    #     local_point = simple_gps_util.heading_correction(
+    #         0, 0, self.anchor_theta, local_point
+    #     )
+    #     self.calc_nav(local_point)
 
-        marker = Marker()
-        marker.header = Header()
-        marker.header.frame_id = "/map"
+    #     marker = Marker()
+    #     marker.header = Header()
+    #     marker.header.frame_id = "/map"
 
-        marker.ns = "GPS_NS"
-        marker.id = 0
-        marker.type = marker.CUBE
-        marker.action = 0
+    #     marker.ns = "GPS_NS"
+    #     marker.id = 0
+    #     marker.type = marker.CUBE
+    #     marker.action = 0
 
-        marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
-        marker.color.a = 1.0
+    #     marker.color.r = 0.0
+    #     marker.color.g = 1.0
+    #     marker.color.b = 0.0
+    #     marker.color.a = 1.0
 
-        # FIXME THIS NEEDS TO BE LOOKED INTO. I think its right but i dont know.
-        marker.lifetime = rclpy.duration.Duration(seconds=10)
+    #     # FIXME THIS NEEDS TO BE LOOKED INTO. I think its right but i dont know.
+    #     marker.lifetime = rclpy.duration.Duration(seconds=10)
 
-        marker.pose.position.x = local_point.x
-        marker.pose.position.y = local_point.y
-        marker.pose.position.z = 0.0
+    #     marker.pose.position.x = local_point.x
+    #     marker.pose.position.y = local_point.y
+    #     marker.pose.position.z = 0.0
 
-        marker.scale.x = 1
-        marker.scale.y = 1
-        marker.scale.z = 0.8
+    #     marker.scale.x = 1
+    #     marker.scale.y = 1
+    #     marker.scale.z = 0.8
 
-        self.display_pub.publish(marker)
+    #     self.display_pub.publish(marker)
 
     def log_header(self, msg):
         """Helper method to print noticeable log statements."""

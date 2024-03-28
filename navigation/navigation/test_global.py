@@ -56,6 +56,7 @@ class GlobalTester(rclpy.node.Node):
         self.get_logger().info("Begin")
 
     def timer_cb(self):
+        self.destroy_timer(self.timer)
         self.pose_pub.publish(self.pose)
         self.tar_pub.publish(self.target)
         self.vel_pub.publish(self.vel)

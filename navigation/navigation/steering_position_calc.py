@@ -18,9 +18,10 @@ LF = 1.25  # Front distance from the center of mass of the cart.
 LB = 1.25  # Back distance from the center of mass of the cart.
 LW = 1  # Half of the width of the cart.
 prev_phi = 0
+steering_angle = 0
 
 
-def calc_new_pos(deltaT, x, y, vel_mps, steering_angle):
+def calc_new_pos(deltaT, x, y, vel_mps, next_steering_angle):
     """
     Compute new position
     """
@@ -28,8 +29,10 @@ def calc_new_pos(deltaT, x, y, vel_mps, steering_angle):
     global LF
     global LW
     global prev_phi
+    global steering_angle
 
     steering = np.deg2rad(steering_angle)
+    print(steering_angle)
 
     # Calculate heading of the vehicle.
     beta = np.arctan(LB * np.tan(steering_angle) / (LB + LF))
@@ -39,6 +42,8 @@ def calc_new_pos(deltaT, x, y, vel_mps, steering_angle):
     # Calculate vehicles's position.
     new_x = x + vel_mps * deltaT * np.cos(beta + phi)
     new_y = y + vel_mps * deltaT * np.sin(beta + phi)
+
+    steering_angle = next_steering_angle
 
     return new_x, new_y, phi
 

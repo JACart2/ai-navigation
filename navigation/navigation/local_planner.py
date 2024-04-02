@@ -280,7 +280,9 @@ class LocalPlanner(rclpy.node.Node):
                 )
 
                 # publish our desired position
-                mkr = create_marker(self.cx[self.target_ind], self.cy[self.target_ind], "/map")
+                mkr = create_marker(
+                    self.cx[self.target_ind], self.cy[self.target_ind], "/world"
+                )
                 self.target_pub.publish(mkr)
 
                 # Arrow that represents steering angle

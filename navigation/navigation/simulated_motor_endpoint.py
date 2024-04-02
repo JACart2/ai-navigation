@@ -34,6 +34,9 @@ class SimulatedMotor(rclpy.node.Node):
         # Class constants
         self.NODE_RATE = 10
 
+        self.STEER_RATE = 5.0
+        self.VEL_RATE = 0.5
+
         self.vel = 0.0
         self.angle = 0.0
 
@@ -66,13 +69,18 @@ class SimulatedMotor(rclpy.node.Node):
         message (planned_vel_angle) and set the appropriate fields to make the cart drive/turn.
         """
 
-        print("IM getting a vel angle")
+        # print("IM getting a vel angle")
         self.vel = planned_vel_angle.vel
-        self.angle = planned_vel_angle.angle
+        # self.angle = planned_vel_angle.angle
 
-        if self.vel < 0:
+        if planned_vel_angle.angle > self.angle:
+            self.angle = min(planned_vel_angle.angle, self.angle + self.STEER_RATE)
+        else:
+            self.angle = max(planned_vel_angle.angle, self.angle - self.STEER_RATE)
+
+        if self.vel < 0.0:
             # indicates an obstacle
-            self.vel = 0
+            self.vel = 0.0
 
         self.new_vel = True
 
@@ -82,9 +90,7 @@ class SimulatedMotor(rclpy.node.Node):
         # Check if we have received a target yet
         if self.new_vel:
             self.calculate_endpoint()
-        self.get_logger().info(
-            f"x:{self.x}, y:{self.y}, vel:{self.vel}, angle:{self.angle}"
-        )
+
         pose = PoseStamped()
         pose.header.frame_id = "world"
         pose.pose.position.x = self.x
@@ -109,8 +115,12 @@ class SimulatedMotor(rclpy.node.Node):
         """The endpoint for processing and sending instructions to the arduino controller."""
 
         cur_time = time.time()
+        delta_time = cur_time - self.prev_time
         self.x, self.y, self.phi = steering_position_calc.calc_new_pos(
-            cur_time - self.prev_time, self.x, self.y, self.vel, self.angle
+            delta_time, self.x, self.y, self.vel, self.angle
+        )
+        self.get_logger().info(
+            f"x:{self.x}, y:{self.y}, vel:{self.vel}, angle:{self.angle}, delta_time:{delta_time}"
         )
 
     # def path_cb(self, msg):

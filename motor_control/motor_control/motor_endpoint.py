@@ -45,7 +45,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
-        #FIXME FOR THIS IS SET TO MANUAL BUT SHOULD PROLLY BE A LAUNCH PARAM.
+        # FIXME FOR THIS IS SET TO MANUAL BUT SHOULD PROLLY BE A LAUNCH PARAM.
         self.manual_control = True
 
         self.vel = 0
@@ -89,10 +89,9 @@ class MotorEndpoint(rclpy.node.Node):
         )
 
         # The linear and angular velocity of the cart from NDT Matching
-        self.twist_sub = self.create_subscriber(
+        self.twist_sub = self.create_subscription(
             TwistStamped, "/estimate_twist", self.vel_curr_callback, 10
         )
-
 
         self.heart_pub = self.create_publisher(String, "/heartbeat", 10)
 
@@ -143,7 +142,7 @@ class MotorEndpoint(rclpy.node.Node):
     def vel_curr_callback(self, vel_twist):
         """Callback method to get the current velocity. It should be noted that we arent using this method right now
         because we have no way of getting the current velocity."""
-        if (vel_twist != None):
+        if vel_twist != None:
             self.vel_curr = vel_twist.twist.linear.x
 
     def timer_callback(self):
@@ -324,7 +323,6 @@ class MotorEndpoint(rclpy.node.Node):
                     1.0 / self.NODE_RATE
                 )  # 1 sec / rate per sec (10)
 
-
                 obstacle_brake_time = self.obstacle_distance / self.vel_curr - (
                     1.0 / self.NODE_RATE
                 )  # We decrease by one node rate initially to account for rounding
@@ -349,8 +347,8 @@ class MotorEndpoint(rclpy.node.Node):
                 if brake_rate >= 255:
                     self.full_stop_count += 1
 
-            #This was originally in the if else statemnt... (At the bottom of both)
-            self.brake = float(min(255, math.ceil(brake_rate)))  
+            # This was originally in the if else statemnt... (At the bottom of both)
+            self.brake = float(min(255, math.ceil(brake_rate)))
             if (
                 self.brake >= 255 and self.full_stop_count > 10
             ):  # We have reached maximum braking!

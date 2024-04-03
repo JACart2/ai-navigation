@@ -12,7 +12,7 @@ This contains the motor_endpoint python code that connects the arduino to cooper
 This contains the old scripts from Jacart1 and other resources used to transition into ROS2.
 
 ## Setup/How to run
-Ensure that you have completed the initial setup that is outlined in [ai-navigation README](../README.md#setup) before continuing on to these steps.
+Ensure that you have completed the initial setup that is outlined in [ai-navigation README](../README.md#Setup) before continuing on to these steps.
 
 1. Turn on the cart and connect the laptop via the USB-C cable located in the rear of the cart
 2. Run the launch file

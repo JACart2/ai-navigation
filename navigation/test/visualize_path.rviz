@@ -69,7 +69,7 @@ Visualization Manager:
       Head Length: 0.30000001192092896
       Head Radius: 1.25
       Name: Pose
-      Shaft Length: 2.200000047683716
+      Shaft Length: 1.7999999523162842
       Shaft Radius: 1
       Shape: Arrow
       Topic:
@@ -80,10 +80,23 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /limited_pose
       Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /target_point
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: world
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:

@@ -32,9 +32,9 @@ class SimulatedMotor(rclpy.node.Node):
         super().__init__("motor_simulator")
 
         # Class constants
-        self.NODE_RATE = 10
+        self.NODE_RATE = 20
 
-        self.STEER_RATE = 5.0
+        self.STEER_RATE = 20.0
         self.VEL_RATE = 0.5
 
         self.vel = 0.0
@@ -44,15 +44,13 @@ class SimulatedMotor(rclpy.node.Node):
         self.y = 132.16149291992187
         self.phi = 0.0
 
-        self.new_vel = False
+        self.prev_time = time.time()
+        self.seen_vel = False
 
         # Creation of some simple subscribers/publishers/timers
         self.planned_motion_subscriber = self.create_subscription(
             VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
-        # self.path_sub = self.create_subscription(
-        #     LocalPointsArray, "/global_path", self.path_cb, 10
-        # )
 
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
@@ -69,30 +67,29 @@ class SimulatedMotor(rclpy.node.Node):
         message (planned_vel_angle) and set the appropriate fields to make the cart drive/turn.
         """
 
-        # print("IM getting a vel angle")
         self.vel = planned_vel_angle.vel
-        # self.angle = planned_vel_angle.angle
 
+        # Only turn at a max rate
         if planned_vel_angle.angle > self.angle:
             self.angle = min(planned_vel_angle.angle, self.angle + self.STEER_RATE)
         else:
             self.angle = max(planned_vel_angle.angle, self.angle - self.STEER_RATE)
 
         if self.vel < 0.0:
-            # indicates an obstacle
+            # indicates an obstacle, so stop
             self.vel = 0.0
-
-        self.new_vel = True
+        # set prev_vel for the first calculation
+        if not self.seen_vel:
+            self.prev_time = time.time()
+            self.seen_vel = True
 
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""
 
-        # Check if we have received a target yet
-        if self.new_vel:
-            self.calculate_endpoint()
+        self.calculate_endpoint()
 
         pose = PoseStamped()
-        pose.header.frame_id = "world"
+        pose.header.frame_id = "map"
         pose.pose.position.x = self.x
         pose.pose.position.y = self.y
         x, y, z, w = quaternion_from_euler(0.0, 0.0, self.phi)
@@ -107,51 +104,20 @@ class SimulatedMotor(rclpy.node.Node):
         vel = Float32()
         vel.data = self.vel
         self.vel_pub.publish(vel)
-        self.prev_time = time.time()
-
-        return
 
     def calculate_endpoint(self):
         """The endpoint for processing and sending instructions to the arduino controller."""
 
         cur_time = time.time()
         delta_time = cur_time - self.prev_time
+        self.prev_time = cur_time
+
         self.x, self.y, self.phi = steering_position_calc.calc_new_pos(
             delta_time, self.x, self.y, self.vel, self.angle
         )
         self.get_logger().info(
             f"x:{self.x}, y:{self.y}, vel:{self.vel}, angle:{self.angle}, delta_time:{delta_time}"
         )
-
-    # def path_cb(self, msg):
-    #     # This array is used to delete the preexisting markerarrays before publishing
-    #     delarr = MarkerArray()
-    #     delmark = Marker()
-    #     delmark.action = 3
-    #     delarr.markers.append(delmark)
-    #     self.rviz_path_pub.publish(delarr)
-
-    #     arr = MarkerArray()
-    #     id = 0
-    #     for p in msg.localpoints:
-    #         temp = Marker()
-    #         temp.pose = p
-    #         temp.header.frame_id = "world"
-    #         temp.id = id
-    #         id += 1
-    #         temp.scale.x = 1.0
-    #         temp.scale.y = 1.0
-    #         temp.scale.z = 1.0
-    #         temp.color.r = 0.0
-    #         temp.color.g = 0.0
-    #         temp.color.b = 1.0
-    #         temp.color.a = 1.0
-    #         temp.type = 2
-    #         temp.action = 0
-    #         arr.markers.append(temp)
-    #     arr.markers[0].color.g = 50.0
-    #     arr.markers[-1].color.r = 50.0
-    #     self.rviz_path_pub.publish(arr)
 
 
 def main():

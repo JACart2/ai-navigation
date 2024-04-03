@@ -120,7 +120,7 @@ class LocalPlanner(rclpy.node.Node):
         self.eta_timer = self.create_timer(1, self.calc_eta)
 
         # Main loop
-        self.timer = self.create_timer(0.5, self.timer_cb)
+        self.timer = self.create_timer(0.05, self.timer_cb)
 
         # plan_msg = VelAngle()
         # plan_msg.vel = 5.0
@@ -281,7 +281,7 @@ class LocalPlanner(rclpy.node.Node):
 
                 # publish our desired position
                 mkr = create_marker(
-                    self.cx[self.target_ind], self.cy[self.target_ind], "/world"
+                    self.cx[self.target_ind], self.cy[self.target_ind], "/map"
                 )
                 self.target_pub.publish(mkr)
 

@@ -75,7 +75,7 @@ class GlobalTester(rclpy.node.Node):
         for p in msg.localpoints:
             temp = Marker()
             temp.pose = p
-            temp.header.frame_id = "world"
+            temp.header.frame_id = "map"
             temp.id = id
             id += 1
             temp.scale.x = 1.0

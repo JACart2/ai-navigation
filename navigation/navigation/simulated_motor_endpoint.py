@@ -14,10 +14,10 @@ from navigation import steering_position_calc
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
-from tf_transformations import quaternion_from_euler
+from tf_transformations import quaternion_from_euler, euler_from_quaternion
 
 from motor_control_interface.msg import VelAngle
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from std_msgs.msg import Float32
 from navigation_interface.msg import LocalPointsArray
 from visualization_msgs.msg import MarkerArray, Marker
@@ -49,6 +49,9 @@ class SimulatedMotor(rclpy.node.Node):
         self.planned_motion_subscriber = self.create_subscription(
             VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
+        self.planned_motion_subscriber = self.create_subscription(
+            PoseWithCovarianceStamped, "/initialpose", self.initial_pose_callback, 10
+        )
 
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
@@ -57,6 +60,19 @@ class SimulatedMotor(rclpy.node.Node):
         )  # pose estimate for the sake of local planner
 
         self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)
+
+    def initial_pose_callback(self, pose_msg):
+        self.x = pose_msg.pose.pose.position.x
+        self.y = pose_msg.pose.pose.position.y
+        self.phi = euler_from_quaternion(
+            [
+                pose_msg.pose.pose.orientation.x,
+                pose_msg.pose.pose.orientation.y,
+                pose_msg.pose.pose.orientation.z,
+                pose_msg.pose.pose.orientation.w,
+            ]
+        )[2]
+        steering_position_calc.prev_phi = self.phi
 
     def vel_angle_planned_callback(self, planned_vel_angle):
         """

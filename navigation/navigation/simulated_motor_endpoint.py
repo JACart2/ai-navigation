@@ -6,9 +6,7 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
 import time
-import serial as sr
 import numpy as np
-import bitstruct
 import math
 
 from navigation import steering_position_calc
@@ -116,7 +114,7 @@ class SimulatedMotor(rclpy.node.Node):
             delta_time, self.x, self.y, self.vel, self.angle
         )
         self.get_logger().info(
-            f"x:{self.x}, y:{self.y}, vel:{self.vel}, angle:{self.angle}, delta_time:{delta_time}"
+            f"x:{self.x}, y:{self.y}, vel:{self.vel}, steer_angle:{self.angle}, phi:{self.phi}, delta_time:{delta_time}"
         )
 
 

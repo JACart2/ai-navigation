@@ -36,7 +36,7 @@ def calc_new_pos(deltaT, x, y, next_vel_mps, next_steering_angle):
     steering = np.deg2rad(steering_angle)
 
     # Calculate heading of the vehicle.
-    beta = np.arctan(LB * np.tan(steering_angle) / (LB + LF))
+    beta = np.arctan(LB * np.tan(steering) / (LB + LF))
     phi = prev_phi + vel_mps * deltaT * np.cos(beta) * np.tan(steering) / (LB + LF)
     prev_phi = phi
 
@@ -47,7 +47,7 @@ def calc_new_pos(deltaT, x, y, next_vel_mps, next_steering_angle):
     steering_angle = next_steering_angle
     vel_mps = next_vel_mps
 
-    return new_x, new_y, phi
+    return new_x, new_y, beta + phi
 
 
 def main():

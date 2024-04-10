@@ -25,7 +25,7 @@ from navigation_interface.msg import (
 from motor_control_interface.msg import VelAngle
 
 from std_msgs.msg import Float32, String, UInt64, Header
-from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose
+from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose, PoseWithCovarianceStamped
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 
@@ -68,8 +68,10 @@ class LocalPlanner(rclpy.node.Node):
         )
 
         # The position of the cart from NDT Matching
+
+        # The topic name used to be ndt_pose
         self.pose_sub = self.create_subscription(
-            PoseStamped, "/ndt_pose", self.pose_cb, 10
+            PoseWithCovarianceStamped, "/pcl_pose", self.pose_cb, 10
         )
 
         # Current speed of the cart in M/s
@@ -136,7 +138,7 @@ class LocalPlanner(rclpy.node.Node):
         self.cur_vel = msg.twist.linear.x
 
     def pose_cb(self, msg):
-        self.cur_pose = msg.pose
+        self.cur_pose = msg.pose.pose
 
     def stop_cb(self, msg):
         self.stop_requests[str[msg.sender_id.data].lower()] = [msg.stop, msg.distance]

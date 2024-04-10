@@ -46,8 +46,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake = 0
         self.stopping_time = 0
         # FIXME FOR THIS IS SET TO MANUAL BUT SHOULD PROLLY BE A LAUNCH PARAM.
-        self.manual_control = True
-
+        # Since this is false right now we are currently operating autonomously
+        self.manual_control = False
         self.vel = 0
         self.vel_planned = None
         self.angle_planned = None
@@ -60,7 +60,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.delta_time = 0.0
 
         self.declare_parameter("baudrate", 57600)
-        self.declare_parameter("arduino_port", "/dev/ttyACM0")
+        self.declare_parameter("arduino_port", "/dev/ttyUSB0")
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -82,7 +82,7 @@ class MotorEndpoint(rclpy.node.Node):
             self.log_header("MOTOR ENDPOINT: " + str(e))
             serial_connected = False
 
-        # Creation of some simple subscribers/publishers/timers
+        # ROS2 SUBSCRIBERS
 
         self.planned_motion_subscriber = self.create_subscription(
             VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
@@ -93,8 +93,12 @@ class MotorEndpoint(rclpy.node.Node):
             TwistStamped, "/estimate_twist", self.vel_curr_callback, 10
         )
 
+        # ROS2 PUBLISHERS
+
+        # heartbeat is used to ensure that we have a stable connection with the ardiuno
         self.heart_pub = self.create_publisher(String, "/heartbeat", 10)
 
+        # ROS2 TIMERS
         self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)
 
     def vel_angle_planned_callback(self, planned_vel_angle):
@@ -111,7 +115,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         # This logic should be changed in the future, but basically if the velocity that we plan to go is negative,
         # then the velocity is interpreted as the distance to an obstacle. The braking using this variable is handled in
-        # calculate endpoint.
+        # calculate endpoint. We have not made use of this as of 4/10/24.
 
         if self.vel_planned < 0:
             # indicates an obstacle
@@ -123,8 +127,7 @@ class MotorEndpoint(rclpy.node.Node):
             self.brake_time_used = 0
             self.full_stop_count = 0
 
-        # I dont really understand this that well, or at least the logic behind this if statemnt. Maybe im just not seeing the reasoning
-        # But the check for if its Stopped or breaking doesnt make that much sense to me.
+        # Setting some class variables about the state of the cart here given what our instructed velocity/angle is
         if (
             self.vel_planned > 0
             and (self.state == STOPPED or self.state == BRAKING)
@@ -140,52 +143,60 @@ class MotorEndpoint(rclpy.node.Node):
         self.new_vel = True
 
     def vel_curr_callback(self, vel_twist):
-        """Callback method to get the current velocity. It should be noted that we arent using this method right now
-        because we have no way of getting the current velocity."""
+        """Callback for getting the estimated current velocity. As of right now this speed
+        estimate is coming from a ROS2 node called speed_node.py"""
         if vel_twist != None:
             self.vel_curr = vel_twist.twist.linear.x
+
+    def connect_arduino(self):
+        """Simple method for retrying/trying serial connection"""
+        try:
+            self.arduino_ser = sr.Serial(
+                self.ARDUINO_PORT,
+                baudrate=self.BAUDRATE,
+                write_timeout=0,
+                timeout=0.01,
+            )
+            self.serial_connected = True
+        except Exception as e:
+            self.log_header("MOTOR ENDPOINT: " + str(e))
+            self.serial_connected = False
 
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""
 
         if not self.serial_connected:
             self.log_header("RETRYING SERIAL CONNECTION")
-
-            # FIXME Make a method to do this
-            try:
-                self.arduino_ser = sr.Serial(
-                    self.ARDUINO_PORT,
-                    baudrate=self.BAUDRATE,
-                    write_timeout=0,
-                    timeout=0.01,
-                )
-                self.serial_connected = True
-            except Exception as e:
-                self.log_header("MOTOR ENDPOINT: " + str(e))
-                self.serial_connected = False
-
-                # Wait for the timer to start over in the event of an error
+            self.connect_arduino()
+            # Wait for the timer to start over in the event of an error
+            if not self.serial_connected:
                 return
+
         # Check if we have received a target yet
         if self.vel_planned is not None and self.angle_planned is not None:
+
+            # Switching between our autonomous implimentation and our "teleop" implimentation here.
             if self.manual_control:
                 # Use a different endpoint for driving if ignoring current velocity
                 self.manual_endpoint()
             else:
+                # Use the autonomous implimentation
                 self.calculate_endpoint()
+
         self.prev_time = time.time()
 
         # The heartbeat is a message sent from the arduino which provides the steering target, throttle target,
         # and brake target as comma separated numbers
         try:
-            self.log_header("getting in the heartbeat try")
             self.heartbeat = self.arduino_ser.read_until()
         except Exception as e:
             self.log_header("THE ARDUINO HAS BEEN DISCONNECTED")
-            self.serial_connected = False
 
-            # FIXME Add a method that attempts to reconnect to the arduino and then return
-            return
+            # Same thing as above. if the ardiuno had some problems... ie: it disconnected attempt to retry the connection.
+            # Return to end the current instance of the time callback we are in if it fails to connect.
+            self.connect_arduino()
+            if not self.serial_connected:
+                return
 
         if self.heartbeat != "":
             self.heart_pub.publish(self.heartbeat)
@@ -267,7 +278,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.send_packet(target_speed, int(self.brake), target_angle)
 
     def calculate_endpoint(self):
-        """The endpoint for processing and sending instructions to the arduino controller."""
+        """The endpoint for processing and sending instructions to the arduino controller.
+        As opposed to manual endpoint this is used for autonomous driving"""
         if self.new_vel:
 
             self.vel_cart_units = self.vel_planned
@@ -303,6 +315,7 @@ class MotorEndpoint(rclpy.node.Node):
             self.angle_planned = self.STEERING_TOLERANCE * -1
         if self.angle_planned > 40:
             self.angle_planned = self.STEERING_TOLERANCE
+
         target_angle = 100 - int(
             ((self.angle_planned + self.STEERING_TOLERANCE) / 90) * 100
         )
@@ -347,7 +360,6 @@ class MotorEndpoint(rclpy.node.Node):
                 if brake_rate >= 255:
                     self.full_stop_count += 1
 
-            # This was originally in the if else statemnt... (At the bottom of both)
             self.brake = float(min(255, math.ceil(brake_rate)))
             if (
                 self.brake >= 255 and self.full_stop_count > 10
@@ -357,15 +369,15 @@ class MotorEndpoint(rclpy.node.Node):
                 self.brake_time_used = 0
                 self.full_stop_count = 0
 
-        self.send_packet(target_speed, int(self.brake), target_angle)
+        self.send_packet(target_speed / 2.2, int(self.brake), target_angle)
 
     def send_packet(self, throttle, brake, steer_angle):
         """This method is used to send instructions to the arduino that was connected in init."""
 
         # This is a buffer used in pack_into essentially making 5 empty bytes
         data = bytearray(b"\x00" * 5)
-        self.log_header(f"Steer angle: {steer_angle}")
-        # We are assuming 42 21 is the magic number for the arduino
+
+        # 42 21 is the magic number for the arduino
         bitstruct.pack_into(
             "u8u8u8u8u8",
             data,

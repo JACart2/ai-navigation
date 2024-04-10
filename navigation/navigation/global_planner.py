@@ -18,7 +18,14 @@ import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 
 import rclpy
-from geometry_msgs.msg import Pose, Point, PoseStamped, PointStamped, TwistStamped
+from geometry_msgs.msg import (
+    Pose,
+    Point,
+    PoseStamped,
+    PointStamped,
+    TwistStamped,
+    PoseWithCovarianceStamped,
+)
 from visualization_msgs.msg import Marker
 from std_msgs.msg import String, Header, Float32
 from navigation_interface.msg import (
@@ -60,22 +67,21 @@ class GlobalPlanner(rclpy.node.Node):
         self.global_graph = nx.DiGraph()
         self.logic_graph = None
 
-        # File name needs to be a launch paramter
-
         # FIXME we need to figure out where to put these graphs files
         self.declare_parameter("graph_file", "")
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
         self.load_file("./src/ai-navigation/navigation/navigation/drive_build.gml")
 
-        # ROS publisher information
-        # Listen for cart position changes
-        self.pose_sub = self.create_subscription(
-            PoseStamped, "/limited_pose", self.pose_callback, 10
-        )
+        # ROS2 SUBSCRIBERS
+        # ------------------------------------------
 
-        # Listen for standard destination requests
-        # self.dest_req_sub = rospy.Subscriber('/destination_request', String, self.request_callback, queue_size=10)
+        # Originally this method was subscribing to a PoseStamped... The library we are
+        # working with now though is giving us a PoseWithCovarianceStamped. This is the pose we
+        # are getting back from localization.
+        self.pose_sub = self.create_subscription(
+            PoseWithCovarianceStamped, "/pcl_pose", self.pose_callback, 10
+        )
 
         # Listen for vehicle state changes
         self.vehicle_state_sub = self.create_subscription(
@@ -92,25 +98,30 @@ class GlobalPlanner(rclpy.node.Node):
             Float32, "/estimated_vel_mps", self.vel_callback, 10
         )
 
-        # This is to orient the gps.
+        # This is to orient the gps. (GPS IS NON OPERATION AS OF 4/10/2024)
         # self.lat_long_req = self.create_subscription(
         #     LatLongPoint, "/gps_request", self.gps_request_cb, 10
         # )
 
-        self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
+        # Listen for standard destination requests
+        # self.dest_req_sub = rospy.Subscriber('/destination_request', String, self.request_callback, queue_size=10)
+
+        # ROS 2 PUBLISHERS
+        # ------------------------------------------
 
         # Publish the path for local planner to begin navigating
         self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
 
+        # THESE CALLBACKS ARE NOT USED BECAUSE GPS IS NON OPERATION
+        # ----------------------------------------------------------
+
         # Publishes the path but in GPS coordinates
-        self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
-
+        # self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
+        # self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
         # Published the current cart position but in GPS coordinates TODO move to local planner
-        self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
-
+        # self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
         # How often to update the gps position of the cart
         # self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
-        self.get_logger().info("Begin")
 
     # Load the graph file as the global graph
     def load_file(self, file_name):
@@ -127,13 +138,14 @@ class GlobalPlanner(rclpy.node.Node):
             for node in self.global_graph:
                 self.global_graph.nodes[node]["active"] = True
         except Exception as e:
-            print(e)
             self.log_header(
-                f"Unable to launch graph file pointed to in the constants file in {file_name}"
+                f"Unable to launch graph file pointed to in the constants file in {file_name} because {e}"
             )
 
-    def calc_nav(self, point):
-        """Main navigation calculation function, main job is to calculate the path.
+    def calc_nav(self, destination):
+        """Main navigation calculation function, main job is to calculate the path. As of right now this only
+        gets called in point_callback which deals with
+        local cordinates. When GPS is operational there are GPS methods that can call calc_nav
 
         Args:
             point (ROS Point Message): Point representing where the cart should navigate to
@@ -149,16 +161,17 @@ class GlobalPlanner(rclpy.node.Node):
             self.current_pos.pose.position.x = 0.0
             self.current_pos.pose.position.y = 0.0
 
-        # Our current position in local coordinates and closest node to our position
         current_cart_pos = self.current_pos.pose.position
 
-        # I want to fix this method call
+        # When the cart_trans param is set to true it attemps to find a node closest to the us based on the path we are on.
+        # This is useful for when we are already navigating...
         self.current_cart_node = self.get_closest_node(
             current_cart_pos.x, current_cart_pos.y, cart_trans=True
         )
 
         # Get the node closest to where we want to go
-        destination_point = self.get_closest_node(point.x, point.y)
+        # It would be worth investigating whether adding "cart_trans=True" here would be useful.
+        destination_point = self.get_closest_node(destination.x, destination.y)
         self.destination_node = destination_point
 
         self.current_cart_node = self.determine_lane(self.current_cart_node)
@@ -215,11 +228,10 @@ class GlobalPlanner(rclpy.node.Node):
             # Allows for class changes again
             self.calculating_nav = False
 
-            # Convert the path to GPS to give to Networking
-            if self.gps_calibrated:
-                self.output_path_gps(points_arr)
+            # Convert the path to GPS to give to Networking.
+            # if self.gps_calibrated:
+            #     self.output_path_gps(points_arr)
 
-            # Publish the local points so Mind.py can begin the navigation
             self.path_pub.publish(points_arr)
             self.get_logger().info(
                 f"Publishing Path: {str(self.current_cart_node)} to {str(destination_point)}"
@@ -464,22 +476,22 @@ class GlobalPlanner(rclpy.node.Node):
         """On new cart positon, update the class on the new position and orientation information
 
         Args:
-            msg (ROS PoseStamped Message): The PoseStamped of the cart's position and orientation coming from /limited_pose topic
+            msg (ROS PoseStamped Message): The PoseWithCovarianceStamped of the cart's position and orientation coming from /pcl_pose topic
         """
-        self.current_pos = msg
+        self.current_pos = msg.pose
 
         # If the cart is mid-navigation calculation, theres no need to update the cart node until it is done
         if not self.calculating_nav:
             self.current_cart_node = self.get_closest_node(
-                msg.pose.position.x, msg.pose.position.y, cart_trans=True
+                msg.pose.pose.position.x, msg.pose.pose.position.y, cart_trans=True
             )
 
         # Obtain euler angles from pose orientation of cart
         cart_quat = (
-            msg.pose.orientation.x,
-            msg.pose.orientation.y,
-            msg.pose.orientation.z,
-            msg.pose.orientation.w,
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w,
         )
         self.orientation = tf_transformations.euler_from_quaternion(cart_quat)
 

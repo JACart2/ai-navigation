@@ -40,7 +40,7 @@ class SimulatedMotor(rclpy.node.Node):
 
         self.x = 82.23206329345703
         self.y = 132.16149291992187
-        self.phi = 0.0
+        self.phi = 0.0  
 
         self.prev_time = time.time()
         self.seen_vel = False

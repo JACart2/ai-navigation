@@ -15,6 +15,10 @@ setup(
             os.path.join("share", package_name, "launch"),
             glob(os.path.join("launch", "*launch.[pxy][yma]*")),
         ),
+        (
+            os.path.join("share", package_name, "rviz"),
+            glob(os.path.join("test", "*.rviz")),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -28,6 +32,7 @@ setup(
             "global_planner = navigation.global_planner:main",
             "local_planner = navigation.local_planner:main",
             "global_tester = navigation.test_global:main",
+            "motor_simulator = navigation.simulated_motor_endpoint:main",
         ],
     },
 )

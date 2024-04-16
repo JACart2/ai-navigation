@@ -40,6 +40,25 @@ def generate_launch_description():
         shell=True,
     )
 
+    # Run the speed_node
+    speed_node = Node(
+        package="navigation",
+        executable="speed_node",
+        name="speed_node",
+        output="screen",
+    )
+
+    # Include the zed_camera launch file directly
+    # zed_camera_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         [
+    #             FindPackageShare("zed_wrapper"),
+    #             "/launch/zed_camera.launch.py",
+    #         ]
+    #     ),
+    #     launch_arguments={"camera_model": "zed2"}.items(),
+    # )
+
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
@@ -47,5 +66,7 @@ def generate_launch_description():
             velodyne_transform_launch,
             lidar_localization_launch,
             rviz2_command,
+            speed_node,
+            # zed_camera_launch,
         ]
     )

@@ -49,14 +49,14 @@ class SimulatedMotor(rclpy.node.Node):
         self.planned_motion_subscriber = self.create_subscription(
             VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
-        self.planned_motion_subscriber = self.create_subscription(
+        self.initial_pose = self.create_subscription(
             PoseWithCovarianceStamped, "/initialpose", self.initial_pose_callback, 10
         )
 
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
         self.local_pose_pub = self.create_publisher(
-            PoseStamped, "/ndt_pose", 10
+            PoseWithCovarianceStamped, "/pcl_pose", 10
         )  # pose estimate for the sake of local planner
 
         self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)

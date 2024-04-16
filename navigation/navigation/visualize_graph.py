@@ -36,6 +36,8 @@ class GraphVisual(rclpy.node.Node):
 
         self.visual_pub = self.create_publisher(MarkerArray, "/graph_visual", 10)
 
+        self.visualize_edges = self.create_publisher(Marker, "/visual_edges", 10)
+
         self.timer = self.create_timer(3, self.timer_cb)
 
     def timer_cb(self):
@@ -64,6 +66,39 @@ class GraphVisual(rclpy.node.Node):
         arr.markers[0].color.g = 50.0
         arr.markers[-1].color.r = 50.0
         self.visual_pub.publish(arr)
+
+        
+
+        edges = self.global_graph.edges()
+        for edge in edges:
+
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.type = Marker.ARROW
+            marker.pose.position.x = 0.0  # Start point x
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            
+            marker.scale.x = 1.0  # Arrow length
+            marker.scale.y = 0.1  # Arrow width
+            marker.scale.z = 0.1  # Arrow height
+            marker.color.r = 1.0  # Red
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            marker.color.a = 1.0  # Alpha
+
+            marker.points = [Point(), Point()]
+            marker.points[0].x = 0.0  # Start point x
+            marker.points[0].y = 0.0  # Start point y
+
+            marker.points[1].x = 1.0  # End point x
+            marker.points[1].y = 1.0  # End point y
+
+            print(self.global_graph.edges[edge]["weight"])
+            print(type[edge[0]])
+        
 
     def load_file(self, file_name):
         """Loads a file and sets all nodes to active(allowed to take part in pathfinding).

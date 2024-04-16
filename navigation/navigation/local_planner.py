@@ -19,13 +19,20 @@ from navigation_interface.msg import (
     VehicleState,
     Stop,
 )
+from visualization_msgs.msg import Marker, MarkerArray
 
 # We need to figure out how they are using VelAngle so we can use VelAngle/Vel
 # Also the respecitive methods need to be ported over.
 from motor_control_interface.msg import VelAngle
 
 from std_msgs.msg import Float32, String, UInt64, Header
-from geometry_msgs.msg import PoseStamped, Point, TwistStamped, Pose, PoseWithCovarianceStamped
+from geometry_msgs.msg import (
+    PoseStamped,
+    Point,
+    TwistStamped,
+    Pose,
+    PoseWithCovarianceStamped,
+)
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 
@@ -116,6 +123,9 @@ class LocalPlanner(rclpy.node.Node):
 
         # Publish the ETA
         self.eta_pub = self.create_publisher(UInt64, "/eta", 10)
+
+        # Publish the projected turning angle and path
+        self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
 
         ## Timers
         # Calculate ETA
@@ -367,6 +377,31 @@ class LocalPlanner(rclpy.node.Node):
                     plan_msg.vel = -x[1]
 
         self.motion_pub.publish(plan_msg)
+
+        # Display lines for projected path
+        id = 0
+        temp = Marker()
+        new_point = Pose()
+        new_point.position.x = pose.position.x
+        new_point.position.y = pose.position.y
+        temp.pose = new_point
+        temp.header.frame_id = "map"
+        temp.id = id
+        id += 1
+        temp.scale.x = 1.0
+        temp.scale.y = 1.0
+        temp.scale.z = 1.0
+        temp.color.r = 0.0
+        temp.color.g = 0.0
+        temp.color.b = 1.0
+        temp.color.a = 1.0
+        temp.type = 5
+        temp.action = 0
+        p = Point()
+        p.x = pose.position.x + 10
+        p.y = pose.position.y
+        temp.points.append(p)
+        self.visual_pub.publish(temp)
 
         state.x = pose.position.x
         state.y = pose.position.y

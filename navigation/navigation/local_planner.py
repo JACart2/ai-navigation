@@ -401,7 +401,7 @@ class LocalPlanner(rclpy.node.Node):
         p.x = pose.position.x + 10
         p.y = pose.position.y
         temp.points.append(p)
-        self.visual_pub.publish(temp)
+        self.projection_pub.publish(temp)
 
         state.x = pose.position.x
         state.y = pose.position.y

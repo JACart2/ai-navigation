@@ -40,7 +40,7 @@ class SimulatedMotor(rclpy.node.Node):
 
         self.x = 82.23206329345703
         self.y = 132.16149291992187
-        self.phi = 0.0  
+        self.phi = 0.0
 
         self.prev_time = time.time()
         self.seen_vel = False
@@ -102,17 +102,21 @@ class SimulatedMotor(rclpy.node.Node):
 
         self.calculate_endpoint()
 
-        pose = PoseStamped()
+        pose = PoseWithCovarianceStamped()
         pose.header.frame_id = "map"
-        pose.pose.position.x = self.x
-        pose.pose.position.y = self.y
+        pose.pose.pose.position.x = self.x
+        pose.pose.pose.position.y = self.y
         x, y, z, w = quaternion_from_euler(0.0, 0.0, self.phi)
-        pose.pose.orientation.x = x
-        pose.pose.orientation.y = y
-        pose.pose.orientation.z = z
-        pose.pose.orientation.w = w
+        pose.pose.pose.orientation.x = x
+        pose.pose.pose.orientation.y = y
+        pose.pose.pose.orientation.z = z
+        pose.pose.pose.orientation.w = w
 
-        self.pose_pub.publish(pose)
+        rpose = PoseStamped()
+        rpose.header = pose.header
+        rpose.pose = pose.pose.pose
+
+        self.pose_pub.publish(rpose)
         self.local_pose_pub.publish(pose)
 
         vel = Float32()

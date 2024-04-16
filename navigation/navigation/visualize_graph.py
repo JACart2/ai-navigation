@@ -18,6 +18,7 @@ import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 
 import rclpy
+from std_msgs.msg import Int8, Bool, Header
 from geometry_msgs.msg import Pose, Point, PoseStamped, PointStamped, TwistStamped
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -36,13 +37,12 @@ class GraphVisual(rclpy.node.Node):
 
         self.visual_pub = self.create_publisher(MarkerArray, "/graph_visual", 10)
 
-        self.visualize_edges = self.create_publisher(Marker, "/visual_edges", 10)
-
         self.timer = self.create_timer(3, self.timer_cb)
+        self.edge_id = 0
 
     def timer_cb(self):
         self.get_logger().info("Looping over path")
-        arr = MarkerArray()
+        marker_array = MarkerArray()
         id = 0
         for node in self.global_graph:
             temp = Marker()
@@ -62,42 +62,51 @@ class GraphVisual(rclpy.node.Node):
             temp.color.a = 1.0
             temp.type = 2
             temp.action = 0
-            arr.markers.append(temp)
-        arr.markers[0].color.g = 50.0
-        arr.markers[-1].color.r = 50.0
-        self.visual_pub.publish(arr)
-
+            marker_array.markers.append(temp)
+        marker_array.markers[0].color.g = 50.0
+        marker_array.markers[-1].color.r = 50.0
         
-
+        nodes = self.global_graph.nodes
         edges = self.global_graph.edges()
         for edge in edges:
-
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.type = Marker.ARROW
-            marker.pose.position.x = 0.0  # Start point x
-            marker.pose.orientation.x = 0.0
-            marker.pose.orientation.y = 0.0
-            marker.pose.orientation.z = 0.0
-            marker.pose.orientation.w = 1.0
+            first_node = nodes[edge[0]]
+            second_node = nodes[edge[1]]
             
-            marker.scale.x = 1.0  # Arrow length
-            marker.scale.y = 0.1  # Arrow width
-            marker.scale.z = 0.1  # Arrow height
-            marker.color.r = 1.0  # Red
+            points = []
+            
+            first_point = Point()
+            first_point.x = first_node['pos'][0]
+            first_point.y = first_node['pos'][1]
+            
+            second_point = Point()
+            second_point.x = second_node['pos'][0]
+            second_point.y = second_node['pos'][1]
+            
+            points.append(first_point)
+            points.append(second_point)
+            
+            marker = Marker()
+            marker.header = Header()
+            marker.header.frame_id = "map"
+
+            marker.ns = "Path_NS"
+            marker.id = self.edge_id
+            marker.type = Marker.ARROW
+            marker.action = 0
+            marker.color.r = 1.0
             marker.color.g = 0.0
             marker.color.b = 0.0
-            marker.color.a = 1.0  # Alpha
+            marker.color.a = 1.0
 
-            marker.points = [Point(), Point()]
-            marker.points[0].x = 0.0  # Start point x
-            marker.points[0].y = 0.0  # Start point y
+            marker.points = points
 
-            marker.points[1].x = 1.0  # End point x
-            marker.points[1].y = 1.0  # End point y
+            marker.scale.x = 0.3
+            marker.scale.y = 0.6
+            marker.scale.z = 0.0
 
-            print(self.global_graph.edges[edge]["weight"])
-            print(type[edge[0]])
+            marker_array.markers.append(marker)
+            self.edge_id+= 1
+        self.visual_pub.publish(marker_array)
         
 
     def load_file(self, file_name):

@@ -33,6 +33,8 @@ setup(
             "local_planner = navigation.local_planner:main",
             "global_tester = navigation.test_global:main",
             "motor_simulator = navigation.simulated_motor_endpoint:main",
+            "visualize_graph = navigation.visualize_graph:main",
+            "speed_node = navigation.speed_node:main"
         ],
     },
 )

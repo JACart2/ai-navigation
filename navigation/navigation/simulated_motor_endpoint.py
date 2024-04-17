@@ -6,21 +6,14 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
 import time
-import numpy as np
-import math
-
 from navigation import steering_position_calc
 
 # ROS based imports
-import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
-
 from motor_control_interface.msg import VelAngle
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from std_msgs.msg import Float32
-from navigation_interface.msg import LocalPointsArray
-from visualization_msgs.msg import MarkerArray, Marker
 
 
 class SimulatedMotor(rclpy.node.Node):
@@ -31,13 +24,13 @@ class SimulatedMotor(rclpy.node.Node):
 
         # Class constants
         self.NODE_RATE = 20
-
         self.STEER_RATE = 20.0
         self.VEL_RATE = 0.5
 
         self.vel = 0.0
         self.angle = 0.0
 
+        # Hard coded cart position
         self.x = 82.23206329345703
         self.y = 132.16149291992187
         self.phi = 0.0
@@ -45,7 +38,16 @@ class SimulatedMotor(rclpy.node.Node):
         self.prev_time = time.time()
         self.seen_vel = False
 
-        # Creation of some simple subscribers/publishers/timers
+        # ROS2 publishers
+
+        self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
+        self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
+        self.local_pose_pub = self.create_publisher(
+            PoseWithCovarianceStamped, "/pcl_pose", 10
+        ) 
+
+        # ROS2 subscribers
+
         self.planned_motion_subscriber = self.create_subscription(
             VelAngle, "/nav_cmd", self.vel_angle_planned_callback, 10
         )
@@ -53,15 +55,10 @@ class SimulatedMotor(rclpy.node.Node):
             PoseWithCovarianceStamped, "/initialpose", self.initial_pose_callback, 10
         )
 
-        self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
-        self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
-        self.local_pose_pub = self.create_publisher(
-            PoseWithCovarianceStamped, "/pcl_pose", 10
-        )  # pose estimate for the sake of local planner
-
         self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)
 
     def initial_pose_callback(self, pose_msg):
+        """Callback responsible for getting the initial pose"""
         self.x = pose_msg.pose.pose.position.x
         self.y = pose_msg.pose.pose.position.y
         self.phi = euler_from_quaternion(

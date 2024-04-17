@@ -138,7 +138,6 @@ class LocalPlanner(rclpy.node.Node):
         # plan_msg.vel = 5.0
         # plan_msg.angle = 5.0
 
-        # self.log_header("IM AT THE END OF INIT")
         # self.motion_pub.publish(plan_msg)
 
     def timer_cb(self):
@@ -281,10 +280,11 @@ class LocalPlanner(rclpy.node.Node):
         if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
             if self.last_index > self.target_ind and self.path_valid:
-                # self.get_logger().info("IN THE LOOP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                self.get_logger().info(
-                    f"Cur pos: {self.cur_pose.position},   Tar pos: {self.local_points[-1]}"
-                )
+                
+                # Uneeded unless testing (floods the terminal with messages when active)
+                # self.get_logger().info(
+                #     f"Cur pos: {self.cur_pose.position},   Tar pos: {self.local_points[-1]}"
+                # )
                 target_speed = self.tar_speed
                 ai = target_speed  # pure_pursuit.PIDControl(target_speed, state.v)
                 di, self.target_ind = pure_pursuit.pure_pursuit_control(

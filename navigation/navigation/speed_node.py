@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-This is the ROS 2 node that handles the global planning for the JACART.
+This node handles the calculation of speed for the golf cart.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
@@ -11,21 +11,11 @@ import numpy as np
 import math
 from navigation import simple_gps_util
 
-# ROS based import
-import tf_transformations
-import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-
-
-# Should change this
-
+# Should change this in main to some ROS based time system but for now it works fine.
 import time
 
 import rclpy
 from geometry_msgs.msg import (
-    Pose,
-    Point,
-    PoseStamped,
-    PointStamped,
     TwistStamped,
     PoseWithCovarianceStamped,
 )
@@ -53,13 +43,15 @@ class SpeedNode(rclpy.node.Node):
         self.speed_estimate = 0
 
     def timer_cb(self):
-        self.log_header("IM IN THE TIMER")
         if self.speed_estimate != 0:
             self.twist_pub.publish(self.twist_estimate)
-            self.log_header(self.twist_estimate.twist.linear.x)
+            
 
     def pose_cb(self, msg):
-
+        """
+        Simple callback for retrieving a code. This callback also does the math to find the 
+        speed estimate based on the distance between two poses.
+        """
         if self.prev_pose != None:
             # Change this to np later
             distance = math.sqrt(
@@ -79,7 +71,7 @@ class SpeedNode(rclpy.node.Node):
         self.prev_pose = msg.pose.pose
         self.prev_time = time.time()
 
-    def log_header(self, msg):
+    # def log_header(self, msg):
         """Helper method to print noticeable log statements."""
         "Currently Commented out due to it drowning out other logs in the launch file"
         # self.get_logger().info("=" * 50)

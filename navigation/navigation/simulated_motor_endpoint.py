@@ -133,9 +133,11 @@ class SimulatedMotor(rclpy.node.Node):
         self.x, self.y, self.phi = steering_position_calc.calc_new_pos(
             delta_time, self.x, self.y, self.vel, self.angle
         )
-        self.get_logger().info(
-            f"x:{self.x}, y:{self.y}, vel:{self.vel}, steer_angle:{self.angle}, phi:{self.phi}, delta_time:{delta_time}"
-        )
+
+        # Uneeded unless testing
+        # self.get_logger().info(
+        #     f"x:{self.x}, y:{self.y}, vel:{self.vel}, steer_angle:{self.angle}, phi:{self.phi}, delta_time:{delta_time}"
+        # )
 
 
 def main():

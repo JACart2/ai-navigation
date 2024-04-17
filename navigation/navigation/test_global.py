@@ -91,8 +91,7 @@ class GlobalTester(rclpy.node.Node):
         arr.markers[0].color.g = 50.0
         arr.markers[-1].color.r = 50.0
         self.rviz_path_pub.publish(arr)
-        self.get_logger().info("Publishing")
-        # self.get_logger().info(f"{str(msg)}")
+
 
 
 def main():

@@ -6,28 +6,25 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 
 # ROS based imports
-import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from navigation_interface.msg import LocalPointsArray, VehicleState
 from std_msgs.msg import Float32
 from geometry_msgs.msg import PoseStamped, PointStamped
 from visualization_msgs.msg import MarkerArray, Marker
-import tf_transformations as tf
-
 
 class GlobalTester(rclpy.node.Node):
-    """ROS2 node that handles local pathing and obstacle avoidance."""
 
     def __init__(self):
         super().__init__("global_tester")
 
+        # ROS2 publishers
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
         self.tar_pub = self.create_publisher(PointStamped, "clicked_point", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
         self.state_pub = self.create_publisher(VehicleState, "/vehicle_state", 10)
-
         self.rviz_path_pub = self.create_publisher(MarkerArray, "/visual_path", 10)
 
+        # ROS2 subscribers 
         self.path_sub = self.create_subscription(
             LocalPointsArray, "/global_path", self.path_cb, 10
         )
@@ -56,6 +53,9 @@ class GlobalTester(rclpy.node.Node):
         self.get_logger().info("Begin")
 
     def timer_cb(self):
+        """This timer is only responible for publishing the state variables of the cart. 
+        It destroys itself after this task is complete.
+        """
         self.destroy_timer(self.timer)
         self.pose_pub.publish(self.pose)
         self.tar_pub.publish(self.target)
@@ -63,7 +63,12 @@ class GlobalTester(rclpy.node.Node):
         self.state_pub.publish(self.state)
 
     def path_cb(self, msg):
-        # This array is used to delete the preexisting markerarrays before publishing
+        """Callback responible for publising the nodes in which the cart must traverse
+
+        Args:
+            file_name (string): The .gml file to load as the graph, cart_planning/launch/constants.launch
+            is where the file path can be found
+        """
         delarr = MarkerArray()
         delmark = Marker()
         delmark.action = 3

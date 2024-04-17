@@ -1,25 +1,15 @@
 #!/usr/bin/env python
 """
-This is the ROS 2 node that handles the global planning for the JACART.
+This ROS2 node is used to visualize edges and nodes from a prespecified graph file in RVIZ.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
-import time
-import serial as sr
-import numpy as np
-import math
 import networkx as nx
-from navigation import simple_gps_util
-
-# ROS based import
-import tf_transformations
-import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-
 
 import rclpy
-from std_msgs.msg import Int8, Bool, Header
-from geometry_msgs.msg import Pose, Point, PoseStamped, PointStamped, TwistStamped
+from std_msgs.msg import Header
+from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
 
 class GraphVisual(rclpy.node.Node):
@@ -30,7 +20,6 @@ class GraphVisual(rclpy.node.Node):
         self.declare_parameter("graph_file", "")
 
         self.global_graph = nx.DiGraph()
-        # self.logic_graph = None
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
         self.load_file("./src/ai-navigation/navigation/navigation/drive_build.gml")
@@ -41,7 +30,11 @@ class GraphVisual(rclpy.node.Node):
         self.edge_id = 0
 
     def timer_cb(self):
+        """Simple timer callback responsible for publishing the MarkerArray with node/edge information.
+        """
         self.get_logger().info("Looping over path")
+
+        # This first for loop adds every node to some Marker array
         marker_array = MarkerArray()
         id = 0
         for node in self.global_graph:
@@ -66,6 +59,7 @@ class GraphVisual(rclpy.node.Node):
         marker_array.markers[0].color.g = 50.0
         marker_array.markers[-1].color.r = 50.0
         
+        # This second for loop adds all the edges to the MarkerArray
         nodes = self.global_graph.nodes
         edges = self.global_graph.edges()
         for edge in edges:

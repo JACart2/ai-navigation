@@ -5,13 +5,10 @@ This is the ROS 2 node that handles the local planning for the JACART.
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
-import time
-import numpy as np
 import math
 from navigation import pure_pursuit, cubic_spline_planner
 
 # ROS based imports
-import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from nav_msgs.msg import Path
 from navigation_interface.msg import (
@@ -19,12 +16,8 @@ from navigation_interface.msg import (
     VehicleState,
     Stop,
 )
-from visualization_msgs.msg import Marker, MarkerArray
-
-# We need to figure out how they are using VelAngle so we can use VelAngle/Vel
-# Also the respecitive methods need to be ported over.
+from visualization_msgs.msg import Marker
 from motor_control_interface.msg import VelAngle
-
 from std_msgs.msg import Float32, String, UInt64, Header
 from geometry_msgs.msg import (
     PoseStamped,
@@ -35,6 +28,7 @@ from geometry_msgs.msg import (
 )
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
+import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 
 class LocalPlanner(rclpy.node.Node):
@@ -94,7 +88,7 @@ class LocalPlanner(rclpy.node.Node):
             Float32, "/speed", self.tar_speed_cb, 10
         )
 
-        ## Publisher
+        ## Publishers
         # Share the current status of the vehicle's state
         self.vehicle_state_pub = self.create_publisher(
             VehicleState, "/vehicle_state", 10
@@ -141,12 +135,17 @@ class LocalPlanner(rclpy.node.Node):
         # self.motion_pub.publish(plan_msg)
 
     def timer_cb(self):
+        """Time callback responsible creating a path. Basically used as a second update function
+        If path is already created the create_path method does updating of the carts state
+        """
         self.create_path()
 
     def twist_cb(self, msg):
+        """Getting current believed cart vel"""
         self.cur_vel = msg.twist.linear.x
 
     def pose_cb(self, msg):
+        """Getting current believed cart position"""
         self.cur_pose = msg.pose.pose
 
     def stop_cb(self, msg):
@@ -229,7 +228,6 @@ class LocalPlanner(rclpy.node.Node):
                     curve_point.y = self.cy[i]
                     path.poses.append(create_pose_stamped(curve_point))
 
-                # It would be nice to figure out why and what this is being published to
                 self.path_pub.publish(path)
 
                 # Set the current state of the cart to navigating
@@ -355,12 +353,6 @@ class LocalPlanner(rclpy.node.Node):
         cur_speed = self.cur_vel
 
         plan_msg = VelAngle()
-        # if self.debug:
-        #     self.delay_print -= 1
-        #     if self.delay_print <= 0:
-        #         self.delay_print = 50
-        #         self.log(f"Target Speed: {str(a)}")
-        #         self.log(f"Current Speed: {str(cur_speed)}")
         plan_msg.vel = a  # Speed we want from pure pursuit controller
         plan_msg.angle = (delta * 180) / math.pi
 
@@ -526,16 +518,6 @@ class LocalPlanner(rclpy.node.Node):
     def log_header(self, log):
         # self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
         self.log(log)
-
-
-## Helper class and methods
-# class State:
-#     def __init__(self, x=0.0, y=0.0, yaw=0.0, v=0.0):
-#         self.x = x
-#         self.y = y
-#         self.yaw = yaw
-#         self.v = v
-
 
 def create_pose_stamped(point):
     stamped = PoseStamped()

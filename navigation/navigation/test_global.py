@@ -6,6 +6,7 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 
 # ROS based imports
+import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from navigation_interface.msg import LocalPointsArray, VehicleState
 from std_msgs.msg import Float32

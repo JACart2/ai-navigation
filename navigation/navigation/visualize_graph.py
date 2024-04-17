@@ -11,6 +11,7 @@ import rclpy
 from std_msgs.msg import Header
 from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
+import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 class GraphVisual(rclpy.node.Node):
 

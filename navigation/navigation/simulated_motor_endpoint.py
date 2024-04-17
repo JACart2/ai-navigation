@@ -11,6 +11,7 @@ from navigation import steering_position_calc
 # ROS based imports
 import rclpy
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
+import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 from motor_control_interface.msg import VelAngle
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from std_msgs.msg import Float32

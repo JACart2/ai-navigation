@@ -14,6 +14,7 @@ import time
 # ROS based imports
 import rclpy
 from geometry_msgs.msg import TwistStamped, PoseWithCovarianceStamped
+import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 
 

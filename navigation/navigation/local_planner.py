@@ -280,7 +280,7 @@ class LocalPlanner(rclpy.node.Node):
         if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
             if self.last_index > self.target_ind and self.path_valid:
-                
+
                 # Uneeded unless testing (floods the terminal with messages when active)
                 # self.get_logger().info(
                 #     f"Cur pos: {self.cur_pose.position},   Tar pos: {self.local_points[-1]}"
@@ -378,31 +378,6 @@ class LocalPlanner(rclpy.node.Node):
 
         self.motion_pub.publish(plan_msg)
 
-        # Display lines for projected path
-        id = 0
-        temp = Marker()
-        new_point = Pose()
-        new_point.position.x = pose.position.x
-        new_point.position.y = pose.position.y
-        temp.pose = new_point
-        temp.header.frame_id = "map"
-        temp.id = id
-        id += 1
-        temp.scale.x = 1.0
-        temp.scale.y = 1.0
-        temp.scale.z = 1.0
-        temp.color.r = 0.0
-        temp.color.g = 0.0
-        temp.color.b = 1.0
-        temp.color.a = 1.0
-        temp.type = 5
-        temp.action = 0
-        p = Point()
-        p.x = pose.position.x + 10
-        p.y = pose.position.y
-        temp.points.append(p)
-        self.projection_pub.publish(temp)
-
         state.x = pose.position.x
         state.y = pose.position.y
 
@@ -418,7 +393,76 @@ class LocalPlanner(rclpy.node.Node):
 
         state.v = self.cur_vel
 
+        # Display lines for projected path
+        left, right = self.create_projected_lines(
+            state.yaw, plan_msg.angle, pose.position
+        )
+        self.projection_pub.publish(left)
+        self.projection_pub.publish(right)
+
         return state
+
+    def create_projected_lines(self, angle, steer, pos):
+        left = Marker()
+        new_point = Pose()
+        left_pos = pos
+        left_pos.x += math.cos(angle + math.pi / 2) * 0.1
+        left_pos.y += math.sin(angle + math.pi / 2) * 0.1
+        new_point.position = pos
+        left.pose = new_point
+        left.header.frame_id = "map"
+        left.id = 0
+        left.scale.x = 0.2
+        left.scale.y = 0.2
+        left.scale.z = 0.2
+        left.color.r = 0.0
+        left.color.g = 2.0
+        left.color.b = 0.0
+        left.color.a = 1.0
+        left.type = 4
+        left.action = 0
+
+        right = Marker()
+        new_point = Pose()
+        right_pos = pos
+        right_pos.x += math.cos(angle - math.pi / 2) * 0.1
+        right_pos.y += math.sin(angle - math.pi / 2) * 0.1
+        new_point.position = pos
+        right.pose = new_point
+        right.header.frame_id = "map"
+        right.id = 1
+        right.scale.x = 0.1
+        right.scale.y = 0.1
+        right.scale.z = 0.1
+        right.color.r = 0.0
+        right.color.g = 2.0
+        right.color.b = 0.0
+        right.color.a = 1.0
+        right.type = 4
+        right.action = 0
+
+        (left.points, right.points) = self.project_points(angle, math.radians(steer))
+        return (left, right)
+
+    def project_points(self, angle, steer_r):
+        left_arr = []
+        right_arr = []
+        dist = 0.5
+        for i in range(30):
+            theta = angle + steer_r * i * 0.3 / 4
+            x = math.cos(theta) * 0.3 * i
+            y = math.sin(theta) * 0.3 * i
+
+            left_p = Point()
+            left_p.x = x + math.cos(theta + math.pi / 2) * dist
+            left_p.y = y + math.sin(theta + math.pi / 2) * dist
+            left_arr.append(left_p)
+            right_p = Point()
+            right_p.x = x + math.cos(theta - math.pi / 2) * dist
+            right_p.y = y + math.sin(theta - math.pi / 2) * dist
+            right_arr.append(right_p)
+
+        return (left_arr, right_arr)
 
     def calc_eta(self):
         """Calculates the Estimated Time of Arrival to the destination"""

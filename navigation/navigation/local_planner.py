@@ -405,16 +405,13 @@ class LocalPlanner(rclpy.node.Node):
     def create_projected_lines(self, angle, steer, pos):
         left = Marker()
         new_point = Pose()
-        left_pos = pos
-        left_pos.x += math.cos(angle + math.pi / 2) * 0.1
-        left_pos.y += math.sin(angle + math.pi / 2) * 0.1
         new_point.position = pos
         left.pose = new_point
         left.header.frame_id = "map"
         left.id = 0
-        left.scale.x = 0.2
-        left.scale.y = 0.2
-        left.scale.z = 0.2
+        left.scale.x = 0.1
+        left.scale.y = 0.1
+        left.scale.z = 0.1
         left.color.r = 0.0
         left.color.g = 2.0
         left.color.b = 0.0
@@ -424,9 +421,6 @@ class LocalPlanner(rclpy.node.Node):
 
         right = Marker()
         new_point = Pose()
-        right_pos = pos
-        right_pos.x += math.cos(angle - math.pi / 2) * 0.1
-        right_pos.y += math.sin(angle - math.pi / 2) * 0.1
         new_point.position = pos
         right.pose = new_point
         right.header.frame_id = "map"

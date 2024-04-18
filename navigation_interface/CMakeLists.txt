@@ -25,6 +25,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VehicleState.msg"
   "msg/Stop.msg"
   "msg/WaypointsArray.msg"
+  "msg/Obstacle.msg"
+  "msg/ObstacleArray.msg"
 
   DEPENDENCIES geometry_msgs 
   DEPENDENCIES std_msgs

@@ -24,6 +24,12 @@ def generate_launch_description():
                 executable="local_planner",
                 output="screen",
             ),
+            # Run the speed_node
+            Node(
+                package="navigation",
+                executable="speed_node",
+                output="screen",
+            ),
         ]
     )
 

@@ -1,25 +1,18 @@
 #!/usr/bin/env python
 """
-This is the ROS 2 node that handles the global planning for the JACART.
+This ROS2 node is used to visualize edges and nodes from a prespecified graph file in RVIZ.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
-import time
-import serial as sr
-import numpy as np
-import math
 import networkx as nx
-from navigation import simple_gps_util
-
-# ROS based import
-import tf_transformations
-import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-
 
 import rclpy
-from geometry_msgs.msg import Pose, Point, PoseStamped, PointStamped, TwistStamped
+from std_msgs.msg import Header
+from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
+import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
+
 
 class GraphVisual(rclpy.node.Node):
 
@@ -29,7 +22,6 @@ class GraphVisual(rclpy.node.Node):
         self.declare_parameter("graph_file", "")
 
         self.global_graph = nx.DiGraph()
-        # self.logic_graph = None
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
         self.load_file("./src/ai-navigation/navigation/navigation/drive_build.gml")
@@ -37,10 +29,14 @@ class GraphVisual(rclpy.node.Node):
         self.visual_pub = self.create_publisher(MarkerArray, "/graph_visual", 10)
 
         self.timer = self.create_timer(3, self.timer_cb)
+        self.edge_id = 0
 
     def timer_cb(self):
+        """Simple timer callback responsible for publishing the MarkerArray with node/edge information."""
         self.get_logger().info("Looping over path")
-        arr = MarkerArray()
+
+        # This first for loop adds every node to some Marker array
+        marker_array = MarkerArray()
         id = 0
         for node in self.global_graph:
             temp = Marker()
@@ -60,10 +56,52 @@ class GraphVisual(rclpy.node.Node):
             temp.color.a = 1.0
             temp.type = 2
             temp.action = 0
-            arr.markers.append(temp)
-        arr.markers[0].color.g = 50.0
-        arr.markers[-1].color.r = 50.0
-        self.visual_pub.publish(arr)
+            marker_array.markers.append(temp)
+        marker_array.markers[0].color.g = 50.0
+        marker_array.markers[-1].color.r = 50.0
+
+        # This second for loop adds all the edges to the MarkerArray
+        nodes = self.global_graph.nodes
+        edges = self.global_graph.edges()
+        for edge in edges:
+            first_node = nodes[edge[0]]
+            second_node = nodes[edge[1]]
+
+            points = []
+
+            first_point = Point()
+            first_point.x = first_node["pos"][0]
+            first_point.y = first_node["pos"][1]
+
+            second_point = Point()
+            second_point.x = second_node["pos"][0]
+            second_point.y = second_node["pos"][1]
+
+            points.append(first_point)
+            points.append(second_point)
+
+            marker = Marker()
+            marker.header = Header()
+            marker.header.frame_id = "map"
+
+            marker.ns = "Path_NS"
+            marker.id = self.edge_id
+            marker.type = Marker.ARROW
+            marker.action = 0
+            marker.color.r = 1.0
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            marker.color.a = 1.0
+
+            marker.points = points
+
+            marker.scale.x = 0.3
+            marker.scale.y = 0.6
+            marker.scale.z = 0.0
+
+            marker_array.markers.append(marker)
+            self.edge_id += 1
+        self.visual_pub.publish(marker_array)
 
     def load_file(self, file_name):
         """Loads a file and sets all nodes to active(allowed to take part in pathfinding).
@@ -83,7 +121,6 @@ class GraphVisual(rclpy.node.Node):
             self.log_header(
                 f"Unable to launch graph file pointed to in the constants file in {file_name}"
             )
-
 
     def log_header(self, msg):
         """Helper method to print noticeable log statements."""

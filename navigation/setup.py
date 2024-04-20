@@ -34,7 +34,9 @@ setup(
             "global_tester = navigation.test_global:main",
             "motor_simulator = navigation.simulated_motor_endpoint:main",
             "visualize_graph = navigation.visualize_graph:main",
-            "speed_node = navigation.speed_node:main"
+            "speed_node = navigation.speed_node:main",
+            "obstacle_converter = navigation.zed_object_to_obstacle:main",
+            "collision_detector = navigation.collision_detector:main",
         ],
     },
 )

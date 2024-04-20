@@ -17,13 +17,13 @@ from zed_interfaces.msg import ObjectsStamped
 from visualization_msgs.msg import Marker
 
 
-class ZedObstacleConverter(object):
+class ZedObstacleConverter(rclpy.node.Node):
     def __init__(self):
 
+        super().__init__("obstacle_converter")
         # This is something I need to figure out soon....
         # ----- Parameters -----
-        # Name of the node
-        self.name = rospy.get_param("name", "front_cam_obj_to_obstacle")
+
         # Name of the topic that subscribes to the ZED objects
         self.objects_in = rospy.get_param(
             "objects_in", "/front_cam/front/obj_det/objects"
@@ -36,22 +36,14 @@ class ZedObstacleConverter(object):
             "obstacle_markers_out", "/front_cam_obj_obstacle_display"
         )
 
-        rospy.init_node(self.name)
-
         # ----- Node State -----
-        self.object_sub = rospy.Subscriber(
-            self.objects_in, ObjectsStamped, callback=self.receiveObjects, queue_size=10
+        # FIXME this subscriber is kind of broken... I need to figure out what the correlation
+        # between OG implimentation and my implimentation is here.
+        self.object_sub = self.create_subscription(
+            ObjectsStamped, "/front_cam/front/obj_det/objects", self.receiveObjects, 10
         )
-        self.obstacle_pub = rospy.Publisher(
-            self.obstacles_out, ObstacleArray, queue_size=10
-        )
-        self.display_pub = rospy.Publisher(
-            self.obstacle_markers_out, Marker, queue_size=10
-        )
-
-        r = rospy.Rate(10)
-        while not rospy.is_shutdown():
-            r.sleep()
+        self.obstacle_pub = self.create_publisher(ObstacleArray, "/obs_array", 10)
+        self.display_pub = self.create_publisher(Marker, "/obs_visualization", 10)
 
     def receiveObjects(self, msg):
         """
@@ -100,7 +92,6 @@ class ZedObstacleConverter(object):
             marker.color.g = 1.0
             marker.color.b = 0.0
             marker.color.a = 1.0
-            marker.lifetime = rospy.Duration.from_sec(0.1)
 
             marker.pose.position.x = object_list.obstacles[i].pos.point.x
             marker.pose.position.y = object_list.obstacles[i].pos.point.y
@@ -114,8 +105,17 @@ class ZedObstacleConverter(object):
             self.display_pub.publish(marker)
 
 
+def main():
+    """The main method that actually handles spinning up the node."""
+
+    rclpy.init()
+    node = ZedObstacleConverter()
+
+    rclpy.spin(node)
+
+    node.destroy_node()
+    rclpy.shutdown()
+
+
 if __name__ == "__main__":
-    try:
-        ZedObstacleConverter()
-    except rospy.ROSInterruptException:
-        pass
+    main()

@@ -36,6 +36,7 @@ setup(
             "visualize_graph = navigation.visualize_graph:main",
             "speed_node = navigation.speed_node:main",
             "obstacle_converter = navigation.zed_object_to_obstacle:main",
+            "collision_detector = navigation.collision_detector:main",
         ],
     },
 )

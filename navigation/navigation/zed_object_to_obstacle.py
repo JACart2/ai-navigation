@@ -24,17 +24,17 @@ class ZedObstacleConverter(rclpy.node.Node):
         # This is something I need to figure out soon....
         # ----- Parameters -----
 
-        # Name of the topic that subscribes to the ZED objects
-        self.objects_in = rospy.get_param(
-            "objects_in", "/front_cam/front/obj_det/objects"
-        )
-        # Name of the topic that publishes the obstacles
-        self.obstacles_out = rospy.get_param(
-            "obstacles_out", "/front_cam_obj_obstacles"
-        )
-        self.obstacle_markers_out = rospy.get_param(
-            "obstacle_markers_out", "/front_cam_obj_obstacle_display"
-        )
+        # # Name of the topic that subscribes to the ZED objects
+        # self.objects_in = rospy.get_param(
+        #     "objects_in", "/front_cam/front/obj_det/objects"
+        # )
+        # # Name of the topic that publishes the obstacles
+        # self.obstacles_out = rospy.get_param(
+        #     "obstacles_out", "/front_cam_obj_obstacles"
+        # )
+        # self.obstacle_markers_out = rospy.get_param(
+        #     "obstacle_markers_out", "/front_cam_obj_obstacle_display"
+        # )
 
         # ----- Node State -----
         # FIXME this subscriber is kind of broken... I need to figure out what the correlation
@@ -42,7 +42,7 @@ class ZedObstacleConverter(rclpy.node.Node):
         self.object_sub = self.create_subscription(
             ObjectsStamped, "/front_cam/front/obj_det/objects", self.receiveObjects, 10
         )
-        self.obstacle_pub = self.create_publisher(ObstacleArray, "/obs_array", 10)
+        self.obstacle_pub = self.create_publisher(ObstacleArray, "/obstacles", 10)
         self.display_pub = self.create_publisher(Marker, "/obs_visualization", 10)
 
     def receiveObjects(self, msg):

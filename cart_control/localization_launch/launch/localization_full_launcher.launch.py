@@ -101,5 +101,6 @@ def generate_launch_description():
             zed_camera_launch,
             # static_transform_publisher,
             navigation_launch,
+            # motor_launch,
         ]
     )

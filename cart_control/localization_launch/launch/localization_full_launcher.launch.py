@@ -6,6 +6,7 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
+
     # Launch the velodyne_driver node for VLP16
     velodyne_driver_node = Node(
         package="velodyne_driver",
@@ -40,7 +41,7 @@ def generate_launch_description():
         shell=True,
     )
 
-    # Run the speed_node
+    # Run the speed_node for speed data to be provided for navigation
     speed_node = Node(
         package="navigation",
         executable="speed_node",
@@ -49,14 +50,33 @@ def generate_launch_description():
     )
 
     # Include the zed_camera launch file directly
-    # zed_camera_launch = IncludeLaunchDescription(
-    #     PythonLaunchDescriptionSource(
-    #         [
-    #             FindPackageShare("zed_wrapper"),
-    #             "/launch/zed_camera.launch.py",
-    #         ]
-    #     ),
-    #     launch_arguments={"camera_model": "zed2"}.items(),
+    zed_camera_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("zed_wrapper"),
+                "/launch/zed_camera.launch.py",
+            ]
+        ),
+        launch_arguments={"camera_model": "zed2"}.items(),
+    )
+
+    # static_transform_publisher = ExecuteProcess(
+    #     cmd=[
+    #         "ros2",
+    #         "run",
+    #         "tf2_ros",
+    #         "static_transform_publisher",
+    #         "0.6",
+    #         "0",
+    #         "1",
+    #         "0.0",
+    #         "0.0",
+    #         "0.0",
+    #         "0.0",  # x, y, z, qx, qy, qz, qw
+    #         "base_link",
+    #         "odom",  # parent_frame_id, child_frame_id
+    #     ],
+    #     output="screen",
     # )
 
     # Combine all the above components into a single launch description
@@ -67,6 +87,7 @@ def generate_launch_description():
             lidar_localization_launch,
             rviz2_command,
             speed_node,
-            # zed_camera_launch,
+            zed_camera_launch,
+            # static_transform_publisher,
         ]
     )

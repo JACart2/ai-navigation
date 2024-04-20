@@ -34,30 +34,42 @@ def generate_launch_description():
         )
     )
 
+    # Include the navigation launch file directly
+    navigation_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("navigation"),
+                "/launch/navigation.launch.py",
+            ]
+        )
+    )
+
+    # Include the navigation launch file directly
+    motor_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("motor_control"),
+                "/launch/motor.launch.py",
+            ]
+        )
+    )
+
+    # Include the zed_camera launch file directly
+    zed_camera_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("zed_wrapper"),
+                "/launch/zed_camera.launch.py",
+            ]
+        ),
+        launch_arguments={"camera_model": "zed2"}.items(),
+    )
+
     # Execute the RViz2 command with the specified configuration file
     rviz2_command = ExecuteProcess(
         cmd=["rviz2", "-d", "src/lidar_localization_ros2/rviz/localization.rviz"],
         shell=True,
     )
-
-    # Run the speed_node
-    speed_node = Node(
-        package="navigation",
-        executable="speed_node",
-        name="speed_node",
-        output="screen",
-    )
-
-    # Include the zed_camera launch file directly
-    # zed_camera_launch = IncludeLaunchDescription(
-    #     PythonLaunchDescriptionSource(
-    #         [
-    #             FindPackageShare("zed_wrapper"),
-    #             "/launch/zed_camera.launch.py",
-    #         ]
-    #     ),
-    #     launch_arguments={"camera_model": "zed2"}.items(),
-    # )
 
     # Combine all the above components into a single launch description
     return LaunchDescription(
@@ -66,7 +78,7 @@ def generate_launch_description():
             velodyne_transform_launch,
             lidar_localization_launch,
             rviz2_command,
-            speed_node,
-            # zed_camera_launch,
+            navigation_launch,
+            zed_camera_launch,
         ]
     )

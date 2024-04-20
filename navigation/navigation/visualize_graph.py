@@ -13,6 +13,7 @@ from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
+
 class GraphVisual(rclpy.node.Node):
 
     def __init__(self):
@@ -31,8 +32,7 @@ class GraphVisual(rclpy.node.Node):
         self.edge_id = 0
 
     def timer_cb(self):
-        """Simple timer callback responsible for publishing the MarkerArray with node/edge information.
-        """
+        """Simple timer callback responsible for publishing the MarkerArray with node/edge information."""
         self.get_logger().info("Looping over path")
 
         # This first for loop adds every node to some Marker array
@@ -59,27 +59,27 @@ class GraphVisual(rclpy.node.Node):
             marker_array.markers.append(temp)
         marker_array.markers[0].color.g = 50.0
         marker_array.markers[-1].color.r = 50.0
-        
+
         # This second for loop adds all the edges to the MarkerArray
         nodes = self.global_graph.nodes
         edges = self.global_graph.edges()
         for edge in edges:
             first_node = nodes[edge[0]]
             second_node = nodes[edge[1]]
-            
+
             points = []
-            
+
             first_point = Point()
-            first_point.x = first_node['pos'][0]
-            first_point.y = first_node['pos'][1]
-            
+            first_point.x = first_node["pos"][0]
+            first_point.y = first_node["pos"][1]
+
             second_point = Point()
-            second_point.x = second_node['pos'][0]
-            second_point.y = second_node['pos'][1]
-            
+            second_point.x = second_node["pos"][0]
+            second_point.y = second_node["pos"][1]
+
             points.append(first_point)
             points.append(second_point)
-            
+
             marker = Marker()
             marker.header = Header()
             marker.header.frame_id = "map"
@@ -100,9 +100,8 @@ class GraphVisual(rclpy.node.Node):
             marker.scale.z = 0.0
 
             marker_array.markers.append(marker)
-            self.edge_id+= 1
+            self.edge_id += 1
         self.visual_pub.publish(marker_array)
-        
 
     def load_file(self, file_name):
         """Loads a file and sets all nodes to active(allowed to take part in pathfinding).
@@ -122,7 +121,6 @@ class GraphVisual(rclpy.node.Node):
             self.log_header(
                 f"Unable to launch graph file pointed to in the constants file in {file_name}"
             )
-
 
     def log_header(self, msg):
         """Helper method to print noticeable log statements."""

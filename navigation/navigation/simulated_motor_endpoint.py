@@ -45,7 +45,7 @@ class SimulatedMotor(rclpy.node.Node):
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
         self.local_pose_pub = self.create_publisher(
             PoseWithCovarianceStamped, "/pcl_pose", 10
-        ) 
+        )
 
         # ROS2 subscribers
 

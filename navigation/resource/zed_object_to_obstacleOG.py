@@ -16,52 +16,64 @@ from zed_interfaces.msg import ObjectsStamped
 # Display purposes
 from visualization_msgs.msg import Marker
 
+
 class ZedObstacleConverter(object):
     def __init__(self):
-        
+
         # ----- Parameters -----
         # Name of the node
         self.name = rospy.get_param("name", "front_cam_obj_to_obstacle")
         # Name of the topic that subscribes to the ZED objects
-        self.objects_in = rospy.get_param("objects_in", "/front_cam/front/obj_det/objects")
+        self.objects_in = rospy.get_param(
+            "objects_in", "/front_cam/front/obj_det/objects"
+        )
         # Name of the topic that publishes the obstacles
-        self.obstacles_out = rospy.get_param("obstacles_out", "/front_cam_obj_obstacles")
-        self.obstacle_markers_out = rospy.get_param("obstacle_markers_out", "/front_cam_obj_obstacle_display")
+        self.obstacles_out = rospy.get_param(
+            "obstacles_out", "/front_cam_obj_obstacles"
+        )
+        self.obstacle_markers_out = rospy.get_param(
+            "obstacle_markers_out", "/front_cam_obj_obstacle_display"
+        )
 
         rospy.init_node(self.name)
 
         # ----- Node State -----
-        self.object_sub = rospy.Subscriber(self.objects_in, ObjectsStamped, callback=self.receiveObjects, queue_size=10)
-        self.obstacle_pub = rospy.Publisher(self.obstacles_out, ObstacleArray, queue_size=10)
-        self.display_pub  = rospy.Publisher(self.obstacle_markers_out, Marker, queue_size=10)
+        self.object_sub = rospy.Subscriber(
+            self.objects_in, ObjectsStamped, callback=self.receiveObjects, queue_size=10
+        )
+        self.obstacle_pub = rospy.Publisher(
+            self.obstacles_out, ObstacleArray, queue_size=10
+        )
+        self.display_pub = rospy.Publisher(
+            self.obstacle_markers_out, Marker, queue_size=10
+        )
 
         r = rospy.Rate(10)
         while not rospy.is_shutdown():
             r.sleep()
 
-
     def receiveObjects(self, msg):
         """
         Receives an ObjectsStamped message, converts it to an ObstacleArray and publishes it.
 
-        @param self 
+        @param self
         @param msg  ObjectsStamped message
         """
-        
+
         # rospy.logwarn("[%s] **Object** converter received a message in coordinate frame %s" % (self.name, msg.header.frame_id))
 
-        obstacles = ObstacleArray() 
+        obstacles = ObstacleArray()
         obstacles.header.frame_id = msg.header.frame_id
-        obstacles.header.stamp    = msg.header.stamp
+        obstacles.header.stamp = msg.header.stamp
 
         for obj in msg.objects:
-            
+
             obs = Obstacle()
             obs.header.frame_id = msg.header.frame_id
-            obs.header.stamp    = msg.header.stamp
-            obs.pos.point.x     = obj.position[0]
-            obs.pos.point.y     = obj.position[1]
-            obs.pos.point.z     = obj.position[2]
+            obs.header.stamp = msg.header.stamp
+            obs.pos.point.x = obj.position[0]
+            obs.pos.point.y = obj.position[1]
+            obs.pos.point.z = obj.position[2]
 
             # Choose the radius to be the max of width / length
             obs.radius = max(obj.dimensions_3d[0], obj.dimensions_3d[2])

@@ -17,7 +17,6 @@ from geometry_msgs.msg import TwistStamped, PoseWithCovarianceStamped
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 
-
 class SpeedNode(rclpy.node.Node):
 
     def __init__(self):
@@ -41,11 +40,10 @@ class SpeedNode(rclpy.node.Node):
     def timer_cb(self):
         if self.speed_estimate != 0:
             self.twist_pub.publish(self.twist_estimate)
-            
 
     def pose_cb(self, msg):
         """
-        Simple callback for retrieving a pose. This callback also does the math to find the 
+        Simple callback for retrieving a pose. This callback also does the math to find the
         speed estimate based on the distance between two poses.
         """
         if self.prev_pose != None:
@@ -67,7 +65,7 @@ class SpeedNode(rclpy.node.Node):
         self.prev_pose = msg.pose.pose
         self.prev_time = time.time()
 
-    # def log_header(self, msg):
+        # def log_header(self, msg):
         """Helper method to print noticeable log statements."""
         "Currently Commented out due to it drowning out other logs in the launch file"
         # self.get_logger().info("=" * 50)

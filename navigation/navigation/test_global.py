@@ -13,6 +13,7 @@ from std_msgs.msg import Float32
 from geometry_msgs.msg import PoseStamped, PointStamped
 from visualization_msgs.msg import MarkerArray, Marker
 
+
 class GlobalTester(rclpy.node.Node):
 
     def __init__(self):
@@ -25,7 +26,7 @@ class GlobalTester(rclpy.node.Node):
         self.state_pub = self.create_publisher(VehicleState, "/vehicle_state", 10)
         self.rviz_path_pub = self.create_publisher(MarkerArray, "/visual_path", 10)
 
-        # ROS2 subscribers 
+        # ROS2 subscribers
         self.path_sub = self.create_subscription(
             LocalPointsArray, "/global_path", self.path_cb, 10
         )
@@ -54,7 +55,7 @@ class GlobalTester(rclpy.node.Node):
         self.get_logger().info("Begin")
 
     def timer_cb(self):
-        """This timer is only responible for publishing the state variables of the cart. 
+        """This timer is only responible for publishing the state variables of the cart.
         It destroys itself after this task is complete.
         """
         self.destroy_timer(self.timer)
@@ -97,7 +98,6 @@ class GlobalTester(rclpy.node.Node):
         arr.markers[0].color.g = 50.0
         arr.markers[-1].color.r = 50.0
         self.rviz_path_pub.publish(arr)
-
 
 
 def main():

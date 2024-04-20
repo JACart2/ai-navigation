@@ -519,6 +519,7 @@ class LocalPlanner(rclpy.node.Node):
         # self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
         self.log(log)
 
+
 def create_pose_stamped(point):
     stamped = PoseStamped()
     stamped.header = Header()

@@ -29,11 +29,9 @@ import rclpy
 from rclpy.duration import Duration
 from std_msgs.msg import Header, Float32
 from visualization_msgs.msg import MarkerArray
-from navigation_interface.msg import ObstacleArray, Obstacle, Stop, VelAngle
+from navigation_interface.msg import ObstacleArray, Obstacle, Stop
+from motor_control_interface.msg import VelAngle
 from geometry_msgs.msg import (
-    PoseWithCovarianceStamped,
-    PolygonStamped,
-    Point32,
     Point,
     TwistStamped,
 )
@@ -46,7 +44,7 @@ class CollisionDetector(rclpy.node.Node):
     def __init__(self):
         super().__init__("collision_detector")
 
-        self.t = tf.TransformListener()
+        # self.t = tf.TransformListener()
 
         self.stop = False
         self.cur_obstacles = None
@@ -71,22 +69,22 @@ class CollisionDetector(rclpy.node.Node):
         self.declare_parameter("rear_axle_track", 0.9652)
         self.declare_parameter("tire_width", 0.2159)
         self.VEHICLE_WIDTH = (
-            self.get_parameter("vehicle_width").get_parameter_value().float_value
+            self.get_parameter("vehicle_width").get_parameter_value().double_value
         )
         self.VEHICLE_LENGTH = (
-            self.get_parameter("vehicle_length").get_parameter_value().float_value
+            self.get_parameter("vehicle_length").get_parameter_value().double_value
         )
         self.WHEEL_BASE = (
-            self.get_parameter("wheel_base").get_parameter_value().float_value
+            self.get_parameter("wheel_base").get_parameter_value().double_value
         )
         self.FRONT_AXLE_TRACK = (
-            self.get_parameter("front_axle_track").get_parameter_value().float_value
+            self.get_parameter("front_axle_track").get_parameter_value().double_value
         )
         self.REAR_AXLE_TRACK = (
-            self.get_parameter("rear_axle_track").get_parameter_value().float_value
+            self.get_parameter("rear_axle_track").get_parameter_value().double_value
         )
         self.TIRE_WIDTH = (
-            self.get_parameter("tire_width").get_parameter_value().float_value
+            self.get_parameter("tire_width").get_parameter_value().double_value
         )
 
         self.cur_speed = 0.1
@@ -122,10 +120,10 @@ class CollisionDetector(rclpy.node.Node):
         # )
 
         self.SAFE_OBSTACLE_DIST = (
-            self.get_parameter("safe_obstacle_dist").get_paramter_value().float_value
+            self.get_parameter("safe_obstacle_dist").get_parameter_value().double_value
         )
         self.SAFE_OBSTACLE_TIME = (
-            self.get_parameter("safe_obstacle_time").get_paramter_value().float_value
+            self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
         )
 
         self.obstacle_sub = self.create_subscription(
@@ -463,9 +461,9 @@ class CollisionDetector(rclpy.node.Node):
         bound_display.type = Marker.LINE_STRIP
         bound_display.header.frame_id = "/base_link"
         bound_display.scale.x = 0.2
-        bound_display.color.r = 1
-        bound_display.color.g = 1
-        bound_display.color.b = 0
+        bound_display.color.r = 1.0
+        bound_display.color.g = 1.0
+        bound_display.color.b = 0.0
         bound_display.color.a = 1.0
         bound_display.action = Marker.ADD
 

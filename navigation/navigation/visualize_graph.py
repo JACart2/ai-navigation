@@ -24,7 +24,7 @@ class GraphVisual(rclpy.node.Node):
         self.global_graph = nx.DiGraph()
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file("./src/ai-navigation/navigation/navigation/drive_build.gml")
+        self.load_file("./src/ai-navigation/navigation/maps/main.gml")
 
         self.visual_pub = self.create_publisher(MarkerArray, "/graph_visual", 10)
 

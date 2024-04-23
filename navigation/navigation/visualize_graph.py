@@ -57,8 +57,8 @@ class GraphVisual(rclpy.node.Node):
             temp.type = 2
             temp.action = 0
             marker_array.markers.append(temp)
-        marker_array.markers[0].color.g = 50.0
-        marker_array.markers[-1].color.r = 50.0
+        # marker_array.markers[0].color.g = 50.0
+        # marker_array.markers[-1].color.r = 50.0
 
         # This second for loop adds all the edges to the MarkerArray
         nodes = self.global_graph.nodes
@@ -102,6 +102,7 @@ class GraphVisual(rclpy.node.Node):
             marker_array.markers.append(marker)
             self.edge_id += 1
         self.visual_pub.publish(marker_array)
+        self.destroy_timer(self.timer)
 
     def load_file(self, file_name):
         """Loads a file and sets all nodes to active(allowed to take part in pathfinding).

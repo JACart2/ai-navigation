@@ -5,9 +5,6 @@ This is the ROS 2 node that handles the global planning for the JACART.
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
-import time
-import serial as sr
-import numpy as np
 import math
 import networkx as nx
 from navigation import simple_gps_util
@@ -20,10 +17,8 @@ import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from geometry_msgs.msg import (
     Pose,
-    Point,
     PoseStamped,
     PointStamped,
-    TwistStamped,
     PoseWithCovarianceStamped,
 )
 from visualization_msgs.msg import Marker
@@ -60,25 +55,24 @@ class GlobalPlanner(rclpy.node.Node):
 
         self.minimize_travel = True  # TODO - Consider removing or setting another way
 
-        # FIXME MAKE THIS A LAUNCH PARAM (i dont feel like doing it rn xD)
-        self.anchor_gps = [38.433939, -78.862157]
+        # TODO MAKE THIS A LAUNCH PARAM
+        self.ANCHOR_GPS = [38.433939, -78.862157]
 
         # Graphing variables
         self.global_graph = nx.DiGraph()
         self.logic_graph = None
 
-        # FIXME we need to figure out where to put these graphs files
-        self.declare_parameter("graph_file", "")
-
+        self.declare_parameter(
+            "graph_file", "./src/ai-navigation/navigation/maps/main.gml"
+        )
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file("./src/ai-navigation/navigation/navigation/drive_build.gml")
+        self.load_file(file_name)
 
         # ROS2 SUBSCRIBERS
         # ------------------------------------------
 
-        # Originally this method was subscribing to a PoseStamped... The library we are
-        # working with now though is giving us a PoseWithCovarianceStamped. This is the pose we
-        # are getting back from localization.
+        # The library we are working with is giving us a PoseWithCovarianceStamped.
+        # This is the pose we are getting back from localization.
         self.pose_sub = self.create_subscription(
             PoseWithCovarianceStamped, "/pcl_pose", self.pose_callback, 10
         )

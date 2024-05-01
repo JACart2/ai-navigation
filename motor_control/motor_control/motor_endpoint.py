@@ -56,8 +56,7 @@ class MotorEndpoint(rclpy.node.Node):
         # Serial vars
         self.serial_connected = False
         self.heartbeat = b""
-        self.prev_time = 0.0
-        self.delta_time = 0.0
+        self.prev_time = time.time()
 
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
@@ -183,8 +182,6 @@ class MotorEndpoint(rclpy.node.Node):
                 # Use the autonomous implimentation
                 self.calculate_endpoint()
 
-        self.prev_time = time.time()
-
         # The heartbeat is a message sent from the arduino which provides the steering target, throttle target,
         # and brake target as comma separated numbers
         try:
@@ -197,20 +194,19 @@ class MotorEndpoint(rclpy.node.Node):
             self.connect_arduino()
             if not self.serial_connected:
                 return
-
+        cur_time = time.time()
         if self.heartbeat != "":
             self.heart_pub.publish(self.heartbeat)
-            self.delta_time = time.time() - self.prev_time
-            self.log_header("Heartbeat message:")
-            self.log_header(f"{self.heartbeat} | Time since last message: ")
             heartbeat_delta_t = time.time() - self.prev_time
+            self.log_header(
+                f"Heartbeat message:\n{self.heartbeat} | Time since last message: {heartbeat_delta_t}"
+            )
 
             # This check is here because the time between the first and 2nd heartbeat is always ~2.4s
             # This is because of the rest of the setup taking place at the same time
             if heartbeat_delta_t >= 2.0:
                 self.log_header("TIME BETWEEN HEARTBEATS, > 2.0s | Things may be fine")
-
-            self.log_header(f"Heartbeat delta: {heartbeat_delta_t}")
+        self.prev_time = cur_time
         return
 
     def manual_endpoint(self):

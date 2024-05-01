@@ -100,7 +100,7 @@ def generate_launch_description():
             rviz2_command,
             zed_camera_launch,
             # static_transform_publisher,
-            navigation_launch,
+            # navigation_launch,
             # motor_launch,
         ]
     )

@@ -10,8 +10,8 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     return LaunchDescription(
         [
-            DeclareLaunchArgument("baudrate", default_value=57600),
-            DeclareLaunchArgument("arduino_port", default_value="dev/ttyUSB9"),
+            DeclareLaunchArgument("baudrate", default_value="57600"),
+            DeclareLaunchArgument("arduino_port", default_value="dev/ttyUSB0"),
             Node(
                 package="motor_control",
                 executable="motor_endpoint",
@@ -26,9 +26,6 @@ def generate_launch_description():
         ]
     )
 
-
-if __name__ == "__main__":
-    generate_launch_description()
 
 if __name__ == "__main__":
     generate_launch_description()

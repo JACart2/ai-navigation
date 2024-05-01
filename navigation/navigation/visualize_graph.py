@@ -8,6 +8,7 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 import networkx as nx
 
 import rclpy
+import rclpy.qos
 from std_msgs.msg import Header
 from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
@@ -21,12 +22,17 @@ class GraphVisual(rclpy.node.Node):
 
         self.declare_parameter("graph_file", "")
 
+        latching_qos = rclpy.qos.QoSProfile(
+            depth=1, durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL
+        )
         self.global_graph = nx.DiGraph()
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
         self.load_file("./src/ai-navigation/navigation/maps/main.gml")
 
-        self.visual_pub = self.create_publisher(MarkerArray, "/graph_visual", 10)
+        self.visual_pub = self.create_publisher(
+            MarkerArray, "/graph_visual", qos_profile=latching_qos
+        )
 
         self.timer = self.create_timer(3, self.timer_cb)
         self.edge_id = 0
@@ -53,7 +59,7 @@ class GraphVisual(rclpy.node.Node):
             temp.color.r = 0.0
             temp.color.g = 0.0
             temp.color.b = 1.0
-            temp.color.a = 1.0
+            temp.color.a = 0.5
             temp.type = 2
             temp.action = 0
             marker_array.markers.append(temp)

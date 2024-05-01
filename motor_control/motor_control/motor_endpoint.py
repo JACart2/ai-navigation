@@ -172,7 +172,7 @@ class MotorEndpoint(rclpy.node.Node):
         """Main loop timer for updating motor's instructions."""
 
         if not self.serial_connected:
-            self.log_header("RETRYING SERIAL CONNECTION")
+            self.log("RETRYING SERIAL CONNECTION")
             self.connect_arduino()
             # Wait for the timer to start over in the event of an error
             if not self.serial_connected:
@@ -398,6 +398,10 @@ class MotorEndpoint(rclpy.node.Node):
         self.get_logger().info("=" * 50)
         self.get_logger().info(f"{msg}")
         self.get_logger().info("=" * 50)
+
+    def log(self, msg):
+        """Helper method to print  log tatements."""
+        self.get_logger().info(f"{msg}")
 
 
 def main():

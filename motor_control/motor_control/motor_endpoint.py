@@ -8,7 +8,6 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 # Python based imports
 import time
 import serial as sr
-import numpy as np
 import bitstruct
 import math
 
@@ -45,9 +44,6 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
-        # FIXME FOR THIS IS SET TO MANUAL BUT SHOULD PROLLY BE A LAUNCH PARAM.
-        # Since this is false right now we are currently operating autonomously
-        self.manual_control = False
         self.vel = 0
         self.vel_planned = None
         self.angle_planned = None
@@ -60,6 +56,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
+        self.declare_parameter("manual_control", False)
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -67,19 +64,21 @@ class MotorEndpoint(rclpy.node.Node):
         self.ARDUINO_PORT = (
             self.get_parameter("arduino_port").get_parameter_value().string_value
         )
+        self.manual_control = (
+            self.get_parameter("manual_control").get_parameter_value().bool_value
+        )  # Sets the cart to use teleop control logic instead of autonomous control
 
+        # Need to sleep after first connection to let serial establish
         try:
             self.arduino_ser = sr.Serial(
                 self.ARDUINO_PORT, baudrate=self.BAUDRATE, write_timeout=0, timeout=0.01
             )
-            time.sleep(1)
-            # self.arduino_ser.setDTR(level=0)
-            time.sleep(1)
+            time.sleep(2)
             self.serial_connected = True
             self.log_header("CONNECTED TO ARDUINO")
         except Exception as e:
             self.log_header("MOTOR ENDPOINT: " + str(e))
-            serial_connected = False
+            self.serial_connected = False
 
         # ROS2 SUBSCRIBERS
 
@@ -90,6 +89,10 @@ class MotorEndpoint(rclpy.node.Node):
         # The linear and angular velocity of the cart from NDT Matching
         self.twist_sub = self.create_subscription(
             TwistStamped, "/estimate_twist", self.vel_curr_callback, 10
+        )
+
+        self.manual_sub = self.create_subscription(
+            Bool, "/set_manual_control", self.manual_callback, 10
         )
 
         # ROS2 PUBLISHERS
@@ -143,12 +146,16 @@ class MotorEndpoint(rclpy.node.Node):
 
     def vel_curr_callback(self, vel_twist):
         """Callback for getting the estimated current velocity. As of right now this speed
-        estimate is coming from a ROS2 node called speed_node.py"""
+        estimate is coming from a ROS2 node called speed_node.py."""
         if vel_twist != None:
             self.vel_curr = vel_twist.twist.linear.x
 
+    def manual_callback(self, msg):
+        """Callback that sets manual control bool to indicate teleop vs auto control."""
+        self.manual_control = msg.data
+
     def connect_arduino(self):
-        """Simple method for retrying/trying serial connection"""
+        """Simple method for retrying/trying serial connection."""
         try:
             self.arduino_ser = sr.Serial(
                 self.ARDUINO_PORT,

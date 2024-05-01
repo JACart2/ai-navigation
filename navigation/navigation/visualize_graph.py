@@ -20,7 +20,9 @@ class GraphVisual(rclpy.node.Node):
     def __init__(self):
         super().__init__("visualize_graph")
 
-        self.declare_parameter("graph_file", "")
+        self.declare_parameter(
+            "graph_file", "./src/ai-navigation/navigation/maps/main.gml"
+        )
 
         latching_qos = rclpy.qos.QoSProfile(
             depth=1, durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL
@@ -28,7 +30,7 @@ class GraphVisual(rclpy.node.Node):
         self.global_graph = nx.DiGraph()
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file("./src/ai-navigation/navigation/maps/main.gml")
+        self.load_file(file_name)
 
         self.visual_pub = self.create_publisher(
             MarkerArray, "/graph_visual", qos_profile=latching_qos
@@ -63,8 +65,6 @@ class GraphVisual(rclpy.node.Node):
             temp.type = 2
             temp.action = 0
             marker_array.markers.append(temp)
-        # marker_array.markers[0].color.g = 50.0
-        # marker_array.markers[-1].color.r = 50.0
 
         # This second for loop adds all the edges to the MarkerArray
         nodes = self.global_graph.nodes

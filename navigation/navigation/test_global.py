@@ -10,7 +10,7 @@ import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from navigation_interface.msg import LocalPointsArray, VehicleState
 from std_msgs.msg import Float32
-from geometry_msgs.msg import PoseStamped, PointStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, PointStamped
 from visualization_msgs.msg import MarkerArray, Marker
 
 
@@ -20,7 +20,9 @@ class GlobalTester(rclpy.node.Node):
         super().__init__("global_tester")
 
         # ROS2 publishers
-        self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
+        self.pose_pub = self.create_publisher(
+            PoseWithCovarianceStamped, "/pcl_pose", 10
+        )
         self.tar_pub = self.create_publisher(PointStamped, "clicked_point", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
         self.state_pub = self.create_publisher(VehicleState, "/vehicle_state", 10)
@@ -32,9 +34,9 @@ class GlobalTester(rclpy.node.Node):
         )
 
         # Cart position
-        self.pose = PoseStamped()
-        self.pose.pose.position.x = 82.23206329345703
-        self.pose.pose.position.y = 132.16149291992187
+        self.pose = PoseWithCovarianceStamped()
+        self.pose.pose.pose.position.x = 82.23206329345703
+        self.pose.pose.pose.position.y = 132.16149291992187
 
         # Target position
         self.target = PointStamped()
@@ -85,18 +87,19 @@ class GlobalTester(rclpy.node.Node):
             temp.header.frame_id = "map"
             temp.id = id
             id += 1
-            temp.scale.x = 1.0
-            temp.scale.y = 1.0
-            temp.scale.z = 1.0
+            temp.scale.x = 1.5
+            temp.scale.y = 1.5
+            temp.scale.z = 1.5
             temp.color.r = 0.0
-            temp.color.g = 0.0
-            temp.color.b = 1.0
+            temp.color.g = 255.0
+            temp.color.b = 0.0
             temp.color.a = 1.0
             temp.type = 2
             temp.action = 0
             arr.markers.append(temp)
-        arr.markers[0].color.g = 50.0
+        arr.markers[0].color.g = 0.0
         arr.markers[-1].color.r = 50.0
+        arr.markers[-1].color.g = 0.0
         self.rviz_path_pub.publish(arr)
 
 

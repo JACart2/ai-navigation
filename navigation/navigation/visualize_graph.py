@@ -8,6 +8,7 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 import networkx as nx
 
 import rclpy
+import rclpy.qos
 from std_msgs.msg import Header
 from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
@@ -19,14 +20,21 @@ class GraphVisual(rclpy.node.Node):
     def __init__(self):
         super().__init__("visualize_graph")
 
-        self.declare_parameter("graph_file", "")
+        self.declare_parameter(
+            "graph_file", "./src/ai-navigation/navigation/maps/main.gml"
+        )
 
+        latching_qos = rclpy.qos.QoSProfile(
+            depth=1, durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL
+        )
         self.global_graph = nx.DiGraph()
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file("./src/ai-navigation/navigation/maps/main.gml")
+        self.load_file(file_name)
 
-        self.visual_pub = self.create_publisher(MarkerArray, "/graph_visual", 10)
+        self.visual_pub = self.create_publisher(
+            MarkerArray, "/graph_visual", qos_profile=latching_qos
+        )
 
         self.timer = self.create_timer(3, self.timer_cb)
         self.edge_id = 0
@@ -53,12 +61,10 @@ class GraphVisual(rclpy.node.Node):
             temp.color.r = 0.0
             temp.color.g = 0.0
             temp.color.b = 1.0
-            temp.color.a = 1.0
+            temp.color.a = 0.5
             temp.type = 2
             temp.action = 0
             marker_array.markers.append(temp)
-        # marker_array.markers[0].color.g = 50.0
-        # marker_array.markers[-1].color.r = 50.0
 
         # This second for loop adds all the edges to the MarkerArray
         nodes = self.global_graph.nodes

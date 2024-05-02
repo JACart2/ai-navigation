@@ -8,7 +8,6 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 # Python based imports
 import time
 import serial as sr
-import numpy as np
 import bitstruct
 import math
 
@@ -45,9 +44,6 @@ class MotorEndpoint(rclpy.node.Node):
         self.brake_time_used = 0
         self.brake = 0
         self.stopping_time = 0
-        # FIXME FOR THIS IS SET TO MANUAL BUT SHOULD PROLLY BE A LAUNCH PARAM.
-        # Since this is false right now we are currently operating autonomously
-        self.manual_control = False
         self.vel = 0
         self.vel_planned = None
         self.angle_planned = None
@@ -56,11 +52,11 @@ class MotorEndpoint(rclpy.node.Node):
         # Serial vars
         self.serial_connected = False
         self.heartbeat = b""
-        self.prev_time = 0.0
-        self.delta_time = 0.0
+        self.prev_time = time.time()
 
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
+        self.declare_parameter("manual_control", False)
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -68,19 +64,21 @@ class MotorEndpoint(rclpy.node.Node):
         self.ARDUINO_PORT = (
             self.get_parameter("arduino_port").get_parameter_value().string_value
         )
+        self.manual_control = (
+            self.get_parameter("manual_control").get_parameter_value().bool_value
+        )  # Sets the cart to use teleop control logic instead of autonomous control
 
+        # Need to sleep after first connection to let serial establish
         try:
             self.arduino_ser = sr.Serial(
                 self.ARDUINO_PORT, baudrate=self.BAUDRATE, write_timeout=0, timeout=0.01
             )
-            time.sleep(1)
-            # self.arduino_ser.setDTR(level=0)
-            time.sleep(1)
+            time.sleep(2)
             self.serial_connected = True
             self.log_header("CONNECTED TO ARDUINO")
         except Exception as e:
             self.log_header("MOTOR ENDPOINT: " + str(e))
-            serial_connected = False
+            self.serial_connected = False
 
         # ROS2 SUBSCRIBERS
 
@@ -91,6 +89,10 @@ class MotorEndpoint(rclpy.node.Node):
         # The linear and angular velocity of the cart from NDT Matching
         self.twist_sub = self.create_subscription(
             TwistStamped, "/estimate_twist", self.vel_curr_callback, 10
+        )
+
+        self.manual_sub = self.create_subscription(
+            Bool, "/set_manual_control", self.manual_callback, 10
         )
 
         # ROS2 PUBLISHERS
@@ -144,12 +146,16 @@ class MotorEndpoint(rclpy.node.Node):
 
     def vel_curr_callback(self, vel_twist):
         """Callback for getting the estimated current velocity. As of right now this speed
-        estimate is coming from a ROS2 node called speed_node.py"""
+        estimate is coming from a ROS2 node called speed_node.py."""
         if vel_twist != None:
             self.vel_curr = vel_twist.twist.linear.x
 
+    def manual_callback(self, msg):
+        """Callback that sets manual control bool to indicate teleop vs auto control."""
+        self.manual_control = msg.data
+
     def connect_arduino(self):
-        """Simple method for retrying/trying serial connection"""
+        """Simple method for retrying/trying serial connection."""
         try:
             self.arduino_ser = sr.Serial(
                 self.ARDUINO_PORT,
@@ -166,7 +172,7 @@ class MotorEndpoint(rclpy.node.Node):
         """Main loop timer for updating motor's instructions."""
 
         if not self.serial_connected:
-            self.log_header("RETRYING SERIAL CONNECTION")
+            self.log("RETRYING SERIAL CONNECTION")
             self.connect_arduino()
             # Wait for the timer to start over in the event of an error
             if not self.serial_connected:
@@ -183,8 +189,6 @@ class MotorEndpoint(rclpy.node.Node):
                 # Use the autonomous implimentation
                 self.calculate_endpoint()
 
-        self.prev_time = time.time()
-
         # The heartbeat is a message sent from the arduino which provides the steering target, throttle target,
         # and brake target as comma separated numbers
         try:
@@ -197,20 +201,19 @@ class MotorEndpoint(rclpy.node.Node):
             self.connect_arduino()
             if not self.serial_connected:
                 return
-
+        cur_time = time.time()
         if self.heartbeat != "":
             self.heart_pub.publish(self.heartbeat)
-            self.delta_time = time.time() - self.prev_time
-            self.log_header("Heartbeat message:")
-            self.log_header(f"{self.heartbeat} | Time since last message: ")
             heartbeat_delta_t = time.time() - self.prev_time
+            self.log_header(
+                f"Heartbeat message:\n{self.heartbeat} | Time since last message: {heartbeat_delta_t}"
+            )
 
             # This check is here because the time between the first and 2nd heartbeat is always ~2.4s
             # This is because of the rest of the setup taking place at the same time
             if heartbeat_delta_t >= 2.0:
                 self.log_header("TIME BETWEEN HEARTBEATS, > 2.0s | Things may be fine")
-
-            self.log_header(f"Heartbeat delta: {heartbeat_delta_t}")
+        self.prev_time = cur_time
         return
 
     def manual_endpoint(self):
@@ -395,6 +398,10 @@ class MotorEndpoint(rclpy.node.Node):
         self.get_logger().info("=" * 50)
         self.get_logger().info(f"{msg}")
         self.get_logger().info("=" * 50)
+
+    def log(self, msg):
+        """Helper method to print  log tatements."""
+        self.get_logger().info(f"{msg}")
 
 
 def main():

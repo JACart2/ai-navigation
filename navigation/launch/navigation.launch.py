@@ -12,12 +12,17 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="/home/student/dev_ws/src/ai-navigation/navigation/maps/main.gml",
+                default_value="./src/ai-navigation/navigation/maps/main.gml",
             ),
             Node(
                 package="navigation",
                 executable="global_planner",
                 output="screen",
+                parameters=[
+                    {
+                        "graph_file": LaunchConfiguration("graph_file"),
+                    }
+                ],
             ),
             Node(
                 package="navigation",
@@ -28,6 +33,11 @@ def generate_launch_description():
             Node(
                 package="navigation",
                 executable="speed_node",
+                output="screen",
+            ),
+            Node(
+                package="navigation",
+                executable="visualize_graph",
                 output="screen",
             ),
         ]

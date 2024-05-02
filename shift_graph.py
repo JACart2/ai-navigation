@@ -1,0 +1,23 @@
+filename = "./navigation/maps/main.gml"
+write_file = "./main_shift.gml"
+f = open(filename, "r")
+new = open(write_file, "w")
+while True:
+    line = f.readline()
+    if line == "":
+        break
+    new.write(line)
+    if line[:6] == "  node":
+        new.write(f.readline())
+        new.write(f.readline())
+        new.write(f.readline())
+        x = float(f.readline().strip()[4:])
+        y = float(f.readline().strip()[4:]) - 1
+        new.write(f"      pos {x}\n")
+        new.write(f"      pos {y}\n")
+        print(x)
+        print(y)
+        print()
+
+
+f.close()

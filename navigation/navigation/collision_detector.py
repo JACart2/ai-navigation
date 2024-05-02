@@ -92,11 +92,11 @@ class CollisionDetector(rclpy.node.Node):
         self.cleared_confidence = 0
 
         # Vehicle Corners (Wheel Positions)
-        self.front_right_corner = [0, 0]
-        self.front_left_corner = [0, 0]
-        self.rear_left_corner = [0, 0]
-        self.rear_right_corner = [0, 0]
-        self.front_axle_center = [0, 0]
+        self.front_right_corner = [0.0, 0.0]
+        self.front_left_corner = [0.0, 0.0]
+        self.rear_left_corner = [0.0, 0.0]
+        self.rear_right_corner = [0.0, 0.0]
+        self.front_axle_center = [0.0, 0.0]
 
         # Collision Bounds
         self.inner_radius = 0
@@ -189,7 +189,7 @@ class CollisionDetector(rclpy.node.Node):
             (self.WHEEL_BASE / 2),
             ((self.REAR_AXLE_TRACK / 2) + (self.TIRE_WIDTH / 2)),
         ]
-        self.front_axle_center = [(self.WHEEL_BASE / 2), 0]
+        self.front_axle_center = [(self.WHEEL_BASE / 2), 0.0]
 
     def calc_arcs(self, steering_angle):
         """Calculates the Inner turn radius arc and outer turn radius arc and the
@@ -279,6 +279,7 @@ class CollisionDetector(rclpy.node.Node):
                 < (abs(self.outer_radius) + obstacle_size)
             )
 
+            # FIXME need to determine if this needs a different frame or not.
             self.display_circle("/base_link", self.front_axle_center, 24, 2, z=1)
 
             if potential_collision:
@@ -430,12 +431,12 @@ class CollisionDetector(rclpy.node.Node):
 
         marker.pose.position.x = corner[0]
         marker.pose.position.y = corner[1]
-        marker.pose.position.z = 1
+        marker.pose.position.z = 1.0
 
-        radius = radius
+        radius = float(radius)
         marker.scale.x = radius
         marker.scale.y = radius
-        marker.scale.z = z
+        marker.scale.z = float(z)
 
         self.display_pub.publish(marker)
 

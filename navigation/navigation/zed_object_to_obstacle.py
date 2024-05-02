@@ -2,7 +2,7 @@
 """
 This ROS node converts detected ZED objects into Obstacles for the cart.
 
-@author Jacob Bringham
+@author Lorenzo Ashurst and Zane Metz
 @version 4/9/2022
 """
 
@@ -10,6 +10,7 @@ import rclpy
 
 # Messages
 from navigation_interface.msg import Obstacle, ObstacleArray
+import rclpy.node
 from std_msgs.msg import Header
 from zed_interfaces.msg import ObjectsStamped
 
@@ -40,8 +41,12 @@ class ZedObstacleConverter(rclpy.node.Node):
         # FIXME this subscriber is kind of broken... I need to figure out what the correlation
         # between OG implimentation and my implimentation is here.
         self.object_sub = self.create_subscription(
-            ObjectsStamped, "/front_cam/front/obj_det/objects", self.receiveObjects, 10
+            ObjectsStamped,
+            "/zed_front/zed_node_0/obj_det/objects",
+            self.receiveObjects,
+            10,
         )
+        print("IM HERE")
         self.obstacle_pub = self.create_publisher(ObstacleArray, "/obstacles", 10)
         self.display_pub = self.create_publisher(Marker, "/obs_visualization", 10)
 
@@ -64,16 +69,19 @@ class ZedObstacleConverter(rclpy.node.Node):
             obs = Obstacle()
             obs.header.frame_id = msg.header.frame_id
             obs.header.stamp = msg.header.stamp
-            obs.pos.point.x = obj.position[0]
-            obs.pos.point.y = obj.position[1]
-            obs.pos.point.z = obj.position[2]
+
+            # This float conversion thing here is a bit ugly but gives me errors otherwise.
+            obs.pos.point.x = float(obj.position[0])
+            obs.pos.point.y = float(obj.position[1])
+            obs.pos.point.z = float(obj.position[2])
 
             # Choose the radius to be the max of width / length
-            obs.radius = max(obj.dimensions_3d[0], obj.dimensions_3d[2])
+            obs.radius = float(max(obj.dimensions_3d[0], obj.dimensions_3d[2]))
 
             obstacles.obstacles.append(obs)
 
         self.obstacle_pub.publish(obstacles)
+        self.get_logger().info("published the obstacles")
         # rospy.loginfo("[%s] Published %d obstacles!" % (self.name, len(obstacles.obstacles)))
         self.local_display("/front_cam_left_camera_frame", obstacles)
 

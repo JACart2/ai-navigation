@@ -12,7 +12,7 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="/home/student/dev_ws/src/ai-navigation/navigation/navigation/drive_build.gml",
+                default_value="/home/student/dev_ws/src/ai-navigation/navigation/maps/main.gml",
             ),
             Node(
                 package="navigation",

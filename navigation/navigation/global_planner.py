@@ -13,6 +13,7 @@ import networkx as nx
 from navigation import simple_gps_util
 
 # ROS based import
+import rclpy.node
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
@@ -71,7 +72,7 @@ class GlobalPlanner(rclpy.node.Node):
         self.declare_parameter("graph_file", "")
 
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file("./src/ai-navigation/navigation/navigation/drive_build.gml")
+        self.load_file("./src/ai-navigation/navigation/maps/main.gml")
 
         # ROS2 SUBSCRIBERS
         # ------------------------------------------

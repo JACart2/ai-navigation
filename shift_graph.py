@@ -1,9 +1,10 @@
 filename = "./navigation/maps/main.gml"
-write_file = "./main_shift2.gml"
+write_file = "./navigation/maps/main_shift3.gml"
 f = open(filename, "r")
 new = open(write_file, "w")
-dx = 0.5
-dy = -1.5
+dx = -0.5
+# dy was originall -1.5 but i didnt wanna touch it for the third graph file
+dy = -2.0
 while True:
     line = f.readline()
     if line == "":

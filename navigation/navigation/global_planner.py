@@ -64,7 +64,7 @@ class GlobalPlanner(rclpy.node.Node):
         self.logic_graph = None
 
         self.declare_parameter(
-            "graph_file", "./src/ai-navigation/navigation/maps/main.gml"
+            "graph_file", "./src/ai-navigation/navigation/maps/main_shift3.gml"
         )
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
         self.load_file(file_name)

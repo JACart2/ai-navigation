@@ -28,14 +28,12 @@ def generate_launch_description():
         )
     )
 
-    # Include the lidar_localization launch file directly
+    # Specify the new path to lidar_localization.launch.py
+    lidar_localization_launch_path = "/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+
+    # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("lidar_localization_ros2"),
-                "/launch/lidar_localization.launch.py",
-            ]
-        )
+        PythonLaunchDescriptionSource([lidar_localization_launch_path])
     )
 
     # Include the navigation launch file directly
@@ -86,24 +84,24 @@ def generate_launch_description():
         }.items(),
     )
 
-    # # Static transform for the reference link (zed_multi_link) to base_link
-    # multi_link_tf = ExecuteProcess(
-    #     cmd=[
-    #         "ros2",
-    #         "run",
-    #         "tf2_ros",
-    #         "static_transform_publisher",
-    #         "0.0",  # X position (adjust as needed)
-    #         "0.0",  # Y position (adjust as needed)
-    #         "1.6",  # Z position (height of cameras above ground)
-    #         "0.0",  # Roll (rotation around X-axis)
-    #         "0.0",  # Pitch (rotation around Y-axis)
-    #         "0.0",  # Yaw (rotation around Z-axis)
-    #         "base_link",  # Parent frame (golf cart base)
-    #         "zed_front_camera_link",  # Child frame (reference link for cameras)
-    #     ],
-    #     output="screen",
-    # )
+    # Static transform for the reference link (zed_multi_link) to base_link
+    multi_link_tf = ExecuteProcess(
+        cmd=[
+            "ros2",
+            "run",
+            "tf2_ros",
+            "static_transform_publisher",
+            "1.0",  # X position (adjust as needed)
+            "0.0",  # Y position (adjust as needed)
+            "1.6",  # Z position (height of cameras above ground)
+            "0.0",  # Roll (rotation around X-axis)
+            "0.0",  # Pitch (rotation around Y-axis)
+            "0.0",  # Yaw (rotation around Z-axis)
+            "base_link",  # Parent frame (golf cart base)
+            "zed_front_camera_link",  # Child frame (reference link for cameras)
+        ],
+        output="screen",
+    )
 
     # Execute the RViz2 command with the specified configuration file
     rviz2_command = ExecuteProcess(
@@ -146,7 +144,7 @@ def generate_launch_description():
             rviz2_command,
             # zed_camera_launch,
             zed_multi_camera_launch,
-            # multi_link_tf,
+            multi_link_tf,
             # static_transform_publisher,
             # navigation_launch,
             # motor_launch,

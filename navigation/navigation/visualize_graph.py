@@ -21,7 +21,7 @@ class GraphVisual(rclpy.node.Node):
         super().__init__("visualize_graph")
 
         self.declare_parameter(
-            "graph_file", "./src/ai-navigation/navigation/maps/main.gml"
+            "graph_file", "./src/ai-navigation/navigation/maps/main_shift3.gml"
         )
 
         latching_qos = rclpy.qos.QoSProfile(

@@ -383,7 +383,7 @@ class CollisionDetector(rclpy.node.Node):
                 stop_msg = Stop()
                 stop_msg.stop = False
                 stop_msg.sender_id.data = "collision_detector"
-                stop_msg.distance = -1
+                stop_msg.distance = -1.0
                 self.stop_pub.publish(stop_msg)
 
         self.collision_pub.publish(collision_array)

@@ -6,6 +6,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
@@ -26,12 +27,17 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="/home/student/dev_ws/src/ai-navigation/navigation/navigation/drive_build.gml",
+                default_value="./src/ai-navigation/navigation/maps/main_shift3.gml",
             ),
             Node(
                 package="navigation",
                 executable="global_planner",
                 output="screen",
+                parameters=[
+                    {
+                        "graph_file": LaunchConfiguration("graph_file"),
+                    }
+                ],
             ),
             Node(
                 package="navigation",
@@ -45,6 +51,15 @@ def generate_launch_description():
             Node(
                 package="navigation",
                 executable="global_tester",
+            ),
+            Node(
+                package="navigation",
+                executable="visualize_graph",
+                parameters=[
+                    {
+                        "graph_file": LaunchConfiguration("graph_file"),
+                    }
+                ],
             ),
         ]
     )

@@ -1,0 +1,33 @@
+/**:
+    ros__parameters:
+      registration_method: "NDT_OMP"
+      score_threshold: 2.0
+      ndt_resolution: 2.0
+      ndt_step_size: 0.1
+      ndt_num_threads: 0
+      transform_epsilon: 0.01
+      # Increase the leaf size to reduce the density of the point cloud data, 
+      # which can help in processing larger outdoor environments more efficiently.
+      # default 0.2
+      voxel_leaf_size: 2.0
+      # default 100.0  Bigger distance.  Middle of quad for example
+      scan_max_range: 100.0
+      scan_min_range: 1.0
+      scan_period: 0.1
+      use_pcd_map: true
+      # map_path: "/home/jacart2/dev_ws/src/maps/speedBoiMap.pcd"
+      map_path: "/home/jacart2/dev_ws/src/maps/final_map_condensed_5-22.pcd"
+      set_initial_pose: true
+      initial_pose_x: 0.0
+      initial_pose_y: 0.0
+      initial_pose_z: 0.0
+      initial_pose_qx: 0.0
+      initial_pose_qy: 0.0
+      initial_pose_qz: 0.0
+      initial_pose_qw: 0.0
+      use_odom: false
+      use_imu: false
+      enable_debug: true
+      global_frame_id: map
+      odom_frame_id: odom
+      base_frame_id: base_link

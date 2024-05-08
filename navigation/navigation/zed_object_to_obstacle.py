@@ -83,11 +83,12 @@ class ZedObstacleConverter(rclpy.node.Node):
         self.obstacle_pub.publish(obstacles)
         self.get_logger().info("published the obstacles")
         # rospy.loginfo("[%s] Published %d obstacles!" % (self.name, len(obstacles.obstacles)))
-        self.local_display("/front_cam_left_camera_frame", obstacles)
+        self.local_display("/zed_front_camera_link", obstacles)
 
     # Display the obstacles on the LIDAR frame, will appear jittery in Rviz as there is no interpolation
     def local_display(self, frame, object_list):
         for i in range(len(object_list.obstacles)):
+            print("PUBLISHING IN LOCAL DISPLAY")
             marker = Marker()
             marker.header = Header()
             marker.header.frame_id = frame
@@ -102,12 +103,15 @@ class ZedObstacleConverter(rclpy.node.Node):
             marker.color.a = 1.0
 
             marker.pose.position.x = object_list.obstacles[i].pos.point.x
+            print(f"x cord: {object_list.obstacles[i].pos.point.x}")
             marker.pose.position.y = object_list.obstacles[i].pos.point.y
+            print(f"y cord: {object_list.obstacles[i].pos.point.y}")
+
             marker.pose.position.z = 0.0
 
             radius = object_list.obstacles[i].radius
-            marker.scale.x = radius
-            marker.scale.y = radius
+            marker.scale.x = 10.0
+            marker.scale.y = 10.0
             marker.scale.z = 0.3
 
             self.display_pub.publish(marker)

@@ -50,7 +50,7 @@ def generate_launch_description():
         parameters=[localization_param_dir],
         remappings=[
             ("/cloud", "/velodyne_points"),
-            ("/odom", "/zed/zed_node/odom"),
+            ("/odom", "/zed_front/zed_node_0/odom"),
             ("/imu", "/zed/zed_node/imu/data"),
         ],
         output="screen",

@@ -36,37 +36,6 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([lidar_localization_launch_path])
     )
 
-    # Include the navigation launch file directly
-    navigation_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("navigation"),
-                "/launch/navigation.launch.py",
-            ]
-        )
-    )
-
-    # Include the navigation launch file directly
-    motor_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("motor_control"),
-                "/launch/motor.launch.py",
-            ]
-        )
-    )
-
-    # # Include the zed_camera launch file directly
-    # zed_camera_launch = IncludeLaunchDescription(
-    #     PythonLaunchDescriptionSource(
-    #         [
-    #             FindPackageShare("zed_wrapper"),
-    #             "/launch/zed_camera.launch.py",
-    #         ]
-    #     ),
-    #     launch_arguments={"camera_model": "zed2"}.items(),
-    # )
-
     # Include the zed_multi_camera launch file instead of individual zed_camera launches
     zed_multi_camera_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -103,50 +72,13 @@ def generate_launch_description():
         output="screen",
     )
 
-    # Execute the RViz2 command with the specified configuration file
-    rviz2_command = ExecuteProcess(
-        cmd=["rviz2", "-d", "src/lidar_localization_ros2/rviz/localization.rviz"],
-        shell=True,
-    )
-
-    static_transform_publisher = ExecuteProcess(
-        cmd=[
-            "ros2",
-            "run",
-            "tf2_ros",
-            "static_transform_publisher",
-            "0.8",
-            "0",
-            "1",
-            "0",
-            "0",
-            "0",
-            "1",  # x, y, z, qx, qy, qz, qw
-            "base_link",
-            "odom",  # parent_frame_id, child_frame_id
-        ],
-        output="screen",
-    )
-
-    lidar_tf = launch_ros.actions.Node(
-        name="lidar_tf",
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments=["0.6", "0", "1", "0", "0", "0", "1", "base_link", "velodyne"],
-    )
-
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
             velodyne_driver_node,
             velodyne_transform_launch,
             lidar_localization_launch,
-            rviz2_command,
-            # zed_camera_launch,
             zed_multi_camera_launch,
             multi_link_tf,
-            # static_transform_publisher,
-            # navigation_launch,
-            # motor_launch,
         ]
     )

@@ -11,4 +11,4 @@ pip install -r ${PKG}/resource/requirements.txt
 
 # builds system
 colcon build --symlink-install
-sudo . install/setup.sh
+source install/setup.sh

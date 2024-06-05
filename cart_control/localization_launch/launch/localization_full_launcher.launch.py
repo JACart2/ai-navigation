@@ -36,26 +36,6 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([lidar_localization_launch_path])
     )
 
-    # Include the navigation launch file directly
-    navigation_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("navigation"),
-                "/launch/navigation.launch.py",
-            ]
-        )
-    )
-
-    # Include the navigation launch file directly
-    motor_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("motor_control"),
-                "/launch/motor.launch.py",
-            ]
-        )
-    )
-
     # Include the zed_multi_camera launch file instead of individual zed_camera launches
     zed_multi_camera_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(

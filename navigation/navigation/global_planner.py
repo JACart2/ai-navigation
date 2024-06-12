@@ -2,12 +2,12 @@
 """
 This is the ROS 2 node that handles the global planning for the JACART.
 
-Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
+Authors: Zane Metz, Lorenzo Ashurst, Zach Putz, Martin Nester, and Walker Todd
 """
 # Python based imports
 import math
 import networkx as nx
-from navigation import simple_gps_util
+import simple_gps_util
 
 # ROS based import
 import rclpy.node
@@ -109,14 +109,25 @@ class GlobalPlanner(rclpy.node.Node):
         # Publish the path for local planner to begin navigating
         self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
 
-        # THESE CALLBACKS ARE NOT USED BECAUSE GPS IS NON OPERATION
+        # THESE CALLBACKS ARE USED FOR THE GPS UTILITY
         # ----------------------------------------------------------
 
+        # Declare parameters
+        self.declare_parameter('anchor_local', [0, 0])
+        self.declare_parameter('test_loc_gps', [0.0, 0.0])
+        self.declare_parameter('test_loc_local', [0.0, 0.0])
+
+        # Get parameters
+        self.anchor_local = self.get_parameter('anchor_local').get_parameter_value().double_array_value
+        self.test_location_gps = self.get_parameter('test_loc_gps').get_parameter_value().double_array_value
+        self.test_location_local = self.get_parameter('test_loc_local').get_parameter_value().double_array_value
+        
+        self.gps_calibrated = False
         # Publishes the path but in GPS coordinates
         self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
+        # Publishes the GPS point to display in RViz
         self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
-        # Published the current cart position but in GPS coordinates TODO move to local planner
-        self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
+
         # How often to update the gps position of the cart
         self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
 
@@ -492,20 +503,6 @@ class GlobalPlanner(rclpy.node.Node):
         )
         self.orientation = tf_transformations.euler_from_quaternion(cart_quat)
 
-    def request_callback(self, msg):
-        """If a destination is requested, calculate a path to it
-
-        Args:
-            msg (String): The destination requested
-        """
-        # If the cart is already navigating, don't allow for a new destination
-        if not self.navigating:
-            self.calc_nav(msg.data)
-        else:
-            self.log_header(
-                "Cart is already navigating, please wait until it reaches its destination"
-            )
-
     # We've received a clicked point from RViz, calculate a path to it
     def point_callback(self, msg):
         """If a point was published in RViz figure out how to get there
@@ -537,6 +534,15 @@ class GlobalPlanner(rclpy.node.Node):
             self.cur_speed = self.cur_speed / self.vel_polls
             self.vel_polls = 0
             self.cur_speed = 0
+
+    def request_callback(self, msg):
+        """If a destination request is made, calculate the path to it
+
+        Args:
+            msg (String): The destination request
+        """
+        self.calc_nav(msg.data)
+        
 
     def output_path_gps(self, path, single=False):
         """Function for converting the list of points along a path to latitude and longitude
@@ -576,19 +582,7 @@ class GlobalPlanner(rclpy.node.Node):
         # Publish here
         self.gps_path_pub.publish(gps_path)
 
-    def output_pos_gps(self):
-        """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution
-        rather than GPS which can be relatively inaccurate.
 
-        """
-        if self.navigating:
-            package_point = LocalPointsArray()
-            cart_pos = self.current_pos.pose
-            package_point.localpoints.append(cart_pos)
-
-            point_in_gps = self.output_path_gps(package_point, single=True)
-
-            self.gps_pose_pub.publish(point_in_gps)
 
     def gps_request_cb(self, msg):
         """Converts a GPS point from Lat, Long to UTM coordinate system using AlvinXY. Also displays the GPS once converted, in RViz
@@ -614,6 +608,7 @@ class GlobalPlanner(rclpy.node.Node):
             test_gps = self.test_location_gps
 
             # Get the calibrated heading and set
+            # Gets the optimized heading offset for the GPS utility
             self.anchor_theta = simple_gps_util.calibrate_util(
                 test_local, anchor_local, test_gps, anchor_gps
             )
@@ -625,6 +620,8 @@ class GlobalPlanner(rclpy.node.Node):
             #     + str(self.anchor_theta)
             #     + " degrees"
             # )
+            self.set_parameter(rclpy.parameter.Parameter('anchor_theta', rclpy.Parameter.Type.DOUBLE, float(self.anchor_theta)))
+            self.get_logger().info(f"Calibrated GPS Utility With Heading Offset: {self.anchor_theta} degrees")
             self.gps_calibrated = True
 
         # the anchor point is the latitude/longitude for the pcd origin
@@ -635,7 +632,7 @@ class GlobalPlanner(rclpy.node.Node):
         local_point.x = x
         local_point.y = y
 
-        # Currect the heading of the point by map offset around origin
+        # Correct the heading of the point by map offset around origin
         local_point = simple_gps_util.heading_correction(
             0, 0, self.anchor_theta, local_point
         )

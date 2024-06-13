@@ -10,8 +10,6 @@ def generate_launch_description():
         'anchor_local': [0, 0],
         'test_loc_gps': [38.433170, -78.860981],
         'test_loc_local': [67.6, 115],
-        'max_speed': 5,
-        'max_ndt_health': 4,
         'min_obstacle_dist': 0.5,
         'min_obstacle_time': 0.5,
         'safe_obstacle_dist': 6,

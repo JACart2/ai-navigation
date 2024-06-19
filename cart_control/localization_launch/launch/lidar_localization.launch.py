@@ -39,7 +39,7 @@ def generate_launch_description():
     # Set the default path directly to the specific YAML file location
     localization_param_dir = LaunchConfiguration(
         "localization_param_dir",
-        default="/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/param/localization.yaml",
+        default="./src/ai-navigation/cart_control/localization_launch/param/localization.yaml",
     )
 
     lidar_localization = launch_ros.actions.LifecycleNode(

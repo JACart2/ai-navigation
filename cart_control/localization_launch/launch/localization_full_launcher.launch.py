@@ -29,7 +29,7 @@ def generate_launch_description():
     )
 
     # Specify the new path to lidar_localization.launch.py
-    lidar_localization_launch_path = "/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+    lidar_localization_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(

@@ -122,6 +122,19 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /projected_path
       Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /display_gps
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 172; 172; 172

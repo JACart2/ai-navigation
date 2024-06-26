@@ -112,13 +112,12 @@ class GlobalPlanner(rclpy.node.Node):
 
         # Publish the path for local planner to begin navigating
         self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
-        self.path_pub_test = self.create_publisher(Path, "planned_path", 10)
+
         # THESE CALLBACKS ARE NOT USED BECAUSE GPS IS NON OPERATION
         # ----------------------------------------------------------
 
         # Publishes the path but in GPS coordinates
         # self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
-
         self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
         # Published the current cart position but in GPS coordinates TODO move to local planner
         # self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
@@ -178,28 +177,6 @@ class GlobalPlanner(rclpy.node.Node):
         marker.scale.z = 1.0
 
         self.display_pub.publish(marker)
-        # Creating a path to show how the cart will get to the destination
-        path = Path()
-        path.header.frame_id = "/map"
-        path.header.stamp = self.get_clock().now().to_msg()
-
-        start_pose = PoseStamped()
-        start_pose.header = path.header
-        start_pose.pose.position.x = self.current_pos.pose.position.x
-        start_pose.pose.position.y = self.current_pos.pose.position.y
-        start_pose.pose.orientation.w = 1.0  # Assuming no rotation
-
-        end_pose = PoseStamped()
-        end_pose.header = path.header
-        end_pose.pose.position.x = destination.x
-        end_pose.pose.position.y = destination.y
-        end_pose.pose.position.z = 0.0
-        end_pose.pose.orientation.w = 1.0  # Assuming no rotation
-
-        path.poses.append(start_pose)
-        path.poses.append(end_pose)
-
-        self.path_pub_test.publish(path)
 
         # Allows other functions to not make critical decisions or modify data while calculating navigation
         self.calculating_nav = True

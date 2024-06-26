@@ -2,7 +2,7 @@
 """
 This is the ROS 2 node that handles the local planning for the JACART.
 
-Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
+Authors: Zane Metz, Lorenzo Ashurst, Zach Putz, Walker Todd
 """
 # Python based imports
 import math

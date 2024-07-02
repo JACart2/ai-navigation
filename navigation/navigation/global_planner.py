@@ -128,8 +128,7 @@ class GlobalPlanner(rclpy.node.Node):
         # Publishes the GPS point to display in RViz
         self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
 
-        # How often to update the gps position of the cart
-        self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
+
 
     # Load the graph file as the global graph
     def load_file(self, file_name):

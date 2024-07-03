@@ -115,7 +115,7 @@ class GlobalPlanner(rclpy.node.Node):
         # THESE CALLBACKS ARE USED FOR THE GPS UTILITY
         # ----------------------------------------------------------
 
-        # Declare parameters
+        # # Declare parameters
         # self.declare_parameter('anchor_local', [0, 0])
         # self.declare_parameter('anchor_gps', [38.433939, -78.862157])
         # self.declare_parameter('anchor_theta', 100)
@@ -194,6 +194,12 @@ class GlobalPlanner(rclpy.node.Node):
         Args:
             msg (ROS LatLongPoint Message): Message containing the latitude and longitude to convert and navigate to
         """
+        # If the cart is currently navigating, don't allow a new destination to be set
+        # Unless we would like one to be?!?
+        if self.navigating:
+            self.get_logger().info("Currently navigating, please wait")
+            return
+
         local_point = Point()
 
         anchor_gps = self.ANCHOR_GPS
@@ -254,15 +260,16 @@ class GlobalPlanner(rclpy.node.Node):
         marker.color.a = 1.0
 
         # FIXME THIS NEEDS TO BE LOOKED INTO. I think its right but i dont know.
-        marker.lifetime = rclpy.duration.Duration(seconds=10)
+        # marker.lifetime = rclpy.duration.Duration(seconds=10)
+        # marker.lifetime = 10
 
         marker.pose.position.x = local_point.x
         marker.pose.position.y = local_point.y
         marker.pose.position.z = 0.0
 
-        marker.scale.x = 1
-        marker.scale.y = 1
-        marker.scale.z = 0.8
+        # marker.scale.x = 1
+        # marker.scale.y = 1
+        # marker.scale.z = 0.8
 
         self.display_pub.publish(marker)
 

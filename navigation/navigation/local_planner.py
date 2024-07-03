@@ -134,22 +134,8 @@ class LocalPlanner(rclpy.node.Node):
 
         # self.motion_pub.publish(plan_msg)
 
-                # How often to update the gps position of the cart
-        self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
 
-    def output_pos_gps(self):
-        """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution
-        rather than GPS which can be relatively inaccurate.
 
-        """
-        if self.navigating:
-            package_point = LocalPointsArray()
-            cart_pos = self.current_pos.pose
-            package_point.localpoints.append(cart_pos)
-
-            point_in_gps = self.output_path_gps(package_point, single=True)
-
-            self.gps_pose_pub.publish(point_in_gps)
 
     def timer_cb(self):
         """Time callback responsible creating a path. Basically used as a second update function

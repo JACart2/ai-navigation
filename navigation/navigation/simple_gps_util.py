@@ -76,6 +76,10 @@ def calibrate_util(test_point_local, map_origin_local, test_point_gps, map_origi
         test_point_gps: The same selected test point tuple but in Latitude, Longitude tuple
         map_origin_gps: The same map origin but a Latitude, Longitude tuple
     """
+    # Check if map_origin_local has the correct number of elements
+    if len(map_origin_local) < 2:
+        raise ValueError("map_origin_local should have at least two elements (X, Y)")
+
     min_err_angle = 360
     min_err = 999999
 

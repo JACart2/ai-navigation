@@ -8,10 +8,13 @@
   <license>Apache 2.0</license> 
 
   <exec_depend>ros2launch</exec_depend>
+<<<<<<< HEAD
   
   <depend>rviz2</depend>
   <depend>velodyne_driver</depend>
   <depend>velodyne_pointcloud</depend>
+=======
+>>>>>>> origin/walker/zed-custom-launch-files
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

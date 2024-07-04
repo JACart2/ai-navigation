@@ -50,8 +50,13 @@ def generate_launch_description():
         parameters=[localization_param_dir],
         remappings=[
             ("/cloud", "/velodyne_points"),
+<<<<<<< HEAD
             ("/odom", "/zed/zed_node_0/odom"),
             ("/imu", "/zed/zed_node_0/imu/data"),
+=======
+            ("/odom", "/zed_front/zed_node_0/odom"),
+            ("/imu", "/zed/zed_node/imu/data"),
+>>>>>>> origin/walker/zed-custom-launch-files
         ],
         output="screen",
     )

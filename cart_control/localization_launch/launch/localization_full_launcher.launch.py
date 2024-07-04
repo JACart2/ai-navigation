@@ -30,6 +30,8 @@ def generate_launch_description():
 
     # Specify the new path to lidar_localization.launch.py
     lidar_localization_launch_path = "/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+    # Specify the new path to zed_multi_camera.launch.py
+    zed_multi_camera_launch_path = "/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/zed_multi_camera.launch.py"
 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(
@@ -38,12 +40,7 @@ def generate_launch_description():
 
     # Include the zed_multi_camera launch file instead of individual zed_camera launches
     zed_multi_camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("zed_multi_camera"),
-                "/launch/zed_multi_camera.launch.py",
-            ]
-        ),
+        PythonLaunchDescriptionSource([zed_multi_camera_launch_path]),
         # Pass launch arguments for cameras, models, serials, and TF configuration
         launch_arguments={
             "cam_names": "[zed_front, zed_rear]",  # Names of the cameras
@@ -72,19 +69,25 @@ def generate_launch_description():
         output="screen",
     )
 
+<<<<<<< HEAD
     # Execute the RViz2 command with the specified configuration file
     rviz2_command = ExecuteProcess(
         cmd=["rviz2", "-d", "src/lidar_localization_ros2/rviz/localization.rviz"],
         shell=True,
     )
 
+=======
+>>>>>>> origin/walker/zed-custom-launch-files
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
             velodyne_driver_node,
             velodyne_transform_launch,
             lidar_localization_launch,
+<<<<<<< HEAD
             rviz2_command,
+=======
+>>>>>>> origin/walker/zed-custom-launch-files
             zed_multi_camera_launch,
             multi_link_tf,
         ]

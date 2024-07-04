@@ -25,7 +25,11 @@
       initial_pose_qy: 0.0
       initial_pose_qz: 0.0
       initial_pose_qw: 0.0
+<<<<<<< HEAD
       use_odom: true
+=======
+      use_odom: True
+>>>>>>> origin/walker/zed-custom-launch-files
       use_imu: false
       enable_debug: true
       global_frame_id: map

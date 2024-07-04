@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Localization_Launcher Launch File Components
 1. Velodyne LiDAR Driver
 Launches the velodyne_driver node for VLP16 LiDAR with specified parameters.
@@ -59,3 +60,11 @@ registration_method: Specifies the method used for point cloud registration. Cur
 Modify the parameter values as needed to adapt to specific localization requirements.
 Adjust parameters based on sensor characteristics, environment conditions, and performance considerations.
 Ensure correct paths are provided for map files and other resources.
+=======
+# Localization Launch File
+This is the custom JACART launch file created to launch the components associated with localization
+This includes launching:
+1. Velodyne Lidar Packages - Converts data to raw velodyne packets then to velodyne pointcloud data
+2. ZED Multi Camera - Runs the ZED packages in order to collect the Data coming off the zed cameras
+3. Lidar_localization_ros2 - Takes that Velodyne point cloud data and the odomentry provided by the ZED and actually runs the localization processs
+>>>>>>> origin/walker/zed-custom-launch-files

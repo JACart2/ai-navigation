@@ -30,11 +30,23 @@ def generate_launch_description():
         )
     )
 
+    # Execute the RViz2 command with the specified configuration file
+    rviz2_command = ExecuteProcess(
+        cmd=[
+            "rviz2",
+            "-d",
+            "src/ai-navigation/cart_control/cart_launch/rviz/localization.rviz",
+        ],
+        shell=True,
+    )
+
+
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
             localization_launch,
             navigation_launch,
             motor_control_launch,
+            rviz2_command,
         ]
     )

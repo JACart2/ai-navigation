@@ -42,7 +42,7 @@ def launch_setup(context, *args, **kwargs):
 
     # URDF/xacro file to be loaded by the Robot State Publisher node
     # Hard coded path to our param file for the ZED Multi camera
-    multi_zed_xacro_path = "/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro"
+    multi_zed_xacro_path = "./src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro"
     # Changed from this:
     # multi_zed_xacro_path = os.path.join(
     #     get_package_share_directory("zed_multi_camera"), "urdf", "zed_multi.urdf.xacro"

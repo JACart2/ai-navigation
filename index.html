@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JACart/ui</title>
+    <style>
+	#split {
+		display: flex;
+		flex-direction: row;
+		height: 100vh;
+		width: 100vw;
+	}
+	#split2 {
+		display: flex;
+		font-family: Arial;
+		flex-direction: column;
+	}
+	h2{
+	 padding-left: 1rem
+	}
+	#map {
+		flex:1;
+		height: 100%;
+	}
+	#destinations {
+		flex: 1;
+		width: 20rem;
+		list-style-type: none;
+		padding: 0;
+		margin: 0;
+	}
+	#destinations li {
+		padding: 1rem;
+		border-bottom: 1px solid lightgrey;
+		user-select: none;
+	}
+	button {
+		padding: 1rem;
+		font-size: 1rem;
+		color: white;
+		border: none;
+	}
+	.selected {
+		background: #6495ED;
+	}
+	#go{
+		background: green;
+	}
+	#pull-over{
+		background: red;
+	}
+
+
+    </style>
+  </head>
+  <body style="margin:0">
+	  <div id="split">
+   
+<div id="split2">
+    <h2>Destinations</h2>
+    <ul id="destinations">
+	<li lat="38.432605" long="-78.860067" class="selected">Festival</li>
+	<li lat="38.433928" long="-78.862181">P.O.D. in Engeo</li>
+    </ul>
+    <button id="pull-over">Pull Over</button>
+    <button id="go">Go</button>
+</div>
+    
+    <div id="map"></div>
+
+	  </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

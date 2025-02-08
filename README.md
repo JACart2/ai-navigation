@@ -40,3 +40,6 @@ cd ..
 ## Quick Commands
 - ```ros2 launch motor_control motor.launch.py``` Starts the node that controls the motor
 - ```ros2 run teleop teleop_node``` Starts the teleop controller
+
+_Note: Any README that asks you to install packages with "sudo apt" is old and not fully relevant._
+_Packages are now installed within Docker containers, which are the primary way of executing the cart logic._

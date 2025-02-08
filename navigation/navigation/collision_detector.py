@@ -20,23 +20,27 @@ Important Notes Before Continuing:
 # from geometry_msgs.msg import PoseStamped, PolygonStamped, Point32, Point
 # from visualization_msgs.msg import Marker
 
+# General-purpose Python libraries.
 import math
 import time
 import numpy as np
 
+# ROS2 libraries.
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
 from rclpy.duration import Duration
 from std_msgs.msg import Header, Float32
 from visualization_msgs.msg import MarkerArray
-from navigation_interface.msg import ObstacleArray, Obstacle, Stop
-from motor_control_interface.msg import VelAngle
 from geometry_msgs.msg import (
     Point,
     TwistStamped,
 )
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
+
+# Custom-made libraries.
+from navigation_interface.msg import ObstacleArray, Obstacle, Stop
+from motor_control_interface.msg import VelAngle
 
 
 class CollisionDetector(rclpy.node.Node):
@@ -62,12 +66,15 @@ class CollisionDetector(rclpy.node.Node):
         self.requested_steering_angle = 0
 
         # Vehicle Kinematics
+        # If not set in the launch file, this will set the Node's parameter defaults.
         self.declare_parameter("vehicle_width", 1.1938)
         self.declare_parameter("vehicle_length", 2.4003)
         self.declare_parameter("wheel_base", 2.4003)
         self.declare_parameter("front_axle_track", 0.9017)
         self.declare_parameter("rear_axle_track", 0.9652)
         self.declare_parameter("tire_width", 0.2159)
+
+        # Defining constants used in the code.
         self.VEHICLE_WIDTH = (
             self.get_parameter("vehicle_width").get_parameter_value().double_value
         )
@@ -105,6 +112,7 @@ class CollisionDetector(rclpy.node.Node):
         self.right_turn = False
 
         # Minimum allowable distance from front of cart to intercept obstacle before emergency stopping
+        # TODO test different stopping distances by altering this factor.
         factor = 1.25
         # self.declare_parameter("min_obstacle_dist", 2.5)
         # self.declare_parameter("min_obstacle_time", 2.5)
@@ -119,6 +127,7 @@ class CollisionDetector(rclpy.node.Node):
         #     self.get_parameter("min_obstacle_time").get_paramter_value().float_value
         # )
 
+        # Define constants for collision avoidance.
         self.SAFE_OBSTACLE_DIST = (
             self.get_parameter("safe_obstacle_dist").get_parameter_value().double_value
         )
@@ -126,29 +135,52 @@ class CollisionDetector(rclpy.node.Node):
             self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
         )
 
+        # Subscribes to the /obstacles topic where ObstacleArray msg types are sent
+        # by the ZedObstacleConverter node (defined in zed_object_to_obstacle.py).
         self.obstacle_sub = self.create_subscription(
             ObstacleArray, "/obstacles", self.obstacle_callback, 10
         )
 
+        # The /nav_cmd topic is sent VelAngle msg types which is used by the node
+        # defined in motor_endpoint.py to send out speed and steering requests to the cart.
         self.angle_sub = self.create_subscription(
             VelAngle, "/nav_cmd", self.angle_callback, 10
         )
 
+        # The /estimate_twist topic is sent approximations of the current linear
+        # and angular velocity. These are estimated based on a strategy defined by
+        # the Autoware library called the Normal Distributions Transform (aka NDT)
+        # matching which takes a scan of LIDAR points and tries to match them with
+        # to a grid representing discretizes space where each block contains
+        # probability functions used to estimate the relative location of the point
+        # within that space.
         self.cur_speed_sub = self.create_subscription(
             TwistStamped, "/estimate_twist", self.speed_callback, 10
         )  # The original didn't have the callback properly implemented
 
+        # I think this is used solely to visualize a very specific point in Rviz whenever the collision detector functions runs.
         self.display_pub = self.create_publisher(Marker, "/corner_display", 10)
+        # The /stop topic is the primary channel used to send cart brake requests.
         self.stop_pub = self.create_publisher(Stop, "/stop", 10)
+        # I don't see display_boundary_pub being used anywhere else in this file, so this looks useless...
         self.display_boundary_pub = self.create_publisher(Marker, "/boundaries", 10)
         # change to 10 if 100 is breaking
-        self.display_array = self.create_publisher(
+        self.display_array = self.create_publisher( # Used for visualizing points that indicate steering intensity.
             MarkerArray, "/boundaries_array", 100
         )
+        # The MarkerArray msg published contains various "collision points" which are used by
+        # the collision detector to determine what points are considered close enough to stop.
         self.collision_pub = self.create_publisher(MarkerArray, "/collision_pub", 100)
 
+        # Used to publish messages to control the speed of the cart.
+        # The collision detector uses this to adjust the speed of the
+        # cart in the event an obstacle is moving in front of the cart,
+        # allowing the cart to "follow" the obstacle.
         self.speed_pub = self.create_publisher(Float32, "/speed", 10)
 
+        # Pretty sure this is just used to get the physical corners of the cart.
+        # Zane, the previous student who worked on this file, made suggestions
+        # to improve the method, (see below.)
         self.obtain_corners()
 
         # Run collision detection 30 times a second

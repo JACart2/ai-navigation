@@ -68,7 +68,7 @@ def visualize_point_clouds(original, adversarial):
 
 # Main Execution
 if __name__ == "__main__":
-    bag_file = "C:\Users\Shano\OneDrive\Desktop\480\2021-02-11-15-37-25.bag"  # Change this to your uploaded file
+    bag_file = "C:\Users\Shano\OneDrive\Desktop\480\2021-02-11-15-37-25.bag"
     topic = "/velodyne_points"  # Update based on your dataset
 
     # Step 1: Extract point cloud

@@ -21,7 +21,7 @@ from visualization_msgs.msg import Marker
 class ZedObstacleConverter(rclpy.node.Node):
     def __init__(self):
 
-        super().__init__("obstacle_converter")
+        super().__init__("zed_object_to_obstacle")
         # This is something I need to figure out soon....
         # ----- Parameters -----
 

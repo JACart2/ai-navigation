@@ -17,9 +17,12 @@ import rclpy
 import rclpy.node
 import tf_transformations
 import tf2_ros
+from tf2_geometry_msgs.tf2_geometry_msgs import do_transform_point
+from builtin_interfaces.msg import Duration
 from builtin_interfaces.msg import Time
 
 # ROS2 Messages.
+from geometry_msgs.msg import PointStamped
 from sensor_msgs.msg import LaserScan, PointCloud2
 from navigation_interface.msg import Obstacle, ObstacleArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy # needed to match QoS settings of /scanner/scan
@@ -55,6 +58,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
         super().__init__("lidar_object_to_obstacle")
         
         self.tf_buffer = Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.last_scanned = None
 
@@ -77,10 +81,13 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.converter_sub = self.create_subscription(
             LaserScan, "/scanner/scan", self.laserscan_callback, qos_scanner # Receives the converted LaserScan data back to be processed
         )
-        self.converter_pub = self.create_publisher(PointCloud2, "/cloud_in", 10) # where received velodyne PointCloud data gets sent to be converted.
+        self.converter_pub = self.create_publisher (PointCloud2, "/cloud_in", 10) # where received velodyne PointCloud data gets sent to be converted.
 
         # Transmit aggregated ObstacleArray data to a topic to be handled separately.
         self.obstacle_pub = self.create_publisher (ObstacleArray, "/obstacles", 10)
+
+        # Publish created markers to be displayed on RVIZ2.
+        self.display_pub = self.create_publisher (Marker, "lidar_obstacle_display", 10)
 
     def cluster_points(self):
         # LaserScan msg being processed.
@@ -225,15 +232,17 @@ class LidarObjectToObstacle(rclpy.node.Node):
                 # Apply the transform to convert from 'velodyne' frame to 'base_link'
                 try:
                     transformed_point = self.tf_buffer.transform(global_point, 'base_link')
+                    transformed_point = do_transform_point(global_point, transform)
                 except (tf2_ros.TransformException) as e:
                     self.get_logger().warn(f'Could not transform point: {e}')
                     continue
 
+                # self.get_logger().info("Transformed point to :: " + str(transformed_point)) # DEBUGGING!
                 # Create a new circle around the obstacle
                 cur_circle = Obstacle()
                 cur_circle.header.frame_id = 'base_link'
                 cur_circle.header.stamp = self.last_scanned
-                cur_circle.pos = transformed_point.point
+                cur_circle.pos = transformed_point
                 cur_circle.radius = radius
                 cur_circle.followable = True
 
@@ -245,7 +254,6 @@ class LidarObjectToObstacle(rclpy.node.Node):
         object_list = self.obstacles.obstacles
         for i in range(len(object_list)):
             marker = Marker()
-            marker.header = Header()
             marker.header.frame_id = frame
 
             marker.ns = "Object_NS"
@@ -258,7 +266,10 @@ class LidarObjectToObstacle(rclpy.node.Node):
             marker.color.a = 1.0
 
             # Use rclpy duration for marker lifetime
-            marker.lifetime = rclpy.duration.Duration(seconds=0.1)
+            dur = Duration()
+            dur.nanosec = 1 * 10 ** 8
+            self.get_logger().info("Setting marker duration to :: " + str(type(dur))) # DEBUGGING!
+            marker.lifetime = dur
 
             marker.pose.position.x = object_list[i].pos.point.x
             marker.pose.position.y = object_list[i].pos.point.y

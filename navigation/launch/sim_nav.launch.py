@@ -41,6 +41,11 @@ def generate_launch_description():
             ),
             Node(
                 package="navigation",
+                executable="display_global_path",
+                output="screen",
+            ),
+            Node(
+                package="navigation",
                 executable="local_planner",
                 output="screen",
             ),

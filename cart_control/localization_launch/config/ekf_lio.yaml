@@ -1,0 +1,21 @@
+ekf_lio_node:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.1
+    two_d_mode: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map
+
+    publish_tf: true
+    publish_acceleration: false
+
+    # Use LIO-SAM's odometry as input
+    odometry0: /lio_sam/mapping/odometry
+    odometry0_config: [true, true, false,
+                       false, false, false,
+                       false, false, false,
+                       false, false, false,
+                       false, false, false]

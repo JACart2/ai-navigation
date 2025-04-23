@@ -4,10 +4,12 @@ This is the ROS 2 node that handles the global planning for the JACART.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
+import sys
+print(sys.path)
 # Python based imports
 import math
 import networkx as nx
-from navigation import simple_gps_util
+import navigation.simple_gps_util as simple_gps_util
 
 # ROS based import
 import rclpy.node

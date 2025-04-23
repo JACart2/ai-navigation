@@ -26,12 +26,6 @@ class GlobalTester(rclpy.node.Node):
         self.tar_pub = self.create_publisher(PointStamped, "clicked_point", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
         self.state_pub = self.create_publisher(VehicleState, "/vehicle_state", 10)
-        self.rviz_path_pub = self.create_publisher(MarkerArray, "/visual_path", 10)
-
-        # ROS2 subscribers
-        self.path_sub = self.create_subscription(
-            LocalPointsArray, "/global_path", self.path_cb, 10
-        )
 
         # Cart position
         self.pose = PoseWithCovarianceStamped()
@@ -65,43 +59,6 @@ class GlobalTester(rclpy.node.Node):
         self.tar_pub.publish(self.target)
         self.vel_pub.publish(self.vel)
         self.state_pub.publish(self.state)
-
-    def path_cb(self, msg):
-        """Callback responible for publising the nodes in which the cart must traverse
-
-        Args:
-            file_name (string): The .gml file to load as the graph, cart_planning/launch/constants.launch
-            is where the file path can be found
-        """
-        delarr = MarkerArray()
-        delmark = Marker()
-        delmark.action = 3
-        delarr.markers.append(delmark)
-        self.rviz_path_pub.publish(delarr)
-
-        arr = MarkerArray()
-        id = 0
-        for p in msg.localpoints:
-            temp = Marker()
-            temp.pose = p
-            temp.header.frame_id = "map"
-            temp.id = id
-            id += 1
-            temp.scale.x = 1.5
-            temp.scale.y = 1.5
-            temp.scale.z = 1.5
-            temp.color.r = 0.0
-            temp.color.g = 255.0
-            temp.color.b = 0.0
-            temp.color.a = 1.0
-            temp.type = 2
-            temp.action = 0
-            arr.markers.append(temp)
-        arr.markers[0].color.g = 0.0
-        arr.markers[-1].color.r = 50.0
-        arr.markers[-1].color.g = 0.0
-        self.rviz_path_pub.publish(arr)
-
 
 def main():
     """The main method that actually handles spinning up the node."""

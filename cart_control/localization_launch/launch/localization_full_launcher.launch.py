@@ -6,6 +6,8 @@ from launch_ros.substitutions import FindPackageShare
 import launch_ros
 import launch_ros.actions
 import launch_ros.events
+from ament_index_python.packages import get_package_share_directory
+import os
 
 
 def generate_launch_description():
@@ -29,21 +31,26 @@ def generate_launch_description():
     )
 
     # Specify the new path to lidar_localization.launch.py
-    lidar_localization_launch_path = "/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+    lio_sam_launch_path = os.path.join(
+        get_package_share_directory("localization_launch"),
+        "launch",
+        "lio-sam.launch.py",
+    )
+
+    zed_multi_camera_launch_path = os.path.join(
+        get_package_share_directory("zed_multi_camera"),
+        "launch",
+        "zed_multi_camera.launch.py",
+    )
 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([lidar_localization_launch_path])
+        PythonLaunchDescriptionSource([lio_sam_launch_path])
     )
 
     # Include the zed_multi_camera launch file instead of individual zed_camera launches
     zed_multi_camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("zed_multi_camera"),
-                "/launch/zed_multi_camera.launch.py",
-            ]
-        ),
+        PythonLaunchDescriptionSource([zed_multi_camera_launch_path]),
         # Pass launch arguments for cameras, models, serials, and TF configuration
         launch_arguments={
             "cam_names": "[zed_front, zed_rear]",  # Names of the cameras

@@ -20,6 +20,13 @@ def generate_launch_description():
         )
     )
 
+    # Launch for eko liosam odometry mapping module
+    ekf_lio_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [FindPackageShare("localization_launch"), "/launch/ekf_lio.launch.py"]
+        )
+    )
+
     # Launch the navigation launcher
     navigation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -44,6 +51,15 @@ def generate_launch_description():
         shell=True,
     )
 
+    # start rosbridge
+    rosbridge_node = Node(
+        package="rosbridge_server",
+        executable="rosbridge_websocket",
+        name="rosbridge_websocket_server",
+        output="screen",
+        parameters=[],
+    )
+
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
@@ -51,5 +67,7 @@ def generate_launch_description():
             navigation_launch,
             motor_control_launch,
             rviz2_command,
+            rosbridge_node,
+            ekf_lio_launch,
         ]
     )

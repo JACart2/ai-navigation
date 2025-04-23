@@ -29,7 +29,9 @@ def generate_launch_description():
     )
 
     # Specify the new path to lidar_localization.launch.py
-    lidar_localization_launch_path = "/home/jacart2/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+    lidar_localization_launch_path = "/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+    # Specify the new path to zed_multi_camera.launch.py
+    zed_multi_camera_launch_path = "/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/zed_multi_camera.launch.py"
 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(
@@ -38,12 +40,7 @@ def generate_launch_description():
 
     # Include the zed_multi_camera launch file instead of individual zed_camera launches
     zed_multi_camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("zed_multi_camera"),
-                "/launch/zed_multi_camera.launch.py",
-            ]
-        ),
+        PythonLaunchDescriptionSource([zed_multi_camera_launch_path]),
         # Pass launch arguments for cameras, models, serials, and TF configuration
         launch_arguments={
             "cam_names": "[zed_front, zed_rear]",  # Names of the cameras

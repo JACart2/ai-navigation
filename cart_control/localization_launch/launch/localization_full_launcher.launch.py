@@ -29,9 +29,9 @@ def generate_launch_description():
     )
 
     # Specify the new path to lidar_localization.launch.py
-    lidar_localization_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+    lidar_localization_launch_path = "/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
     # Specify the new path to zed_multi_camera.launch.py
-    zed_multi_camera_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/zed_multi_camera.launch.py"
+    zed_multi_camera_launch_path = "/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/zed_multi_camera.launch.py"
 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(

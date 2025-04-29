@@ -1,43 +1,27 @@
 import os
 from launch import LaunchDescription
-from launch.actions import TimerAction, DeclareLaunchArgument, ExecuteProcess
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.actions import TimerAction
 from launch_ros.actions import Node
+from launch.actions import ExecuteProcess
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    # Get path to the shared config directory
     lio_sam_share_dir = get_package_share_directory("lio_sam")
     lio_sam_config = os.path.join(lio_sam_share_dir, "config", "params.yaml")
 
     declare_config_arg = DeclareLaunchArgument(
         "config_file",
         default_value=lio_sam_config,
-        description="Path to the LIO-SAM configuration file",
+        description="Path to LIO-SAM configuration file",
     )
 
-    declare_loc_only_arg = DeclareLaunchArgument(
-        "localization_only",
-        default_value="false",
-        description="Set to 'true' to run in localization-only mode",
-    )
+    config = LaunchConfiguration("config_file")
 
-    declare_static_map_arg = DeclareLaunchArgument(
-        "static_map_path",
-        default_value="",
-        description="Absolute path to the pre-built PCD map "
-                    "(required if localization_only == true)",
-    )
-
-    config        = LaunchConfiguration("config_file")
-    loc_only      = LaunchConfiguration("localization_only")
-    static_map    = LaunchConfiguration("static_map_path")
-
-    # When localization_only == true we also want loopClosureEnableFlag=false
-    loop_closure_flag = PythonExpression(
-        ["'false' if ", loc_only, " == 'true' else 'true'"]
-    )
-
+    # Static TFs
     lidar_tf = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -54,6 +38,7 @@ def generate_launch_description():
         output="screen",
     )
 
+    # LIO-SAM components
     image_projection = Node(
         package="lio_sam",
         executable="lio_sam_imageProjection",
@@ -79,11 +64,13 @@ def generate_launch_description():
     imu_preintegration = Node(
         package="lio_sam",
         executable="lio_sam_imuPreintegration",
-        name="lio_sam_imuPreintegration",
-        namespace="lio_sam",
+        name="lio_sam_imuPreintegration",  # Ensure this is UNIQUE
+        namespace="lio_sam",  # Add this line
         parameters=[config],
-        remappings=[("odometry/imu", "/odometry/imu_incremental")],
-        arguments=["--ros-args", "--log-level", "warn"],
+        remappings=[
+            ("odometry/imu", "/odometry/imu_incremental"),
+        ],
+        arguments=["--ros-args", "--log-level", "warn"],  # Reduced verbosity
         output="screen",
     )
 
@@ -100,15 +87,7 @@ def generate_launch_description():
         package="lio_sam",
         executable="lio_sam_mapOptimization",
         name="lio_sam_mapOptimization",
-        parameters=[
-            config,
-            {
-                # ←──── overrides land here
-                "localization_only": loc_only,
-                "static_map_path":   static_map,
-                "loopClosureEnableFlag": loop_closure_flag,
-            },
-        ],
+        parameters=[config],
         arguments=["--ros-args", "--log-level", "map_optimization:=info"],
         output="screen",
     )
@@ -116,18 +95,15 @@ def generate_launch_description():
     return LaunchDescription(
         [
             declare_config_arg,
-            declare_loc_only_arg,
-            declare_static_map_arg,
             lidar_tf,
             imu_tf,
             TimerAction(
-                period=3.0,
+                period=3.0,  # Increased delay for TF stabilization
                 actions=[
                     image_projection,
                     imu_preintegration,
                     TimerAction(
-                        period=1.0,
-                        actions=[feature_extraction, map_optimization],
+                        period=1.0, actions=[feature_extraction, map_optimization]
                     ),
                 ],
             ),

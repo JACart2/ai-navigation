@@ -20,6 +20,14 @@ def generate_launch_description():
         )
     )
 
+    # Transform lidar into base frame
+    lidar_tf = launch_ros.actions.Node(
+        name="lidar_tf",
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        arguments=["1", "0", "1.9", "0", "0", "0", "1", "base_link", "velodyne"],
+    )
+
     # Launch the navigation launcher
     navigation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -48,6 +56,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             localization_launch,
+            lidar_tf,
             navigation_launch,
             motor_control_launch,
             rviz2_command,

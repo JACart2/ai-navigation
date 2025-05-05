@@ -121,7 +121,7 @@ def launch_setup(context, *args, **kwargs):
         
         pose = '['
 
-        info = '* Starting a ZED ROS2 node for camera ' + name + \
+        info = '* Starting a ZED2i ROS2 node for camera ' + name + \
             ' (' + model        
         if(serial != '0'):
             info += ', serial: ' + serial
@@ -144,7 +144,7 @@ def launch_setup(context, *args, **kwargs):
         # ZED Wrapper launch file
         zed_wrapper_launch = IncludeLaunchDescription(
             launch_description_source=PythonLaunchDescriptionSource([
-                get_package_share_directory('zed_wrapper'),
+                get_package_share_directory('localization_launch'),
                 '/launch/zed_camera.launch.py'
             ]),
             launch_arguments={

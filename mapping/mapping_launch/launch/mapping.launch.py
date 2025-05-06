@@ -1,11 +1,9 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, ExecuteProcess, DeclareLaunchArgument
+from launch.actions import Node, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 import launch_ros
 import launch_ros.actions
-import launch_ros.events
 
 
 def generate_launch_description():
@@ -47,42 +45,19 @@ def generate_launch_description():
         }.items()
     )
 
-    # Execute the RViz2 command with the specified configuration file
-    rviz2_command = ExecuteProcess(
-        cmd=[
-            "rviz2",
-            "-d",
-            "src/ai-navigation/cart_control/cart_launch/rviz/localization.rviz",
-        ],
-        shell=True,
-    )
-
-    # GPS
+    # GPS - WORK IN PROGRESS
     # Launch to test it:
-    gps_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("mrpt_sensor_gnss_nmea"),
-                "/launch/mrpt_sensor_gnss_nmea.launch.py" # Yes, they spelled it "launchs"
-            ]
-        ),
-        launch_arguments={
-            "serial_port": "/dev/ttyACM0",
-            "publish_topic" : "/gps"
-        }.items()
-    )
-    # gps_launch = LaunchDescription(
-    #     Node(
-    #         package='nmea_navsat_driver',
-    #         executable='nmea_navsat_driver_node',
-    #         name='nmea_navsat_driver',
-    #         output='screen',
-    #         parameters=[{
-    #             'serial_port': '/dev/ttyACM0',
-    #             'serial_baud': 4800
-    #         }],
-    #         remappings=[('/fix', '/gps')]
-    #     )
+    # gps_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         [
+    #             FindPackageShare("mrpt_sensor_gnss_nmea"),
+    #             "/launch/mrpt_sensor_gnss_nmea.launch.py"
+    #         ]
+    #     ),
+    #     launch_arguments={
+    #         "serial_port": "/dev/ttyACM0",
+    #         "publish_topic" : "/gps"
+    #     }.items()
     # )
 
     # Combine all the above components into a single launch description
@@ -92,7 +67,6 @@ def generate_launch_description():
             velodyne_transform_launch,
             lidar_tf,
             mola,
-            rviz2_command,
-            gps_launch
+            # gps_launch
         ]
     )

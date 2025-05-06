@@ -55,10 +55,10 @@ def launch_setup(context, *args, **kwargs):
     'urdf',
     'zed_multi.urdf.xacro')
 
-    names = LaunchConfiguration('cam_names')
-    models = LaunchConfiguration('cam_models')
-    serials = LaunchConfiguration('cam_serials')
-    ids = LaunchConfiguration('cam_ids')
+    names = LaunchConfiguration('cam_names') # [zed_front, zed_rear]
+    models = LaunchConfiguration('cam_models') # [zed2i, zed2i]
+    serials = LaunchConfiguration('cam_serials') # [37963597, 31061594]
+    ids = LaunchConfiguration('cam_ids') # []
 
     disable_tf = LaunchConfiguration('disable_tf')
 
@@ -144,7 +144,7 @@ def launch_setup(context, *args, **kwargs):
         # ZED Wrapper launch file
         zed_wrapper_launch = IncludeLaunchDescription(
             launch_description_source=PythonLaunchDescriptionSource([
-                get_package_share_directory('zed_wrapper'),
+                get_package_share_directory('localization_launch'),
                 '/launch/zed_camera.launch.py'
             ]),
             launch_arguments={
@@ -155,7 +155,8 @@ def launch_setup(context, *args, **kwargs):
                 'camera_id': id,
                 'publish_tf': publish_tf,
                 'publish_map_tf': publish_tf,
-                'namespace': namespace_val
+                'namespace': namespace_val,
+                'node_name': node_name
             }.items()
         )
         actions.append(zed_wrapper_launch)

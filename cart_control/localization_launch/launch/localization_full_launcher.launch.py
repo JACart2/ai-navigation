@@ -28,6 +28,18 @@ def generate_launch_description():
         )
     )
 
+    # Specify the new path to liosam.launch.py
+    lio_sam_launch_path = os.path.join(
+        get_package_share_directory("localization_launch"),
+        "launch",
+        "lio-sam.launch.py",
+    )
+
+    # Include the lidar_localization launch file using the new path
+    liosam_localization_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([lio_sam_launch_path])
+    )
+
     # Specify the new path to lidar_localization.launch.py
     lidar_localization_launch_path = "/dev_ws/src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
     # Specify the new path to zed_multi_camera.launch.py
@@ -77,5 +89,6 @@ def generate_launch_description():
             lidar_localization_launch,
             zed_multi_camera_launch,
             multi_link_tf,
+            liosam_localization_launch,
         ]
     )

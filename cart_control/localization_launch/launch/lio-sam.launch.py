@@ -35,7 +35,7 @@ def generate_launch_description():
 
     # When localization_only == true we also want loopClosureEnableFlag=false
     loop_closure_flag = PythonExpression(
-        ["'false' if ", loc_only, " == 'true' else 'true'"]
+        ["false if ", loc_only, " == 'true' else true"]
     )
 
     lidar_tf = Node(

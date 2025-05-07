@@ -18,7 +18,7 @@ def generate_launch_description():
 
     declare_loc_only_arg = DeclareLaunchArgument(
         "localization_only",
-        default_value=False,
+        default_value='false',
         description="Set to 'true' to run in localization-only mode",
     )
 

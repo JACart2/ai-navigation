@@ -87,7 +87,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.obstacle_pub = self.create_publisher (ObstacleArray, "/obstacles", 10)
 
         # Publish created markers to be displayed on RVIZ2.
-        self.display_pub = self.create_publisher (Marker, "/lidar_obstacle_display", 10)
+        self.display_pub = self.create_publisher (Marker, "lidar_obstacle_display", 10)
 
     def cluster_points(self):
         # LaserScan msg being processed.

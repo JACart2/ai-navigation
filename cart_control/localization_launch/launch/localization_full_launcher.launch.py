@@ -91,6 +91,6 @@ def generate_launch_description():
             lidar_localization_launch,
             zed_multi_camera_launch,
             multi_link_tf,
-            liosam_localization_launch,
+            # liosam_localization_launch,
         ]
     )

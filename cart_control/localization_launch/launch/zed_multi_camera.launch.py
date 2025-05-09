@@ -50,10 +50,11 @@ def launch_setup(context, *args, **kwargs):
     namespace_val = 'zed_multi'
     
     # URDF/xacro file to be loaded by the Robot State Publisher node
-    multi_zed_xacro_path = os.path.join(
-    get_package_share_directory('zed_multi_camera'),
-    'urdf',
-    'zed_multi.urdf.xacro')
+    # multi_zed_xacro_path = os.path.join(
+    # get_package_share_directory('localization_launch'),
+    # 'param',
+    # 'zed_multi.urdf.xacro')
+    multi_zed_xacro_path = '/dev_ws/src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro'
 
     names = LaunchConfiguration('cam_names') # [zed_front, zed_rear]
     models = LaunchConfiguration('cam_models') # [zed2i, zed2i]

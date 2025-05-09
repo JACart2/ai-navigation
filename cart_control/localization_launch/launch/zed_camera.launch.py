@@ -140,8 +140,9 @@ def launch_setup(context, *args, **kwargs):
                 'general.serial_number': serial_number,
                 'pos_tracking.publish_tf': publish_tf,
                 'pos_tracking.publish_map_tf': publish_map_tf,
-                'sensors.publish_imu_tf': publish_imu_tf
-                # 'object_detection.od_enabled': True # TODO - This results in 0 camera feedback; something may be happening when the camera gets mounted with the URDF (tf between base_link -> camera_link)
+                'sensors.publish_imu_tf': publish_imu_tf,
+                'object_detection.od_enabled': True,
+                'object_detection.model': 'MULTI_CLASS_BOX_FAST'
             },
             ros_params_override_path,
         ]

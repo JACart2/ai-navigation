@@ -24,10 +24,6 @@ def generate_launch_description():
         arguments=["0", "0", "0", "0", "0", "0", "1", "base_link", "imu_link"],
     )
 
-    # Load the map right away
-    map_mm = LaunchConfiguration('MOLA_LOAD_MM', default='/tmp/my_map.mm')
-    map_sm = LaunchConfiguration('MOLA_LOAD_SM', default='/tmp/my_map.simplemap')
-
     # MOLA-LO launch in localization-only mode with map loading
     mola_localization = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -40,14 +36,12 @@ def generate_launch_description():
             "start_mapping_enabled": 'false',
             "start_active": 'false',
             "lidar_topic_name": "/velodyne_points",
-            # 'MOLA_LOAD_MM': map_mm,
-            # 'MOLA_LOAD_SM': map_sm,
+            'MOLA_LOAD_MM': '/dev_ws/src/mapping/maps/map.mm',
         }.items(),
     )
 
     return LaunchDescription([
         lidar_tf,
         imu_tf,
-        mola_localization
+        mola_localization,
     ])
-

@@ -144,7 +144,7 @@ def launch_setup(context, *args, **kwargs):
         # ZED Wrapper launch file
         zed_wrapper_launch = IncludeLaunchDescription(
             launch_description_source=PythonLaunchDescriptionSource([
-                get_package_share_directory('zed_wrapper'),
+                get_package_share_directory('zed_wrapper'), # TODO : Change this to be our own localization_launch package
                 '/launch/zed_camera.launch.py'
             ]),
             launch_arguments={

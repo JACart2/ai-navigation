@@ -39,8 +39,13 @@ def generate_launch_description():
 
     # Include the lidar_localization launch file using the new path
     liosam_localization_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([lio_sam_launch_path])
-    )
+        PythonLaunchDescriptionSource([lio_sam_launch_path]),
+        launch_arguments={
+            "localization_only": "true",
+            "loop_closure_flag": "false",
+            "static_map_path": "/home/jacart/jacart-project/dev_ws/src/maps/final_map_condensed_5-22.pcd",
+        }.items(),
+)
 
     # Specify the new path to lidar_localization.launch.py
     lidar_localization_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
@@ -91,6 +96,6 @@ def generate_launch_description():
             lidar_localization_launch,
             zed_multi_camera_launch,
             multi_link_tf,
-            # liosam_localization_launch,
+            liosam_localization_launch,
         ]
     )

@@ -37,8 +37,10 @@ setup(
             "speed_node = navigation.speed_node:main",
             "obstacle_converter = navigation.zed_object_to_obstacle:main",
             "collision_detector = navigation.collision_detector:main",
-            "display_global_path = navigation.display_global_path:main"
+            "display_global_path = navigation.display_global_path:main",
             "pose_bridge = navigation.pose_bridge:main",
+            "zed_object_to_obstacle = navigation.zed_object_to_obstacle:main",
+            "lidar_object_to_obstacle = navigation.lidar_object_to_obstacle:main",
         ],
     },
 )

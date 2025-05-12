@@ -5,6 +5,9 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import IncludeLaunchDescription
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -49,6 +52,17 @@ def generate_launch_description():
                 package="navigation",
                 executable="pose_bridge",
                 output="screen",
+            ),
+            # call other launchfiles from this package:
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    [FindPackageShare("navigation"), "/launch/obstacle_conversion.launch.py"]
+                )
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    [FindPackageShare("navigation"), "/launch/pointcloud-to-laserscan.launch.py"]
+                )
             ),
         ]
     )

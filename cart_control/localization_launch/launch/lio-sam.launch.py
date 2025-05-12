@@ -109,9 +109,13 @@ def generate_launch_description():
         parameters=[
             config,
             {
-                "localization_only": loc_only,
-                "static_map_path": static_map,
-                "loopClosureEnableFlag": loop_closure_flag,
+                "lio_sam_mapOptimization": {
+                    "ros__parameters": {
+                        "localization_only": loc_only,
+                        "static_map_path": static_map,
+                        "loopClosureEnableFlag": loop_closure_flag,
+                    }
+                }
             },
         ],
         arguments=["--ros-args", "--log-level", "map_optimization:=info"],

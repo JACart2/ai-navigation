@@ -113,40 +113,76 @@ def launch_setup(context, *args, **kwargs):
         }]
     )
 
-    # ZED Wrapper node
-    zed_wrapper_node = Node(
-        package='zed_wrapper',
-        namespace=camera_name_val,
-        executable='zed_wrapper',
-        name=node_name,
-        output='screen',
-        # prefix=['xterm -e valgrind --tools=callgrind'],
-        # prefix=['xterm -e gdb -ex run --args'],
-        #prefix=['gdbserver localhost:3000'],
-        parameters=[
-            # YAML files
-            config_common_path,  # Common parameters
-            config_camera_path,  # Camera related parameters
-            # Overriding
-            {
-                'use_sim_time': use_sim_time,
-                'simulation.sim_enabled': sim_mode,
-                'simulation.sim_address': sim_address,
-                'simulation.sim_port': sim_port,
-                'general.camera_name': camera_name_val,
-                'general.camera_model': camera_model_val,
-                'general.camera_flip': True,
-                'general.svo_file': svo_path,
-                'general.serial_number': serial_number,
-                'pos_tracking.publish_tf': publish_tf,
-                'pos_tracking.publish_map_tf': publish_map_tf,
-                'sensors.publish_imu_tf': publish_imu_tf,
-                'object_detection.od_enabled': True,
-                'object_detection.model': 'MULTI_CLASS_BOX_FAST'
-            },
-            ros_params_override_path,
-        ]
-    )
+    # ZED Wrapper node (only launch object detection for the front cam.)
+    zed_wrapper_node = None
+
+    if (camera_name_val == 'zed_front'):
+        # TODO - FINISH THIS
+        zed_wrapper_node = Node(
+            package='zed_wrapper',
+            namespace=camera_name_val,
+            executable='zed_wrapper',
+            name=node_name,
+            output='screen',
+            # prefix=['xterm -e valgrind --tools=callgrind'],
+            # prefix=['xterm -e gdb -ex run --args'],
+            #prefix=['gdbserver localhost:3000'],
+            parameters=[
+                # YAML files
+                config_common_path,  # Common parameters
+                config_camera_path,  # Camera related parameters
+                # Overriding
+                {
+                    'use_sim_time': use_sim_time,
+                    'simulation.sim_enabled': sim_mode,
+                    'simulation.sim_address': sim_address,
+                    'simulation.sim_port': sim_port,
+                    'general.camera_name': camera_name_val,
+                    'general.camera_model': camera_model_val,
+                    'general.camera_flip': True,
+                    'general.svo_file': svo_path,
+                    'general.serial_number': serial_number,
+                    'pos_tracking.publish_tf': publish_tf,
+                    'pos_tracking.publish_map_tf': publish_map_tf,
+                    'sensors.publish_imu_tf': publish_imu_tf,
+                    'object_detection.od_enabled': True,
+                    'object_detection.model': 'MULTI_CLASS_BOX_FAST'
+                },
+                ros_params_override_path,
+            ]
+        )
+    else:
+        zed_wrapper_node = Node(
+            package='zed_wrapper',
+            namespace=camera_name_val,
+            executable='zed_wrapper',
+            name=node_name,
+            output='screen',
+            # prefix=['xterm -e valgrind --tools=callgrind'],
+            # prefix=['xterm -e gdb -ex run --args'],
+            #prefix=['gdbserver localhost:3000'],
+            parameters=[
+                # YAML files
+                config_common_path,  # Common parameters
+                config_camera_path,  # Camera related parameters
+                # Overriding
+                {
+                    'use_sim_time': use_sim_time,
+                    'simulation.sim_enabled': sim_mode,
+                    'simulation.sim_address': sim_address,
+                    'simulation.sim_port': sim_port,
+                    'general.camera_name': camera_name_val,
+                    'general.camera_model': camera_model_val,
+                    'general.camera_flip': True,
+                    'general.svo_file': svo_path,
+                    'general.serial_number': serial_number,
+                    'pos_tracking.publish_tf': publish_tf,
+                    'pos_tracking.publish_map_tf': publish_map_tf,
+                    'sensors.publish_imu_tf': publish_imu_tf
+                },
+                ros_params_override_path,
+            ]
+        )
 
     return [
         rsp_node,

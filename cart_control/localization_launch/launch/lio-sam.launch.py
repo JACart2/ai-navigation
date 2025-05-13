@@ -18,29 +18,8 @@ def generate_launch_description():
         description="Path to the LIO-SAM configuration file",
     )
 
-    declare_loc_only_arg = DeclareLaunchArgument(
-        "localization_only",
-        default_value=TextSubstitution(text="false"),
-        description="Set to 'true' to run in localization-only mode",
-    )
-
-    declare_static_map_arg = DeclareLaunchArgument(
-        "static_map_path",
-        default_value=TextSubstitution(text=""),
-        description="Absolute path to the pre-built PCD map (required if localization_only == true)",
-    )
-
-    declare_loop_flag_arg = DeclareLaunchArgument(
-        "loop_closure_flag",
-        default_value=TextSubstitution(text="true"),
-        description="Enable loop closure. Set to 'false' if localization_only is true.",
-    )
-
     # Load launch config values
     config = LaunchConfiguration("config_file")
-    loc_only = LaunchConfiguration("localization_only")
-    static_map = LaunchConfiguration("static_map_path")
-    loop_closure_flag = LaunchConfiguration("loop_closure_flag")
 
     # TF static transforms
     lidar_tf = Node(
@@ -67,6 +46,7 @@ def generate_launch_description():
         parameters=[
             config,
             {
+                "imuTopic": "/zed_rear/zed_node_1/imu/data",
                 "qos_overrides./velodyne_points.reliability": "reliable",
                 "qos_overrides./zed_rear/zed_node/imu/data.reliability": "reliable",
                 "qos_overrides./odometry/imu_incremental.reliability": "reliable",
@@ -74,7 +54,7 @@ def generate_launch_description():
         ],
         remappings=[
             ("points", "/velodyne_points"),
-            ("imu/data", "/zed_rear/zed_node/imu/data"),
+            # ("imu/data", "/zed_rear/zed_node_1/imu/data"),
             ("odometry/imu", "/odometry/imu_incremental"),
         ],
         arguments=["--ros-args", "--log-level", "image_projection:=debug"],
@@ -106,28 +86,13 @@ def generate_launch_description():
         package="lio_sam",
         executable="lio_sam_mapOptimization",
         name="lio_sam_mapOptimization",
-        parameters=[
-            config,
-            {
-                "lio_sam_mapOptimization": {
-                    "ros__parameters": {
-                        "localization_only": loc_only,
-                        "static_map_path": static_map,
-                        "loopClosureEnableFlag": loop_closure_flag,
-                    }
-                }
-            },
-        ],
-        arguments=["--ros-args", "--log-level", "map_optimization:=info"],
+        parameters=[config],
         output="screen",
     )
 
     return LaunchDescription(
         [
             declare_config_arg,
-            declare_loc_only_arg,
-            declare_static_map_arg,
-            declare_loop_flag_arg,
             lidar_tf,
             imu_tf,
             TimerAction(

@@ -100,6 +100,10 @@ class MotorEndpoint(rclpy.node.Node):
             UInt8, "/direct_brake", self.brake_callback, 10
         )
 
+        self.resume_sub = self.create_subscription(
+            Bool, "/resume_navigation", self.resume_callback, 10
+        )
+
         # ROS2 PUBLISHERS
 
         # heartbeat is used to ensure that we have a stable connection with the ardiuno
@@ -180,6 +184,16 @@ class MotorEndpoint(rclpy.node.Node):
             self.state = BRAKING
             self.vel_planned = 0  # Stop movement
             self.stopping_time = time.time()  # Reset timeout clock
+    
+    def resume_callback(self, msg):
+        """Explicitly handle resume commands"""
+        if msg.data:  # Only act if True is received
+            if self.state in [STOPPED, BRAKING]:
+                self.state = MOVING
+                self.brake = 0  # Release brakes
+                self.brake_time_used = 0
+                self.full_stop_count = 0
+                self.log_header("RESUMING NAVIGATION - BRAKES RELEASED")
             
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""

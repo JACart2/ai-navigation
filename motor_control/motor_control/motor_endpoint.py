@@ -179,6 +179,7 @@ class MotorEndpoint(rclpy.node.Node):
         if msg.data > 0:
             self.state = BRAKING
             self.vel_planned = 0  # Stop movement
+            self.stopping_time = time.time()  # Reset timeout clock
             
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""

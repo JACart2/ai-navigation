@@ -95,6 +95,11 @@ class MotorEndpoint(rclpy.node.Node):
             Bool, "/set_manual_control", self.manual_callback, 10
         )
 
+        # Remove if Causing issues (should help with sending brake messages)
+        self.brake_sub = self.create_subscription(
+            UInt8, "/direct_brake", self.brake_callback, 10
+        )
+
         # ROS2 PUBLISHERS
 
         # heartbeat is used to ensure that we have a stable connection with the ardiuno
@@ -167,7 +172,14 @@ class MotorEndpoint(rclpy.node.Node):
         except Exception as e:
             self.log_header("MOTOR ENDPOINT: " + str(e))
             self.serial_connected = False
-
+    # Add new callback method:
+    def brake_callback(self, msg):
+        """Direct brake pressure control"""
+        self.brake = msg.data  # Set brake pressure directly (0-255)
+        if msg.data > 0:
+            self.state = BRAKING
+            self.vel_planned = 0  # Stop movement
+            
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""
 
@@ -177,7 +189,7 @@ class MotorEndpoint(rclpy.node.Node):
             # Wait for the timer to start over in the event of an error
             if not self.serial_connected:
                 return
-
+    
         # Check if we have received a target yet
         if self.vel_planned is not None and self.angle_planned is not None:
 

@@ -6,10 +6,19 @@ from launch_ros.substitutions import FindPackageShare
 import launch_ros
 import launch_ros.actions
 import launch_ros.events
-
-
+ 
+ 
 def generate_launch_description():
-
+    """
+    Generate a launch description for the full localization stack.
+    
+    This includes:
+    - Velodyne LiDAR driver and transform
+    - LiDAR-based localization
+    - One ZED camera (front only)
+    - Static transform between base_link and front camera
+    """
+ 
     # Launch the velodyne_driver node for VLP16
     velodyne_driver_node = Node(
         package="velodyne_driver",
@@ -17,7 +26,7 @@ def generate_launch_description():
         name="velodyne_driver_node",
         parameters=[{"model": "VLP16"}],
     )
-
+ 
     # Include the velodyne_transform_node-VLP16-launch.py directly
     velodyne_transform_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -27,31 +36,28 @@ def generate_launch_description():
             ]
         )
     )
-
+ 
     # Specify the new path to lidar_localization.launch.py
     lidar_localization_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
-    # Specify the new path to zed_multi_camera.launch.py
-    zed_multi_camera_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/zed_multi_camera.launch.py"
-
+    # Specify the path to zed_camera.launch.py
+    zed_camera_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/zed_camera.launch.py"
+ 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([lidar_localization_launch_path])
     )
-
-    # Include the zed_multi_camera launch file instead of individual zed_camera launches
-    zed_multi_camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([zed_multi_camera_launch_path]),
-        # Pass launch arguments for cameras, models, serials, and TF configuration
+ 
+    # Launch front camera with only name and model parameters
+    zed_front_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([zed_camera_launch_path]),
         launch_arguments={
-            "cam_names": "[zed_front, zed_rear]",  # Names of the cameras
-            "cam_models": "[zed2i, zed2i]",  # Models of the cameras
-            "cam_serials": "[37963597, 31061594]",  # Serial numbers of the cameras
-            "disable_tf": "False",  # Enable TF broadcasting
+            "camera_name": "zed_front",
+            "camera_model": "zed2i"
         }.items(),
     )
-
-    # Static transform for the reference link (zed_multi_link) to base_link
-    multi_link_tf = ExecuteProcess(
+ 
+    # Static transform for the front camera to base_link
+    front_camera_tf = ExecuteProcess(
         cmd=[
             "ros2",
             "run",
@@ -64,18 +70,18 @@ def generate_launch_description():
             "0.0",  # Pitch (rotation around Y-axis)
             "0.0",  # Yaw (rotation around Z-axis)
             "base_link",  # Parent frame (golf cart base)
-            "zed_front_camera_link",  # Child frame (reference link for cameras)
+            "zed_front_camera_link",  # Child frame (front camera link)
         ],
         output="screen",
     )
-
+    
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
             velodyne_driver_node,
             velodyne_transform_launch,
             lidar_localization_launch,
-            zed_multi_camera_launch,
-            multi_link_tf,
+            zed_front_launch,
+            front_camera_tf,
         ]
     )

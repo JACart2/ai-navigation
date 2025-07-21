@@ -42,7 +42,7 @@ class ZedObstacleConverter(rclpy.node.Node):
         # between OG implimentation and my implimentation is here.
         self.object_sub = self.create_subscription(
             ObjectsStamped,
-            "/zed_front/zed_node_0/obj_det/objects",
+            "/zed_front/zed_node/obj_det/objects",
             self.receiveObjects,
             10,
         )

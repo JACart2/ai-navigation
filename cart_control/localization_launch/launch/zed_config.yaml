@@ -1,0 +1,39 @@
+# Simple ZED camera configuration file
+---
+/**:
+    ros__parameters:
+        general:
+            camera_model: 'zed2i'
+            camera_name: 'zed_front'
+            grab_resolution: 'HD720'
+            grab_frame_rate: 30
+            camera_flip: true
+
+        video:
+            brightness: 4
+            contrast: 4
+            hue: 0
+
+        depth:
+            min_depth: 0.3
+            max_depth: 10.0
+        
+        object_detection:
+            od_enabled: true
+            model: 'MULTI_CLASS_BOX_FAST'
+            confidence_threshold: 40.0
+            enable_tracking: true
+            mc_people: true
+            mc_vehicle: true
+            mc_animal: true
+            mc_bag: false
+            mc_electronics: false
+            mc_fruit_vegetable: false
+            mc_sport: false
+
+        pos_tracking:
+            publish_tf: true
+            publish_map_tf: true
+
+        sensors:
+            publish_imu_tf: true

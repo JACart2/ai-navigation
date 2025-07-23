@@ -1,12 +1,12 @@
 """ Launch the motor control system.
 """
-
+ 
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-
-
+ 
+ 
 def generate_launch_description():
     return LaunchDescription(
         [
@@ -45,9 +45,22 @@ def generate_launch_description():
                 executable="visualize_graph",
                 output="screen",
             ),
+ 
+            Node(
+                package="navigation",
+                executable="obstacle_converter",
+                output="screen",
+            ),
+            Node(
+                package="navigation",
+                executable="collision_detector",
+                output="screen",
+            ),
         ]
+ 
+ 
     )
-
-
+ 
+ 
 if __name__ == "__main__":
     generate_launch_description()

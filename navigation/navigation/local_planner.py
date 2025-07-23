@@ -3,9 +3,11 @@
 This is the ROS 2 node that handles the local planning for the JACART.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
+Fixed by: ahmedislamfarouk (2025-07-23)
 """
 # Python based imports
 import math
+import time
 from navigation import pure_pursuit, cubic_spline_planner
 
 # ROS based imports
@@ -56,6 +58,9 @@ class LocalPlanner(rclpy.node.Node):
 
         # ros variables
         self.cur_pose = Pose()  # current position in local coordinates
+        
+        # Safety: Track if emergency stop is active
+        self.emergency_stop_active = False
 
         ## subscribers
         # The points to use for a path coming from global planner
@@ -69,7 +74,6 @@ class LocalPlanner(rclpy.node.Node):
         )
 
         # The position of the cart from NDT Matching
-
         # The topic name used to be ndt_pose
         self.pose_sub = self.create_subscription(
             PoseWithCovarianceStamped, "/pcl_pose", self.pose_cb, 10
@@ -122,23 +126,53 @@ class LocalPlanner(rclpy.node.Node):
         self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
 
         ## Timers
+        # SAFETY: Dedicated emergency stop handler - highest priority
+        self.stop_timer = self.create_timer(0.1, self.handle_emergency_stops)
+        
         # Calculate ETA
         self.eta_timer = self.create_timer(1, self.calc_eta)
 
-        # Main loop
+        # Main navigation loop
         self.timer = self.create_timer(0.05, self.timer_cb)
 
-        # plan_msg = VelAngle()
-        # plan_msg.vel = 5.0
-        # plan_msg.angle = 5.0
-
-        # self.motion_pub.publish(plan_msg)
+    def handle_emergency_stops(self):
+        """SAFETY: Always handle stops regardless of navigation state - runs at 10Hz"""
+        stop_active = False
+        
+        for sender, (stop_requested, distance) in self.stop_requests.items():
+            if stop_requested:
+                stop_active = True
+                
+                # Create stop command
+                stop_msg = VelAngle()
+                stop_msg.vel = 0.0
+                stop_msg.angle = 0.0
+                
+                if distance > 0:  # Obstacle distance provided
+                    stop_msg.vel = -distance
+                    
+                # Publish immediately
+                self.motion_pub.publish(stop_msg)
+                
+                # Log for debugging
+                self.log(f"EMERGENCY STOP from {sender}: vel={stop_msg.vel}, angle={stop_msg.angle}")
+                
+                # Force navigation to halt
+                self.path_valid = False
+                if self.current_state.is_navigating:
+                    self.current_state.is_navigating = False
+                    self.vehicle_state_pub.publish(self.current_state)
+                
+                break  # Process only first stop request
+        
+        self.emergency_stop_active = stop_active
 
     def timer_cb(self):
-        """Time callback responsible creating a path. Basically used as a second update function
-        If path is already created the create_path method does updating of the carts state
-        """
-        self.create_path()
+        """Navigation timer callback - only runs if no emergency stops active"""
+        # Only do navigation if no emergency stop is active
+        if not self.emergency_stop_active:
+            self.create_path()
+        # If emergency active, navigation is paused until stop is cleared
 
     def twist_cb(self, msg):
         """Getting current believed cart vel"""
@@ -149,10 +183,10 @@ class LocalPlanner(rclpy.node.Node):
         self.cur_pose = msg.pose.pose
 
     def stop_cb(self, msg):
-        #This was wrong in the last version
+        """Handle incoming stop requests"""
         self.stop_requests[str(msg.sender_id.data).lower()] = [msg.stop, msg.distance]
         self.log(
-            f"{str(msg.sender_id.data).lower()} requested stop: {str(msg.stop)} with distance {str(msg.distance)}"
+            f"STOP REQUEST from {str(msg.sender_id.data).lower()}: stop={str(msg.stop)}, distance={str(msg.distance)}"
         )
 
     def tar_speed_cb(self, msg):
@@ -174,7 +208,7 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
-        self.log(f"Path received: {str(msg)}")
+        self.log(f"Path received with {len(self.local_points)} points")
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -236,8 +270,6 @@ class LocalPlanner(rclpy.node.Node):
                 self.current_state.is_navigating = True
                 self.vehicle_state_pub.publish(self.current_state)
 
-                # target_speed = self.tar_speed
-
                 # initial state
                 pose = self.cur_pose
 
@@ -249,7 +281,7 @@ class LocalPlanner(rclpy.node.Node):
                 )
                 angles = tf.euler_from_quaternion(quat)
 
-                # ??? TODO state has to be where we start
+                # Initialize state
                 self.state = pure_pursuit.State(
                     x=pose.position.x, y=pose.position.y, yaw=angles[2], v=self.cur_vel
                 )
@@ -268,9 +300,6 @@ class LocalPlanner(rclpy.node.Node):
 
                 # Publish the ETA to the destination before we get started
                 self.calc_eta()
-                rate = 1.0 / 30.0  # 30 cycles per second
-
-                # TODO - Can we make this a timer that gets called then destoryed?
 
             else:
                 self.path_valid = False
@@ -280,10 +309,6 @@ class LocalPlanner(rclpy.node.Node):
             # Continue to loop while we have not hit the target destination, and the path is still valid
             if self.last_index > self.target_ind and self.path_valid:
 
-                # Uneeded unless testing (floods the terminal with messages when active)
-                # self.get_logger().info(
-                #     f"Cur pos: {self.cur_pose.position},   Tar pos: {self.local_points[-1]}"
-                # )
                 target_speed = self.tar_speed
                 ai = target_speed  # pure_pursuit.PIDControl(target_speed, state.v)
                 di, self.target_ind = pure_pursuit.pure_pursuit_control(
@@ -313,7 +338,7 @@ class LocalPlanner(rclpy.node.Node):
                 arrow.pose.orientation.w = quater[3]
                 self.target_twist_pub.publish(arrow)
 
-                # self.log_header("update is about to be called")
+                # Update state and publish navigation command
                 self.state = self.update(self.state, ai, di)
 
                 self.x.append(self.state.x)
@@ -331,7 +356,7 @@ class LocalPlanner(rclpy.node.Node):
 
                 # Let operator know why current path has stopped
                 if self.path_valid:
-                    self.log("Reached Destination succesfully without interruption")
+                    self.log("Reached Destination successfully without interruption")
                     self.arrived_pub.publish(notify_server)
                 else:
                     self.log(
@@ -343,15 +368,14 @@ class LocalPlanner(rclpy.node.Node):
                 plan_msg = VelAngle()
                 plan_msg.vel = 0.0
                 plan_msg.angle = 0.0
-
                 self.motion_pub.publish(plan_msg)
 
     def update(self, state, a, delta):
-        """Updates the carts position by a given state and delta"""
-
-        # self.log_header("update is being called")
+        """Updates the carts position by a given state and delta
+        NOTE: Stop handling is now done in handle_emergency_stops(), 
+        this method focuses on normal navigation
+        """
         pose = self.cur_pose
-        cur_speed = self.cur_vel
 
         plan_msg = VelAngle()
         plan_msg.vel = a  # Speed we want from pure pursuit controller
@@ -359,18 +383,12 @@ class LocalPlanner(rclpy.node.Node):
 
         display_angle = Float32()
         display_angle.data = plan_msg.angle
-
         self.steering_pub.publish(display_angle)
 
-        # Check if any node wants us to stop
-        for x in self.stop_requests.values():
-            if x[0]:  # stop requested
-                plan_msg.vel = 0.0
-                if x[1] > 0:  # obstacle distance is given
-                    plan_msg.vel = -x[1]
-
+        # Publish navigation command (emergency stops are handled separately)
         self.motion_pub.publish(plan_msg)
 
+        # Update state with current pose
         state.x = pose.position.x
         state.y = pose.position.y
 
@@ -383,7 +401,6 @@ class LocalPlanner(rclpy.node.Node):
         angles = tf.euler_from_quaternion(quat)
 
         state.yaw = angles[2]
-
         state.v = self.cur_vel
 
         # Display lines for projected path
@@ -460,18 +477,23 @@ class LocalPlanner(rclpy.node.Node):
                 self.cur_pose.position.x, self.cur_pose.position.y
             )
 
-            # distance_remaining = self.calc_trip_dist(self.local_points, current_node)
+            if current_node is not None:
+                distance_remaining = self.calc_trip_dist(self.local_points, current_node)
 
-            # # Remaining time in seconds
-            # remaining_time = distance_remaining / self.cur_speed
+                # Remaining time in seconds
+                if self.cur_speed > 0:
+                    remaining_time = distance_remaining / self.cur_speed
+                    # Calculate the ETA to the end
+                    arrival_time = time.time() + remaining_time
+                    # Convert the time to milliseconds
+                    eta_data = int(arrival_time * 1000)
+                else:
+                    eta_data = 0
+            else:
+                eta_data = 0
+
             eta_msg = UInt64()
-
-            # # Calculate the ETA to the end
-            # arrival_time = time.time() + remaining_time
-
-            # # Convert the time to milliseconds
-            # eta_msg.data = int(arrival_time * (1000))
-            eta_msg.data = 0
+            eta_msg.data = eta_data
             self.eta_pub.publish(eta_msg)
 
     def calc_trip_dist(self, points_list, start):
@@ -481,17 +503,16 @@ class LocalPlanner(rclpy.node.Node):
             points_list(List): The list of path points to calculate the distance of
             start(int): The index of which to start calculating the trip distance
         """
-        sum = 0
+        total_dist = 0.0
         for i in range(start, len(points_list) - 1):
-            sum += self.calc_dist(
+            total_dist += self.calc_dist(
                 points_list[i].x,
                 points_list[i].y,
                 points_list[i + 1].x,
                 points_list[i + 1].y,
             )
-            prev_node = i
 
-        return sum
+        return total_dist
 
     def get_closest_point(self, pos_x, pos_y):
         """Get the closest point along the raw path from pos_x, pos_y
@@ -499,7 +520,13 @@ class LocalPlanner(rclpy.node.Node):
         Args:
             pos_x(float): The x position of search center
             pos_y(float): The y position of search center
+            
+        Returns:
+            int: Index of closest point, or None if no points available
         """
+        if not self.local_points:
+            return None
+            
         min_node = 0
         min_dist = float("inf")
         for i in range(len(self.local_points)):
@@ -509,6 +536,8 @@ class LocalPlanner(rclpy.node.Node):
             if dist < min_dist:
                 min_dist = dist
                 min_node = i
+        
+        return min_node
 
     def calc_dist(self, x1, y1, x2, y2):
         return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
@@ -562,10 +591,13 @@ def main():
     rclpy.init()
     node = LocalPlanner()
 
-    rclpy.spin(node)
-
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.log("Shutting down local planner...")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":

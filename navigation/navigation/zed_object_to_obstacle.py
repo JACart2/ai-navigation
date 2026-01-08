@@ -12,7 +12,7 @@ import rclpy
 from navigation_interface.msg import Obstacle, ObstacleArray
 import rclpy.node
 from std_msgs.msg import Header
-from zed_interfaces.msg import ObjectsStamped
+from zed_msgs.msg import ObjectsStamped
 
 # Display purposes
 from visualization_msgs.msg import Marker

@@ -19,6 +19,10 @@ setup(
             os.path.join("share", package_name, "rviz"),
             glob(os.path.join("test", "*.rviz")),
         ),
+        (
+            os.path.join("share", package_name, "maps"),
+            glob(os.path.join("maps", "*")), 
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

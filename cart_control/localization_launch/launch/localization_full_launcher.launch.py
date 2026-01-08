@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, ExecuteProcess
+from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -38,19 +38,27 @@ def generate_launch_description():
     )
 
     # Include the lidar_localization launch file using the new path
-    liosam_localization_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([lio_sam_launch_path]),
-        launch_arguments={
-            "localization_only": "true",
-            "loop_closure_flag": "false",
-            "static_map_path": "/home/jacart/jacart-project/dev_ws/src/maps/final_map_condensed_5-22.pcd",
-        }.items(),
-)
+    # liosam_localization_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource([lio_sam_launch_path]),
+    #     launch_arguments={
+    #         "localization_only": "true",
+    #         "loop_closure_flag": "false",
+    #         "static_map_path": "/home/jacart/jacart-project/dev_ws/src/maps/final_map_condensed_5-22.pcd",
+    #     }.items(),
+    # )
 
     # Specify the new path to lidar_localization.launch.py
-    lidar_localization_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/lidar_localization.launch.py"
+    lidar_localization_launch_path = os.path.join(
+        get_package_share_directory("localization_launch"),
+        "launch",
+        "lidar_localization.launch.py",
+    )
     # Specify the new path to zed_multi_camera.launch.py
-    zed_multi_camera_launch_path = "./src/ai-navigation/cart_control/localization_launch/launch/zed_multi_camera.launch.py"
+    zed_multi_camera_launch_path = os.path.join(
+        get_package_share_directory("localization_launch"),
+        "launch",
+        "zed_multi_camera.launch.py",
+    )
 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(
@@ -70,12 +78,11 @@ def generate_launch_description():
     )
 
     # Static transform for the reference link (zed_multi_link) to base_link
-    multi_link_tf = ExecuteProcess(
-        cmd=[
-            "ros2",
-            "run",
-            "tf2_ros",
-            "static_transform_publisher",
+    multi_link_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="multi_link_tf",
+        arguments=[
             "1.0",  # X position (adjust as needed)
             "0.0",  # Y position (adjust as needed)
             "1.6",  # Z position (height of cameras above ground)
@@ -96,6 +103,6 @@ def generate_launch_description():
             lidar_localization_launch,
             zed_multi_camera_launch,
             multi_link_tf,
-            liosam_localization_launch,
+            # liosam_localization_launch,
         ]
     )

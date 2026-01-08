@@ -27,7 +27,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="./src/ai-navigation/navigation/maps/main_shift3.gml",
+                default_value=os.path.join(
+                    get_package_share_directory("navigation"), "maps", "main_shift3.gml"
+                ),
             ),
             Node(
                 package="navigation",

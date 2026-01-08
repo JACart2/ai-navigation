@@ -29,12 +29,14 @@ from launch.substitutions import (
     TextSubstitution
 )
 from launch_ros.actions import Node
+from launch_ros.actions import LoadComposableNodes
+from launch_ros.descriptions import ComposableNode
 
 # ZED Configurations to be loaded by ZED Node
 default_config_common = os.path.join(
     get_package_share_directory('zed_wrapper'),
     'config',
-    'common.yaml'
+    'common_stereo.yaml'
 )
 
 # URDF/xacro file to be loaded by the Robot State Publisher node
@@ -54,8 +56,6 @@ def parse_array_param(param):
 
 
 def launch_setup(context, *args, **kwargs):
-    wrapper_dir = get_package_share_directory('zed_wrapper')
-
     # Launch configuration variables
     svo_path = LaunchConfiguration('svo_path')
 
@@ -72,6 +72,7 @@ def launch_setup(context, *args, **kwargs):
     config_common_path = LaunchConfiguration('config_path')
 
     serial_number = LaunchConfiguration('serial_number')
+    camera_id = LaunchConfiguration('camera_id')
 
     publish_urdf = LaunchConfiguration('publish_urdf')
     publish_tf = LaunchConfiguration('publish_tf')
@@ -81,7 +82,10 @@ def launch_setup(context, *args, **kwargs):
 
     ros_params_override_path = LaunchConfiguration('ros_params_override_path')
 
-    gnss_frame = LaunchConfiguration('gnss_frame')
+    # NOTE: Jazzy zed_wrapper provides composable components (zed_components) rather
+    # than a standalone executable under libexec/zed_wrapper.
+    container_name = LaunchConfiguration('container_name')
+    namespace = LaunchConfiguration('namespace')
 
     camera_name_val = camera_name.perform(context)
     camera_model_val = camera_model.perform(context)
@@ -113,80 +117,49 @@ def launch_setup(context, *args, **kwargs):
         }]
     )
 
-    # ZED Wrapper node (only launch object detection for the front cam.)
-    zed_wrapper_node = None
+    # Load the ZED camera as a composable component into the existing container.
+    # This matches the upstream Jazzy launch behavior.
+    # If override path is empty or '.', don't pass it as a parameters file.
+    ros_override_val = ros_params_override_path.perform(context)
+    extra_param_files = []
+    if ros_override_val not in ['', '.']:
+        extra_param_files.append(ros_params_override_path)
 
-    if (camera_name_val == 'zed_front'):
-        # TODO - FINISH THIS
-        zed_wrapper_node = Node(
-            package='zed_wrapper',
-            namespace=camera_name_val,
-            executable='zed_wrapper',
-            name=node_name,
-            output='screen',
-            # prefix=['xterm -e valgrind --tools=callgrind'],
-            # prefix=['xterm -e gdb -ex run --args'],
-            #prefix=['gdbserver localhost:3000'],
-            parameters=[
-                # YAML files
-                config_common_path,  # Common parameters
-                config_camera_path,  # Camera related parameters
-                # Overriding
-                {
-                    'use_sim_time': use_sim_time,
-                    'simulation.sim_enabled': sim_mode,
-                    'simulation.sim_address': sim_address,
-                    'simulation.sim_port': sim_port,
-                    'general.camera_name': camera_name_val,
-                    'general.camera_model': camera_model_val,
-                    'general.camera_flip': True,
-                    'general.svo_file': svo_path,
-                    'general.serial_number': serial_number,
-                    'pos_tracking.publish_tf': publish_tf,
-                    'pos_tracking.publish_map_tf': publish_map_tf,
-                    'sensors.publish_imu_tf': publish_imu_tf,
-                    'object_detection.od_enabled': True,
-                    'object_detection.model': 'MULTI_CLASS_BOX_FAST'
-                },
-                ros_params_override_path,
-            ]
-        )
-    else:
-        zed_wrapper_node = Node(
-            package='zed_wrapper',
-            namespace=camera_name_val,
-            executable='zed_wrapper',
-            name=node_name,
-            output='screen',
-            # prefix=['xterm -e valgrind --tools=callgrind'],
-            # prefix=['xterm -e gdb -ex run --args'],
-            #prefix=['gdbserver localhost:3000'],
-            parameters=[
-                # YAML files
-                config_common_path,  # Common parameters
-                config_camera_path,  # Camera related parameters
-                # Overriding
-                {
-                    'use_sim_time': use_sim_time,
-                    'simulation.sim_enabled': sim_mode,
-                    'simulation.sim_address': sim_address,
-                    'simulation.sim_port': sim_port,
-                    'general.camera_name': camera_name_val,
-                    'general.camera_model': camera_model_val,
-                    'general.camera_flip': True,
-                    'general.svo_file': svo_path,
-                    'general.serial_number': serial_number,
-                    'pos_tracking.publish_tf': publish_tf,
-                    'pos_tracking.publish_map_tf': publish_map_tf,
-                    'sensors.publish_imu_tf': publish_imu_tf
-                },
-                ros_params_override_path,
-            ]
-        )
+    zed_component = ComposableNode(
+        package='zed_components',
+        plugin='stereolabs::ZedCamera',
+        name=node_name,
+        namespace=camera_name_val,
+        parameters=[
+            config_common_path,
+            config_camera_path,
+            {
+                'use_sim_time': use_sim_time,
+                'simulation.sim_enabled': sim_mode,
+                'simulation.sim_address': sim_address,
+                'simulation.sim_port': sim_port,
+                'general.camera_name': camera_name_val,
+                'general.camera_model': camera_model_val,
+                'general.camera_flip': True,
+                'general.svo_file': svo_path,
+                'general.serial_number': serial_number,
+                'general.camera_id': camera_id,
+                'pos_tracking.publish_tf': publish_tf,
+                'pos_tracking.publish_map_tf': publish_map_tf,
+                'sensors.publish_imu_tf': publish_imu_tf,
+            },
+            *extra_param_files,
+        ],
+    )
+
+    load_zed_component = LoadComposableNodes(
+        target_container=[namespace, '/', container_name],
+        composable_node_descriptions=[zed_component],
+    )
 
     return [
         rsp_node,
-        zed_wrapper_node
+        load_zed_component,
     ]
 
 
@@ -210,6 +183,14 @@ def generate_launch_description():
                 'config_path',
                 default_value=TextSubstitution(text=default_config_common),
                 description='Path to the YAML configuration file for the camera.'),
+            DeclareLaunchArgument(
+                'container_name',
+                default_value=TextSubstitution(text='zed_container'),
+                description='Name of the component container where the ZED component will be loaded.'),
+            DeclareLaunchArgument(
+                'namespace',
+                default_value=TextSubstitution(text='zed'),
+                description='Namespace of the component container where the ZED component will be loaded.'),
             DeclareLaunchArgument(
                 'serial_number',
                 default_value='0',
@@ -242,6 +223,10 @@ def generate_launch_description():
                 'ros_params_override_path',
                 default_value='',
                 description='The path to an additional parameters file to override the defaults'),
+            DeclareLaunchArgument(
+                'camera_id',
+                default_value='-1',
+                description='Camera ID (used if serial_number is 0).'),
             DeclareLaunchArgument(
                 'svo_path',
                 default_value=TextSubstitution(text='live'),

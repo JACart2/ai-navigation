@@ -149,7 +149,7 @@ class LocalPlanner(rclpy.node.Node):
         self.cur_pose = msg.pose.pose
 
     def stop_cb(self, msg):
-        self.stop_requests[str[msg.sender_id.data].lower()] = [msg.stop, msg.distance]
+        self.stop_requests[str(msg.sender_id.data).lower()] = [msg.stop, msg.distance]
         self.log(
             f"{str(msg.sender_id.data).lower()} requested stop: {str(msg.stop)} with distance {str(msg.distance)}"
         )

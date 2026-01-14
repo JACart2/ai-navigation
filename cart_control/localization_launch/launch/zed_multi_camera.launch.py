@@ -50,11 +50,12 @@ def launch_setup(context, *args, **kwargs):
     namespace_val = 'zed_multi'
     
     # URDF/xacro file to be loaded by the Robot State Publisher node
-    # multi_zed_xacro_path = os.path.join(
-    # get_package_share_directory('localization_launch'),
-    # 'param',
-    # 'zed_multi.urdf.xacro')
-    multi_zed_xacro_path = '/dev_ws/src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro'
+    multi_zed_xacro_path = os.path.join(
+        get_package_share_directory("localization_launch"),
+        "param",
+        "zed_multi.urdf.xacro",
+    )
+    # multi_zed_xacro_path = '/dev_ws/src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro'
 
     names = LaunchConfiguration('cam_names') # [zed_front, zed_rear]
     models = LaunchConfiguration('cam_models') # [zed2i, zed2i]
@@ -119,8 +120,6 @@ def launch_setup(context, *args, **kwargs):
             id = ids_arr[cam_idx]
         else:
             id = '-1'
-        
-        pose = '['
 
         info = '* Starting a ZED ROS2 node for camera ' + name + \
             ' (' + model        
@@ -157,7 +156,9 @@ def launch_setup(context, *args, **kwargs):
                 'publish_tf': publish_tf,
                 'publish_map_tf': publish_tf,
                 'namespace': namespace_val,
-                'node_name': node_name
+                'node_name': node_name,
+                # Ensure this is a file path (empty string is fine); passing '.' will crash launch.
+                'ros_params_override_path': ''
             }.items()
         )
         actions.append(zed_wrapper_launch)

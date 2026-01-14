@@ -8,6 +8,8 @@ from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.actions import IncludeLaunchDescription
 from launch_ros.substitutions import FindPackageShare
+from ament_index_python.packages import get_package_share_directory 
+import os
 
 
 def generate_launch_description():
@@ -15,7 +17,9 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="./src/ai-navigation/navigation/maps/main_shift3.gml",
+                default_value=os.path.join(
+                    get_package_share_directory("navigation"), "maps", "main_shift3.gml"
+                ),
             ),
             Node(
                 package="navigation",

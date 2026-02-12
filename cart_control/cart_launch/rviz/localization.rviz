@@ -270,7 +270,7 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /visual_path
       Value: true
-          - Class: rviz_default_plugins/Marker
+    - Class: rviz_default_plugins/Marker
       Enabled: true
       Name: LidarObstacles
       Namespaces:

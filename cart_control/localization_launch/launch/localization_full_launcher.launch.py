@@ -1,8 +1,9 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 import launch_ros
 import launch_ros.actions
@@ -11,6 +12,9 @@ import os
 
 
 def generate_launch_description():
+
+    zed_front_serial = LaunchConfiguration("zed_front_serial")
+    zed_rear_serial = LaunchConfiguration("zed_rear_serial")
 
     # Launch the velodyne_driver node for VLP16
     velodyne_driver_node = Node(
@@ -68,12 +72,24 @@ def generate_launch_description():
 
     # Include the cameras launch file
     cameras_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([cameras_launch_path])
+        PythonLaunchDescriptionSource([cameras_launch_path]),
+        launch_arguments={
+            "zed_front_serial": zed_front_serial,
+            "zed_rear_serial": zed_rear_serial,
+        }.items(),
     )
 
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "zed_front_serial",
+                description="Serial number for zed_front camera",
+            ),
+            DeclareLaunchArgument(
+                "zed_rear_serial",
+                description="Serial number for zed_rear camera",
+            ),
             velodyne_driver_node,
             velodyne_transform_launch,
             lidar_localization_launch,

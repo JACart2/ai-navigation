@@ -14,11 +14,23 @@ import launch_ros.events
 def generate_launch_description():
 
     console_start_delay_s = LaunchConfiguration("console_start_delay_s")
+    zed_front_serial = LaunchConfiguration("zed_front_serial")
+    zed_rear_serial = LaunchConfiguration("zed_rear_serial")
 
     declare_console_start_delay_s = DeclareLaunchArgument(
         "console_start_delay_s",
         default_value="5.0",
         description="Delay (seconds) before launching the rest of the stack, to let swri_console start first.",
+    )
+    declare_zed_front_serial = DeclareLaunchArgument(
+        "zed_front_serial",
+        default_value="37963597",
+        description="Serial number for zed_front camera",
+    )
+    declare_zed_rear_serial = DeclareLaunchArgument(
+        "zed_rear_serial",
+        default_value="31061594",
+        description="Serial number for zed_rear camera",
     )
 
     swri_console_node = Node(
@@ -35,7 +47,11 @@ def generate_launch_description():
                 FindPackageShare("localization_launch"),
                 "/launch/localization_full_launcher.launch.py",
             ]
-        )
+        ),
+        launch_arguments={
+            "zed_front_serial": zed_front_serial,
+            "zed_rear_serial": zed_rear_serial,
+        }.items(),
     )
 
     # Launch the navigation launcher
@@ -88,6 +104,8 @@ def generate_launch_description():
     return LaunchDescription(
         [
             declare_console_start_delay_s,
+            declare_zed_front_serial,
+            declare_zed_rear_serial,
             swri_console_node,
             delayed_stack,
         ]

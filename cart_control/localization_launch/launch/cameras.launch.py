@@ -1,12 +1,16 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
 
 
 def generate_launch_description():
+
+    zed_front_serial = LaunchConfiguration("zed_front_serial")
+    zed_rear_serial = LaunchConfiguration("zed_rear_serial")
 
     # Specify the path to zed_multi_camera.launch.py
     zed_multi_camera_launch_path = os.path.join(
@@ -22,7 +26,13 @@ def generate_launch_description():
         launch_arguments={
             "cam_names": "[zed_front, zed_rear]",  # Names of the cameras
             "cam_models": "[zed2i, zed2i]",  # Models of the cameras
-            "cam_serials": "[37963597, 31061594]",  # Serial numbers of the cameras
+            "cam_serials": PythonExpression([
+                "[",
+                zed_front_serial,
+                ", ",
+                zed_rear_serial,
+                "]",
+            ]),  # Serial numbers of the cameras
             "disable_tf": "False",  # Enable TF broadcasting
         }.items(),
     )
@@ -48,6 +58,14 @@ def generate_launch_description():
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "zed_front_serial",
+                description="Serial number for zed_front camera",
+            ),
+            DeclareLaunchArgument(
+                "zed_rear_serial",
+                description="Serial number for zed_rear camera",
+            ),
             zed_multi_camera_launch,
             multi_link_tf,
         ]

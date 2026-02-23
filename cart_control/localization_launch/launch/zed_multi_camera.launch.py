@@ -57,6 +57,9 @@ def launch_setup(context, *args, **kwargs):
     )
     # multi_zed_xacro_path = '/dev_ws/src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro'
 
+    # Common camera config file for all ZED instances in this launch.
+    config_path = LaunchConfiguration('config_path')
+
     names = LaunchConfiguration('cam_names') # [zed_front, zed_rear]
     models = LaunchConfiguration('cam_models') # [zed2i, zed2i]
     serials = LaunchConfiguration('cam_serials') # [37963597, 31061594]
@@ -157,6 +160,7 @@ def launch_setup(context, *args, **kwargs):
                 'publish_map_tf': publish_tf,
                 'namespace': namespace_val,
                 'node_name': node_name,
+                'config_path': config_path,
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.
                 'ros_params_override_path': ''
             }.items()
@@ -222,6 +226,14 @@ def generate_launch_description():
                 'disable_tf',
                 default_value='False',
                 description='If `True` disable TF broadcasting for all the cameras in order to fuse visual odometry information externally.'),
+            DeclareLaunchArgument(
+                'config_path',
+                default_value=os.path.join(
+                    get_package_share_directory("localization_launch"),
+                    "config",
+                    "common.yaml",
+                ),
+                description='Path to the common YAML config loaded by each ZED camera node.'),
             OpaqueFunction(function=launch_setup)
         ]
     )

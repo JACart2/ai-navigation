@@ -14,11 +14,15 @@
 
 import os
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import (
+    PackageNotFoundError,
+    get_package_share_directory,
+)
 
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    LogInfo,
     OpaqueFunction,
     SetEnvironmentVariable
 )
@@ -45,6 +49,12 @@ default_xacro_path = os.path.join(
     'urdf',
     'zed_descr.urdf.xacro'
 )
+
+try:
+    get_package_share_directory('zed_components')
+    HAS_ZED_COMPONENTS = True
+except PackageNotFoundError:
+    HAS_ZED_COMPONENTS = False
 
 
 def parse_array_param(param):
@@ -125,41 +135,60 @@ def launch_setup(context, *args, **kwargs):
     if ros_override_val not in ['', '.']:
         extra_param_files.append(ros_params_override_path)
 
-    zed_component = ComposableNode(
-        package='zed_components',
-        plugin='stereolabs::ZedCamera',
+    camera_parameters = [
+        config_common_path,
+        config_camera_path,
+        {
+            'use_sim_time': use_sim_time,
+            'simulation.sim_enabled': sim_mode,
+            'simulation.sim_address': sim_address,
+            'simulation.sim_port': sim_port,
+            'general.camera_name': camera_name_val,
+            'general.camera_model': camera_model_val,
+            'general.camera_flip': True,
+            'general.svo_file': svo_path,
+            'general.serial_number': serial_number,
+            'general.camera_id': camera_id,
+            'pos_tracking.publish_tf': publish_tf,
+            'pos_tracking.publish_map_tf': publish_map_tf,
+            'sensors.publish_imu_tf': publish_imu_tf,
+        },
+        *extra_param_files,
+    ]
+
+    if HAS_ZED_COMPONENTS:
+        zed_component = ComposableNode(
+            package='zed_components',
+            plugin='stereolabs::ZedCamera',
+            name=node_name,
+            namespace=camera_name_val,
+            parameters=camera_parameters,
+        )
+
+        load_zed_component = LoadComposableNodes(
+            target_container=[namespace, '/', container_name],
+            composable_node_descriptions=[zed_component],
+        )
+
+        return [
+            LogInfo(msg='Loading ZED camera as composable node (zed_components).'),
+            rsp_node,
+            load_zed_component,
+        ]
+
+    zed_wrapper_node = Node(
+        package='zed_wrapper',
+        executable='zed_wrapper',
         name=node_name,
         namespace=camera_name_val,
-        parameters=[
-            config_common_path,
-            config_camera_path,
-            {
-                'use_sim_time': use_sim_time,
-                'simulation.sim_enabled': sim_mode,
-                'simulation.sim_address': sim_address,
-                'simulation.sim_port': sim_port,
-                'general.camera_name': camera_name_val,
-                'general.camera_model': camera_model_val,
-                'general.camera_flip': True,
-                'general.svo_file': svo_path,
-                'general.serial_number': serial_number,
-                'general.camera_id': camera_id,
-                'pos_tracking.publish_tf': publish_tf,
-                'pos_tracking.publish_map_tf': publish_map_tf,
-                'sensors.publish_imu_tf': publish_imu_tf,
-            },
-            *extra_param_files,
-        ],
-    )
-
-    load_zed_component = LoadComposableNodes(
-        target_container=[namespace, '/', container_name],
-        composable_node_descriptions=[zed_component],
+        output='screen',
+        parameters=camera_parameters,
     )
 
     return [
+        LogInfo(msg='Loading ZED camera as standalone node (zed_wrapper executable).'),
         rsp_node,
-        load_zed_component,
+        zed_wrapper_node,
     ]
 
 

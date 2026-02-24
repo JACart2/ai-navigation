@@ -459,7 +459,7 @@ class LocalPlanner(rclpy.node.Node):
                 self.cur_pose.position.x, self.cur_pose.position.y
             )
 
-            self.log("x: " + str(self.cur_pose.position.x) + "y: " + str(self.cur_pose.position.y))
+            # self.log("x: " + str(self.cur_pose.position.x) + "y: " + str(self.cur_pose.position.y))
 
             distance_remaining = self.calc_trip_dist(self.local_points, current_node)
 

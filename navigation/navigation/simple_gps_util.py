@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import math
-import numpy
 from geometry_msgs.msg import Point
 
 """
 This file is a modified version of the AlvinXY method produced by WHOI
+Modified by Joshua Sun in Spring 2026.
 """
 
 
@@ -68,46 +68,136 @@ def heading_correction(origin_x, origin_y, angle, point):
 
 
 def calibrate_util(test_point_local, map_origin_local, test_point_gps, map_origin_gps):
-    """A calibration utility for finding the optimal heading angle for use.
+    """A calibration utility for finding the heading angle between the GPS frame and the
+    local map frame using two known point correspondences.
+
+    Computes the angle analytically via atan2 — the difference in bearing between the
+    two points in GPS space vs. local map space. This is exact (no search granularity
+    error) and limited only by the precision of the input coordinates.
 
     Args:
         test_point_local: Selected test point tuple in X, Y
         map_origin_local: The PCD map's origin tuple in X, Y
         test_point_gps: The same selected test point tuple but in Latitude, Longitude tuple
         map_origin_gps: The same map origin but a Latitude, Longitude tuple
+
+    Returns:
+        Heading offset angle in degrees
     """
-    min_err_angle = 360
-    min_err = 999999
-
-    # Test point in X, Y
-    point_x, point_y = test_point_local[0], test_point_local[1]
-
-    # Same test point but in GPS coordinates
-    lat_x, lat_y = test_point_gps[0], test_point_gps[1]
-
-    # Map Origin in X, Y
-    map_x, map_y = map_origin_local[0], map_origin_local[1]
-
-    # Same origin but in Latitude Longitude
     map_lat, map_lon = map_origin_gps[0], map_origin_gps[1]
 
-    # Step degree of 0.1 is arbitrary and is indeed a magic number
-    for angle in numpy.arange(0, 360, 0.1):
-        # Get a fresh point for each heading adjustment
-        local_point = Point()
-        local_x, local_y = latlon2xy(lat_x, lat_y, map_lat, map_lon)
-        local_point.x = local_x
-        local_point.y = local_y
+    # Vector from anchor to test point in GPS space (meters)
+    gps_x, gps_y = latlon2xy(
+        test_point_gps[0], test_point_gps[1], map_lat, map_lon
+    )
+    gps_dx = gps_x - 0  # relative to GPS-frame anchor (always 0,0 from latlon2xy)
+    gps_dy = gps_y - 0
 
-        # Calculate the heading using the step angle and point
-        corrected_point = heading_correction(map_x, map_y, angle, local_point)
+    # Vector from anchor to test point in local map space
+    local_dx = test_point_local[0] - map_origin_local[0]
+    local_dy = test_point_local[1] - map_origin_local[1]
 
-        # Calculate the error this heading gives
-        dist_err = math.sqrt(
-            (corrected_point.x - point_x) ** 2 + (corrected_point.y - point_y) ** 2
+    # Bearing of the vector in each frame
+    gps_bearing   = math.degrees(math.atan2(gps_dy, gps_dx))
+    local_bearing = math.degrees(math.atan2(local_dy, local_dx))
+
+    # The rotation needed to align GPS frame to local map frame
+    angle = (local_bearing - gps_bearing) % 360
+
+    return angle
+
+
+def calibrate_util_multi(test_points_local, map_origin_local, test_points_gps, map_origin_gps):
+    """Multi-point calibration using the circular mean of per-pair atan2 angles.
+
+    Each test-point pair contributes one angle estimate via calibrate_util.
+    A circular mean (sin/cos averaging) is then used to combine them correctly,
+    avoiding the wrap-around error that plain arithmetic mean produces near 0°/360°.
+    More spread-out test points reduce the impact of any single imprecise GPS reading.
+
+    Args:
+        test_points_local: List of (X, Y) tuples in local map frame
+        map_origin_local:  Map anchor tuple in X, Y
+        test_points_gps:   List of (lat, lon) tuples for the same test points
+        map_origin_gps:    Map anchor as (lat, lon)
+
+    Returns:
+        Heading offset angle in degrees (circular mean across all pairs)
+    """
+    if len(test_points_local) != len(test_points_gps):
+        raise ValueError(
+            f"test_points_local ({len(test_points_local)} pts) and "
+            f"test_points_gps ({len(test_points_gps)} pts) must be the same length"
         )
-        if dist_err < min_err:
-            min_err = dist_err
-            min_err_angle = angle
+    if len(test_points_local) == 0:
+        raise ValueError("At least one test point pair is required")
 
-    return min_err_angle
+    # Single-point fast path — no averaging needed
+    if len(test_points_local) == 1:
+        return calibrate_util(
+            test_points_local[0], map_origin_local,
+            test_points_gps[0],   map_origin_gps
+        )
+
+    # Accumulate unit vectors on the unit circle (circular mean)
+    sin_sum = 0.0
+    cos_sum = 0.0
+    for pt_local, pt_gps in zip(test_points_local, test_points_gps):
+        angle_rad = math.radians(
+            calibrate_util(pt_local, map_origin_local, pt_gps, map_origin_gps)
+        )
+        sin_sum += math.sin(angle_rad)
+        cos_sum += math.cos(angle_rad)
+
+    return math.degrees(math.atan2(sin_sum, cos_sum)) % 360
+
+
+def convert_gml_to_gps(input_path, output_path, anchor_gps, anchor_local, anchor_theta):
+    """Convert a GML map file from local ROS coordinates to GPS (lat/lon) coordinates.
+
+    Each node's pos [x, y] is transformed using the same pipeline as the runtime
+    local→GPS conversion in global_planner.py:
+        1. Subtract anchor_local to re-centre on the GPS anchor
+        2. Rotate by -anchor_theta to align with the GPS frame
+        3. Convert metre offset to lat/lon via xy2latlon
+
+    The output GML replaces the two-value 'pos' list attribute with separate 'lat'
+    and 'lon' float attributes on every node.  All edges and non-pos node attributes
+    (label, active, weight, …) are preserved exactly as-is.
+
+    Args:
+        input_path:   Path to the source .gml file (local ROS coordinates)
+        output_path:  Path to write the converted .gml file
+        anchor_gps:   (lat, lon) of the map anchor point
+        anchor_local: (x, y) of the same anchor in local map frame
+        anchor_theta: Heading offset in degrees (from calibrate_util_multi)
+
+    Returns:
+        The converted NetworkX DiGraph
+    """
+    import networkx as nx
+
+    graph = nx.read_gml(input_path)
+    anchor_lat, anchor_lon = anchor_gps[0], anchor_gps[1]
+
+    for node in graph.nodes:
+        pos = graph.nodes[node]["pos"]
+        local_x, local_y = pos[0], pos[1]
+
+        # Step 1: subtract anchor_local to re-centre on the GPS anchor origin
+        pt = Point()
+        pt.x = local_x - anchor_local[0]
+        pt.y = local_y - anchor_local[1]
+
+        # Step 2: rotate by -anchor_theta to align with the GPS frame
+        pt = heading_correction(0, 0, -anchor_theta, pt)
+
+        # Step 3: convert metre offset to lat/lon
+        lat, lon = xy2latlon(pt.x, pt.y, anchor_lat, anchor_lon)
+
+        graph.nodes[node]["lat"] = lat
+        graph.nodes[node]["lon"] = lon
+        del graph.nodes[node]["pos"]
+
+    nx.write_gml(graph, output_path)
+    return graph

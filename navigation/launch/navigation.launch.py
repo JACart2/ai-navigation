@@ -28,6 +28,10 @@ def generate_launch_description():
                 parameters=[
                     {
                         "graph_file": LaunchConfiguration("graph_file"),
+                        "anchor_gps":     [38.433939, -78.862157],
+                        "anchor_local":   [0.0, 0.0],
+                        "test_loc_gps":   [38.43956786501199, -78.8753470745255],
+                        "test_loc_local": [-456.7843017578125, -1224.987548828125],
                     }
                 ],
             ),

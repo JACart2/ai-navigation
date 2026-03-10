@@ -173,7 +173,8 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
-        self.log(f"Path received: {str(msg)}")
+        #self.log(f"Path received: {str(msg)}")
+        self.log(f"Path received. Navigating to {str(self.local_points[-1])}.")
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points

@@ -130,11 +130,7 @@ class MotorEndpoint(rclpy.node.Node):
             self.full_stop_count = 0
 
         # Setting some class variables about the state of the cart here given what our instructed velocity/angle is
-        if (
-            self.vel_planned > 0
-            and (self.state == STOPPED or self.state == BRAKING)
-            and (time.time() - self.stopping_time) > 10
-        ):
+        if self.vel_planned > 0 and (self.state == STOPPED or self.state == BRAKING):
             self.state = MOVING
             self.brake = 0  # take the foot off the brake
         elif self.state == MOVING and self.vel_planned <= 0:  # Brakes are hit

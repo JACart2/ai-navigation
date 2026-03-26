@@ -24,6 +24,7 @@ Important Notes Before Continuing:
 import math
 import time
 import numpy as np
+from std_msgs.msg import String
 
 # ROS2 libraries.
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
@@ -177,6 +178,9 @@ class CollisionDetector(rclpy.node.Node):
         # cart in the event an obstacle is moving in front of the cart,
         # allowing the cart to "follow" the obstacle.
         self.speed_pub = self.create_publisher(Float32, "/speed", 10)
+
+        # Publisher for collision detector state monitoring
+        self.state_pub = self.create_publisher(String, "/collision_detector_state", 10)
 
         # Pretty sure this is just used to get the physical corners of the cart.
         # Zane, the previous student who worked on this file, made suggestions
@@ -360,6 +364,13 @@ class CollisionDetector(rclpy.node.Node):
                             if not self.obstacle_detected:
                                 new_speed = (3.23 * obstacle_speed) + 4.254
                                 if new_speed < 3 and new_speed > 0:
+                                    self.get_logger().info(f"[CollisionDetector] Following obstacle - speed: {new_speed:.2f} m/s, obstacle_speed: {obstacle_speed:.2f} m/s")
+
+                                    # Publish state change
+                                    state_msg = String()
+                                    state_msg.data = f"FOLLOWING_OBSTACLE - Speed: {new_speed:.2f} m/s, Obstacle Speed: {obstacle_speed:.2f} m/s"
+                                    self.state_pub.publish(state_msg)
+
                                     self.speed_pub.publish(math.ceil(new_speed) + 1)
                                     self.obstacle_detected = True
 
@@ -373,6 +384,14 @@ class CollisionDetector(rclpy.node.Node):
                     self.cleared_confidence = 0
                     if not self.stopped:
                         self.stopped = True
+                        self.get_logger().warn(f"[CollisionDetector] STOP - Obstacle at distance: {distance:.2f}m, impact_time: {impact_time:.2f}s")   
+
+                        # Publish state change
+                        state_msg = String()
+                        state_msg.data = f"STOPPED - Distance: {distance:.2f}m, Impact Time: {impact_time:.2f}s"
+                        self.state_pub.publish(state_msg)      
+
+
                         stop_msg.distance = distance
                         self.stop_pub.publish(stop_msg)
 
@@ -398,6 +417,13 @@ class CollisionDetector(rclpy.node.Node):
             else:
                 if self.obstacle_detected:
                     self.resume_confid += 1
+                    self.get_logger().debug(f"[CollisionDetector] Clearing obstacle - resume_confid: {self.resume_confid}/8")
+
+                    # Publish state change
+                    state_msg = String()
+                    state_msg.data = "RESUMED - Path cleared"
+                    self.state_pub.publish(state_msg)
+                    
                     if self.resume_confid > 8:
                         self.obstacle_detected = False
                         self.speed_pub.publish(10)
@@ -412,6 +438,7 @@ class CollisionDetector(rclpy.node.Node):
             if self.stopped and self.cleared_confidence >= 15:
                 self.cleared_confidence = 0
                 self.stopped = False
+                self.get_logger().info(f"[CollisionDetector] RESUME - Path cleared after {self.cleared_confidence} cycles")
                 stop_msg = Stop()
                 stop_msg.stop = False
                 stop_msg.sender_id.data = "collision_detector"

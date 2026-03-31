@@ -493,21 +493,34 @@ class CollisionDetector(rclpy.node.Node):
         bound_display.lifetime = Duration(seconds=0.033).to_msg()
         bound_display.type = Marker.LINE_STRIP
         bound_display.header.frame_id = "/base_link"
-        bound_display.scale.x = 0.2
+        bound_display.scale.x = 0.05
         bound_display.color.r = 1.0
         bound_display.color.g = 1.0
         bound_display.color.b = 0.0
         bound_display.color.a = 1.0
         bound_display.action = Marker.ADD
 
-        # Obtain the angle range necessary for a certain arc length in this case 20
-        ang = 20 / (2 * radius)
+        # Build a fixed arc length (meters) and sample with a minimum number of points so
+        # the curve remains visible in RViz even when steering is near straight.
+        arc_length_m = 5.0
+        radius_abs = abs(radius)
+        if radius_abs < 1e-6:
+            return bound_display
 
-        # Setup arc display range
+        # Central angle swept by the requested arc length.
+        ang = arc_length_m / radius_abs
+
+        # Setup arc display range.
         if right_turn:
-            loop_range = np.arange((math.pi / 2) + ang, math.pi / 2, 0.10)
+            start_ang = (math.pi / 2) - ang
+            end_ang = math.pi / 2
         else:
-            loop_range = np.arange(-(math.pi / 2), (-(math.pi / 2)) + ang, 0.10)
+            start_ang = -(math.pi / 2)
+            end_ang = (-(math.pi / 2)) + ang
+
+        # Use linspace so we always get points, regardless of turn direction and angular span.
+        point_count = max(30, int(abs(end_ang - start_ang) / 0.02))
+        loop_range = np.linspace(start_ang, end_ang, point_count)
 
         # Obtain the points along the arc on the circle
         for ang in loop_range:

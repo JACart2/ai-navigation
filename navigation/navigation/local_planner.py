@@ -37,12 +37,8 @@ class LocalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("local_planner")
 
-        self.declare_parameter("cruise_speed_kph", 30.0)
-
         # driving constants THIS USED TO BE 10 and 3.6 respectively
-        self.METERS = (
-            self.get_parameter("cruise_speed_kph").get_parameter_value().double_value
-        )
+        self.METERS = 30.0
         self.SECONDS = 3.6
 
         # driving variables

@@ -118,7 +118,6 @@ class CollisionDetector(rclpy.node.Node):
         # self.declare_parameter("min_obstacle_time", 2.5)
         self.declare_parameter("safe_obstacle_dist", 6 * factor)
         self.declare_parameter("safe_obstacle_time", 2 * factor)
-        self.declare_parameter("cruise_speed_kph", 30.0)
 
         # self.MIN_OBSTACLE_DIST = (
         #     self.get_paramater("min_obstacle_dist").get_paramter_value().float_value
@@ -134,10 +133,6 @@ class CollisionDetector(rclpy.node.Node):
         )
         self.SAFE_OBSTACLE_TIME = (
             self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
-        )
-        # /speed uses km/h, matching the local planner's target-speed interface.
-        self.CRUISE_SPEED_KPH = (
-            self.get_parameter("cruise_speed_kph").get_parameter_value().double_value
         )
 
         # Subscribes to the /obstacles topic where ObstacleArray msg types are sent
@@ -196,21 +191,6 @@ class CollisionDetector(rclpy.node.Node):
         if self.cur_obstacles is not None:
             # Calculate the inner and outer radius for arcs and the center of their circ
             self.determine_collision()
-
-    def publish_speed_request(self, speed_kph):
-        """Publish a planner speed request in km/h."""
-        speed_msg = Float32()
-        speed_msg.data = float(speed_kph)
-        self.speed_pub.publish(speed_msg)
-
-    def clear_follow_speed_override(self):
-        """Restore the planner's normal cruise speed after obstacle following ends."""
-        self.obstacle_detected = False
-        self.resume_confid = 0
-        self.prev_distance = None
-        self.prev_time = None
-        self.prev_obstacle_speed = 0
-        self.publish_speed_request(self.CRUISE_SPEED_KPH)
 
     def angle_callback(self, msg):
         self.requested_steering_angle = msg.angle
@@ -312,7 +292,6 @@ class CollisionDetector(rclpy.node.Node):
 
         # Control for undoing a stop
         clear_path = True
-        follow_speed_active = False
 
         cur_obstacle_list = self.cur_obstacles
         for obstacle in cur_obstacle_list:
@@ -352,7 +331,6 @@ class CollisionDetector(rclpy.node.Node):
                     o for o in cur_obstacle_list if o.followable
                 ]
                 if self.followable_obstacles:
-                    follow_speed_active = True
                     # Calculate distance from front of cart to obstacle
                     distance = self.distance(
                         self.followable_obstacles[0].pos.point.x,
@@ -382,9 +360,10 @@ class CollisionDetector(rclpy.node.Node):
                             if not self.obstacle_detected:
                                 new_speed = (3.23 * obstacle_speed) + 4.254
                                 if new_speed < 3 and new_speed > 0:
-                                    self.publish_speed_request(
-                                        float(math.ceil(new_speed) + 1)
-                                    )
+                                    # ROS2 publisher expects a Float32 message object (not a raw int/float).
+                                    speed_msg = Float32()
+                                    speed_msg.data = float(math.ceil(new_speed) + 1)
+                                    self.speed_pub.publish(speed_msg)
                                     self.obstacle_detected = True
 
                     self.prev_distance = distance
@@ -419,17 +398,19 @@ class CollisionDetector(rclpy.node.Node):
                     display = self.show_colliding_obstacle(
                         obstacle.pos.point.x, obstacle.pos.point.y
                     )
+            else:
+                if self.obstacle_detected:
+                    self.resume_confid += 1
+                    if self.resume_confid > 8:
+                        self.obstacle_detected = False
+                        # Keep publish type consistent with /speed topic (std_msgs/Float32).
+                        speed_msg = Float32()
+                        speed_msg.data = 10.0
+                        self.speed_pub.publish(speed_msg)
+                        self.resume_confid = 0
 
             if display is not None:
                 collision_array.markers.append(display)
-
-        if self.obstacle_detected:
-            if follow_speed_active:
-                self.resume_confid = 0
-            else:
-                self.resume_confid += 1
-                if self.resume_confid > 8:
-                    self.clear_follow_speed_override()
 
         # If a run detects a clear path, but we are still stopped. allow nav to continue, and we have confidence is clear (15 spins/3 seconds given rate of 5 hz)
         if clear_path:

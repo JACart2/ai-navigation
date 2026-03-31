@@ -18,7 +18,7 @@ from navigation_interface.msg import (
 )
 from visualization_msgs.msg import Marker
 from motor_control_interface.msg import VelAngle
-from std_msgs.msg import Float32, String, UInt64, Header
+from std_msgs.msg import Float32, String, UInt64, Header, Bool
 from geometry_msgs.msg import (
     PoseStamped,
     Point,
@@ -53,6 +53,14 @@ class LocalPlanner(rclpy.node.Node):
 
         self.current_state = VehicleState()
         self.stop_requests = {}
+        self.off_path = False
+        self.off_path_distance = 0.0
+        self.off_path_node_index = -1
+
+        self.declare_parameter("off_path_threshold_m", 2.0)
+        self.OFF_PATH_THRESHOLD_M = (
+            self.get_parameter("off_path_threshold_m").get_parameter_value().double_value
+        )
 
         # ros variables
         self.cur_pose = Pose()  # current position in local coordinates
@@ -121,12 +129,18 @@ class LocalPlanner(rclpy.node.Node):
         # Publish the projected turning angle and path
         self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
 
+        # Publish off-path latch status for monitoring and testing.
+        self.off_path_pub = self.create_publisher(Bool, "/off_path", 10)
+
         ## Timers
         # Calculate ETA
         self.eta_timer = self.create_timer(1, self.calc_eta)
 
         # Main loop
         self.timer = self.create_timer(0.05, self.timer_cb)
+
+        # Check path adherence once per second.
+        self.off_path_timer = self.create_timer(1.0, self.off_path_check_cb)
 
         # plan_msg = VelAngle()
         # plan_msg.vel = 5.0
@@ -173,7 +187,66 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
+        self.off_path = False
+        self.off_path_distance = 0.0
+        self.off_path_node_index = -1
+        self.off_path_pub.publish(Bool(data=False))
         self.log(f"Path received: {str(msg)}")
+
+    def off_path_check_cb(self):
+        """Checks if cart is too far from its expected target node while navigating."""
+        if not self.current_state.is_navigating:
+            return
+
+        if not hasattr(self, "cx") or not hasattr(self, "cy"):
+            return
+
+        if not hasattr(self, "target_ind"):
+            return
+
+        if len(self.cx) == 0 or len(self.cy) == 0:
+            return
+
+        # Compare against the closest point on the active spline, not the
+        # pure-pursuit lookahead target (which is expected to be ahead).
+        idx = 0
+        dist_to_expected = float("inf")
+        for i in range(len(self.cx)):
+            d = self.calc_dist(
+                self.cur_pose.position.x,
+                self.cur_pose.position.y,
+                self.cx[i],
+                self.cy[i],
+            )
+            if d < dist_to_expected:
+                dist_to_expected = d
+                idx = i
+
+        self.off_path_distance = dist_to_expected
+        self.off_path_node_index = idx
+
+        if dist_to_expected > self.OFF_PATH_THRESHOLD_M:
+            self.off_path = True
+            self.path_valid = False
+            self.off_path_pub.publish(Bool(data=True))
+
+            self.current_state.is_navigating = False
+            self.current_state.reached_destination = False
+            self.current_state.stopped = True
+            self.vehicle_state_pub.publish(self.current_state)
+
+            self.log_header(
+                f"OFF PATH DETECTED: distance {dist_to_expected:.2f}m from target node index {idx} (threshold {self.OFF_PATH_THRESHOLD_M:.2f}m)."
+            )
+
+            self.publish_stop_nav_cmd()
+
+    def publish_stop_nav_cmd(self):
+        """Sends a zero-velocity command to stop the cart immediately."""
+        stop_msg = VelAngle()
+        stop_msg.vel = 0.0
+        stop_msg.angle = 0.0
+        self.motion_pub.publish(stop_msg)
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -339,11 +412,7 @@ class LocalPlanner(rclpy.node.Node):
 
                 # Update the internal state of the vehicle
                 self.vehicle_state_pub.publish(self.current_state)
-                plan_msg = VelAngle()
-                plan_msg.vel = 0.0
-                plan_msg.angle = 0.0
-
-                self.motion_pub.publish(plan_msg)
+                self.publish_stop_nav_cmd()
 
     def update(self, state, a, delta):
         """Updates the carts position by a given state and delta"""
@@ -360,6 +429,12 @@ class LocalPlanner(rclpy.node.Node):
         display_angle.data = plan_msg.angle
 
         self.steering_pub.publish(display_angle)
+
+        if self.off_path:
+            plan_msg.vel = 0.0
+            plan_msg.angle = 0.0
+            self.motion_pub.publish(plan_msg)
+            return state
 
         # Check if any node wants us to stop
         for x in self.stop_requests.values():

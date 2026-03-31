@@ -7,6 +7,7 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
 
 
 def generate_launch_description():
@@ -30,6 +31,10 @@ def generate_launch_description():
                 default_value=os.path.join(
                     get_package_share_directory("navigation"), "maps", "main_shift3.gml"
                 ),
+            ),
+            DeclareLaunchArgument(
+                "enable_global_tester",
+                default_value="false",
             ),
             Node(
                 package="navigation",
@@ -58,6 +63,7 @@ def generate_launch_description():
             Node(
                 package="navigation",
                 executable="global_tester",
+                condition=IfCondition(LaunchConfiguration("enable_global_tester")),
             ),
             Node(
                 package="navigation",

@@ -37,6 +37,13 @@ class MotorEndpoint(rclpy.node.Node):
         self.STEERING_TOLERANCE = 50
         self.COMFORT_STOP_DIST = 4.0
         self.STEERING_CORRECTION = 10
+        self.OBSTACLE_SLOWDOWN_DIST = 8.0
+        self.OBSTACLE_STOP_BUFFER = 1.0
+        self.MAX_DECEL_STEP_UNITS = 6
+        self.MAX_BRAKE_DECEL_MPS2 = 2.0
+        self.CONTROL_LATENCY_SEC = 0.35
+        self.SAFETY_BUFFER_M = 0.75
+        self.MAX_CART_SPEED_MPS = 254.0 / 50.0
 
         # Driving vars
         self.state = STOPPED
@@ -48,6 +55,10 @@ class MotorEndpoint(rclpy.node.Node):
         self.vel_planned = None
         self.angle_planned = None
         self.vel_curr = 0
+        self.new_vel = False
+        self.full_stop_count = 0
+        self.last_forward_vel = 0.0
+        self.slowdown_speed_units = 0
 
         # Serial vars
         self.serial_connected = False
@@ -120,18 +131,34 @@ class MotorEndpoint(rclpy.node.Node):
         # calculate endpoint. We have not made use of this as of 4/10/24.
 
         if self.vel_planned < 0:
-            # indicates an obstacle
+            # Negative velocity is used as obstacle distance by local planner.
             self.obstacle_distance = abs(self.vel_planned)
-            self.vel_planned = 0
+
+            # Keep a forward-speed reference so we can ramp down smoothly.
+            if self.last_forward_vel > 0:
+                self.vel_planned = self.last_forward_vel
+            elif self.vel_curr > 0:
+                self.vel_planned = self.vel_curr
+            else:
+                self.vel_planned = 0
+
+            if self.state == MOVING:
+                self.state = BRAKING
+                self.brake = 0
+                self.stopping_time = time.time()
         else:
             # reset obstacle distance and brake time
             self.obstacle_distance = -1
             self.brake_time_used = 0
             self.full_stop_count = 0
 
+            if self.vel_planned > 0:
+                self.last_forward_vel = self.vel_planned
+
         # Setting some class variables about the state of the cart here given what our instructed velocity/angle is
         if (
             self.vel_planned > 0
+            and self.obstacle_distance < 0
             and (self.state == STOPPED or self.state == BRAKING)
             and (time.time() - self.stopping_time) > 10
         ):
@@ -311,6 +338,9 @@ class MotorEndpoint(rclpy.node.Node):
             if self.vel_cart_units < 0:
                 self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
 
+            # Initialize the slowdown target from current cart speed when new command arrives.
+            self.slowdown_speed_units = max(0, int(self.vel_curr_cart_units))
+
         target_speed = int(self.vel_cart_units)  # float64
 
         # Adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
@@ -328,8 +358,30 @@ class MotorEndpoint(rclpy.node.Node):
             target_speed = 0
 
         elif self.state == BRAKING:
-
             target_speed = 0
+
+            if self.obstacle_distance > 0:
+                # Distance-based scaling plus a slew-rate limiter to avoid abrupt speed drops.
+                slowdown_range = max(
+                    self.OBSTACLE_SLOWDOWN_DIST - self.OBSTACLE_STOP_BUFFER,
+                    0.1,
+                )
+                distance_scale = (
+                    self.obstacle_distance - self.OBSTACLE_STOP_BUFFER
+                ) / slowdown_range
+                distance_scale = max(0.0, min(1.0, distance_scale))
+
+                desired_speed_units = int(max(0, self.vel_cart_units) * distance_scale)
+
+                if self.slowdown_speed_units > desired_speed_units:
+                    self.slowdown_speed_units = max(
+                        desired_speed_units,
+                        self.slowdown_speed_units - self.MAX_DECEL_STEP_UNITS,
+                    )
+                else:
+                    self.slowdown_speed_units = desired_speed_units
+
+                target_speed = max(0, self.slowdown_speed_units)
 
             # Calculation for braking
             if self.obstacle_distance > 0:
@@ -339,13 +391,34 @@ class MotorEndpoint(rclpy.node.Node):
                     1.0 / self.NODE_RATE
                 )  # 1 sec / rate per sec (10)
 
-                obstacle_brake_time = self.obstacle_distance / self.vel_curr - (
+                obstacle_brake_time = self.obstacle_distance / max(self.vel_curr, 0.1) - (
                     1.0 / self.NODE_RATE
                 )  # We decrease by one node rate initially to account for rounding
+
+                obstacle_brake_time = max(obstacle_brake_time, 0.1)
 
                 brake_rate = (0.1) * (
                     (2550) ** (self.brake_time_used / obstacle_brake_time)
                 )
+
+                # Physics-based minimum brake demand based on stopping distance.
+                min_safe_speed = max(self.vel_curr, 0.1)
+                available_distance = max(
+                    self.obstacle_distance - max(self.SAFETY_BUFFER_M, 0.0),
+                    0.05,
+                )
+                max_allowable_speed = math.sqrt(
+                    2.0 * max(self.MAX_BRAKE_DECEL_MPS2, 0.1) * available_distance
+                )
+                max_allowable_speed = max(0.0, min(max_allowable_speed, self.MAX_CART_SPEED_MPS))
+                required_decel = max(
+                    0.0,
+                    (min_safe_speed - max_allowable_speed)
+                    / max(self.CONTROL_LATENCY_SEC, 0.1),
+                )
+                brake_ratio = min(1.0, required_decel / max(self.MAX_BRAKE_DECEL_MPS2, 0.1))
+                physics_brake = 255.0 * brake_ratio
+                brake_rate = max(brake_rate, physics_brake)
 
                 if brake_rate >= 255:
                     self.full_stop_count += 1

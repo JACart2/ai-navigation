@@ -37,8 +37,8 @@ class LocalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("local_planner")
 
-        # driving constants THIS USED TO BE 10 and 3.6 respectively
-        self.METERS = 30.0
+        # driving constants
+        self.METERS = 10.0  # Restored for physical turning safety
         self.SECONDS = 3.6
 
         # driving variables
@@ -139,9 +139,6 @@ class LocalPlanner(rclpy.node.Node):
         # Main loop
         self.timer = self.create_timer(0.05, self.timer_cb)
 
-        # Check path adherence once per second.
-        self.off_path_timer = self.create_timer(1.0, self.off_path_check_cb)
-
         # plan_msg = VelAngle()
         # plan_msg.vel = 5.0
         # plan_msg.angle = 5.0
@@ -149,9 +146,11 @@ class LocalPlanner(rclpy.node.Node):
         # self.motion_pub.publish(plan_msg)
 
     def timer_cb(self):
-        """Time callback responsible creating a path. Basically used as a second update function
-        If path is already created the create_path method does updating of the carts state
-        """
+        """Time callback responsible creating a path."""
+        if self.off_path and not self.new_path:
+            self.publish_stop_nav_cmd()
+            return
+
         self.create_path()
 
     def twist_cb(self, msg):
@@ -192,54 +191,6 @@ class LocalPlanner(rclpy.node.Node):
         self.off_path_node_index = -1
         self.off_path_pub.publish(Bool(data=False))
         self.log(f"Path received: {str(msg)}")
-
-    def off_path_check_cb(self):
-        """Checks if cart is too far from its expected target node while navigating."""
-        if not self.current_state.is_navigating:
-            return
-
-        if not hasattr(self, "cx") or not hasattr(self, "cy"):
-            return
-
-        if not hasattr(self, "target_ind"):
-            return
-
-        if len(self.cx) == 0 or len(self.cy) == 0:
-            return
-
-        # Compare against the closest point on the active spline, not the
-        # pure-pursuit lookahead target (which is expected to be ahead).
-        idx = 0
-        dist_to_expected = float("inf")
-        for i in range(len(self.cx)):
-            d = self.calc_dist(
-                self.cur_pose.position.x,
-                self.cur_pose.position.y,
-                self.cx[i],
-                self.cy[i],
-            )
-            if d < dist_to_expected:
-                dist_to_expected = d
-                idx = i
-
-        self.off_path_distance = dist_to_expected
-        self.off_path_node_index = idx
-
-        if dist_to_expected > self.OFF_PATH_THRESHOLD_M:
-            self.off_path = True
-            self.path_valid = False
-            self.off_path_pub.publish(Bool(data=True))
-
-            self.current_state.is_navigating = False
-            self.current_state.reached_destination = False
-            self.current_state.stopped = True
-            self.vehicle_state_pub.publish(self.current_state)
-
-            self.log_header(
-                f"OFF PATH DETECTED: distance {dist_to_expected:.2f}m from target node index {idx} (threshold {self.OFF_PATH_THRESHOLD_M:.2f}m)."
-            )
-
-            self.publish_stop_nav_cmd()
 
     def publish_stop_nav_cmd(self):
         """Sends a zero-velocity command to stop the cart immediately."""
@@ -352,6 +303,42 @@ class LocalPlanner(rclpy.node.Node):
             # Continue to loop while we have not hit the target destination, and the path is still valid
             if self.last_index > self.target_ind and self.path_valid:
 
+                # Calculate distance ONLY to the local segment around target index.
+                search_start = max(0, self.target_ind - 30)
+                search_end = min(len(self.cx), self.target_ind + 30)
+
+                min_dist = float("inf")
+                min_idx = search_start
+
+                for i in range(search_start, search_end):
+                    d = self.calc_dist(
+                        self.cur_pose.position.x,
+                        self.cur_pose.position.y,
+                        self.cx[i],
+                        self.cy[i],
+                    )
+                    if d < min_dist:
+                        min_dist = d
+                        min_idx = i
+
+                self.off_path_distance = min_dist
+                self.off_path_node_index = min_idx
+
+                if min_dist > self.OFF_PATH_THRESHOLD_M:
+                    self.log_header(
+                        f"ABORT: Cart is {min_dist:.2f}m off path! (Threshold: {self.OFF_PATH_THRESHOLD_M}m)"
+                    )
+                    self.off_path = True
+                    self.path_valid = False
+                    self.off_path_pub.publish(Bool(data=True))
+
+                    self.current_state.is_navigating = False
+                    self.current_state.reached_destination = False
+                    self.current_state.stopped = True
+                    self.vehicle_state_pub.publish(self.current_state)
+                    self.publish_stop_nav_cmd()
+                    return
+
                 # Uneeded unless testing (floods the terminal with messages when active)
                 # self.get_logger().info(
                 #     f"Cur pos: {self.cur_pose.position},   Tar pos: {self.local_points[-1]}"
@@ -394,21 +381,19 @@ class LocalPlanner(rclpy.node.Node):
                 self.v.append(self.state.v)
                 self.t.append(self.timedelta)
             else:
-                # Check if we've reached the destination, if so we should change the cart state to finished
+                # Check if we've reached the destination or aborted
                 self.log("Done navigating")
                 self.current_state = VehicleState()
                 self.current_state.is_navigating = False
-                self.current_state.reached_destination = True
-                notify_server = String()
 
-                # Let operator know why current path has stopped
                 if self.path_valid:
-                    self.log("Reached Destination succesfully without interruption")
-                    self.arrived_pub.publish(notify_server)
+                    self.current_state.reached_destination = True
+                    self.log("Reached Destination successfully without interruption")
+                    self.arrived_pub.publish(String())
                 else:
-                    self.log(
-                        "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
-                    )
+                    self.current_state.reached_destination = False
+                    self.current_state.stopped = True
+                    self.log("Navigation ABORTED. Cart is off-path or interrupted.")
 
                 # Update the internal state of the vehicle
                 self.vehicle_state_pub.publish(self.current_state)

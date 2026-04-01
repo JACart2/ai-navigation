@@ -175,6 +175,8 @@ class LocalPlanner(rclpy.node.Node):
         self.new_path = True
         self.log(f"Path received: {str(msg)}")
 
+        # self.anomaly_detected("New path received", AnomalyMsg.INFO)
+
     def create_path(self):
         """Creates a path for the cart with a set of local_points
         Adds 15 more points between the google points

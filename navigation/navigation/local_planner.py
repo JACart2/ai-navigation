@@ -29,6 +29,7 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
+# from anomaly_msg.msg import AnomalyMsg
 
 
 class LocalPlanner(rclpy.node.Node):
@@ -118,6 +119,9 @@ class LocalPlanner(rclpy.node.Node):
         # Publish the ETA
         self.eta_pub = self.create_publisher(UInt64, "/eta", 10)
 
+        # Publish anomaly detections
+        # self.anomaly_pub = self.create_publisher(AnomalyMsg, "/ai_anomaly_logging", 10)
+
         # Publish the projected turning angle and path
         self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
 
@@ -174,6 +178,8 @@ class LocalPlanner(rclpy.node.Node):
         self.path_valid = False
         self.new_path = True
         self.log(f"Path received: {str(msg)}")
+
+        # self.anomaly_detected("New path received", AnomalyMsg.INFO)
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -465,7 +471,7 @@ class LocalPlanner(rclpy.node.Node):
 
 
             # # Remaining time in seconds
-            remaining_time = distance_remaining / self.cur_speed
+            remaining_time = distance_remaining / self.tar_speed # target speed assumes max speed cart is allowed to go
             eta_msg = UInt64()
 
             # # Calculate the ETA to the end
@@ -558,6 +564,30 @@ def create_marker(x, y, frame_id):
     marker.color.b = 0.0
 
     return marker
+
+# def anomaly_detected(self, message, severity):
+#     """Helper function to publish an anomaly detection message to the anomaly logging topic.
+
+#     Args:
+#         message (str): A description of the detected anomaly.
+#         severity (str): The severity level of the anomaly (e.g., "info", "warning", "error").
+#     """
+#     anomaly_msg = AnomalyMsg()
+
+#     # Header
+#     anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+#     anomaly_msg.header.frame_id = "local_planner"
+
+#     # Required fields
+#     anomaly_msg.node_name = self.get_name()
+#     anomaly_msg.importance = severity
+#     anomaly_msg.type = AnomalyMsg.TEXT
+
+#     # Human-readable description of the anomaly
+#     anomaly_msg.msg= message
+    
+#     self.anomaly_pub.publish(anomaly_msg)
+    
 
 
 def main():

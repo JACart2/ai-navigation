@@ -45,6 +45,7 @@ setup(
             "pose_bridge = navigation.pose_bridge:main",
             "zed_object_to_obstacle = navigation.zed_object_to_obstacle:main",
             "lidar_object_to_obstacle = navigation.lidar_object_to_obstacle:main",
+            "waypoint_creation = navigation.waypoint_creation:main",
         ],
     },
 )

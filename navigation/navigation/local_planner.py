@@ -276,6 +276,7 @@ class LocalPlanner(rclpy.node.Node):
             else:
                 self.path_valid = False
                 self.log_header("It appears the cart is already at the destination")
+                # self.anomaly_detected("Cart is already at destination", AnomalyMsg.WARNING)
 
         if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
@@ -333,11 +334,13 @@ class LocalPlanner(rclpy.node.Node):
                 # Let operator know why current path has stopped
                 if self.path_valid:
                     self.log("Reached Destination succesfully without interruption")
+                    # self.anomaly_detected("Arrived", AnomalyMsg.INFO)
                     self.arrived_pub.publish(notify_server)
                 else:
                     self.log(
                         "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
                     )
+                    # self.anomaly_detected("Either already at destination or destination can't be reached", AnomalyMsg.WARNING)
 
                 # Update the internal state of the vehicle
                 self.vehicle_state_pub.publish(self.current_state)
@@ -467,7 +470,7 @@ class LocalPlanner(rclpy.node.Node):
 
 
             # # Remaining time in seconds
-            remaining_time = distance_remaining / self.cur_speed
+            remaining_time = distance_remaining / self.tar_speed # use target speed to avoid incorrect eta during speed up
             eta_msg = UInt64()
 
             # # Calculate the ETA to the end

@@ -173,7 +173,8 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
-        self.log(f"Path received: {str(msg)}")
+        #self.log(f"Path received: {str(msg)}")
+        self.log(f"Path received. Navigating to {str(self.local_points[-1])}.")
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -459,42 +460,38 @@ class LocalPlanner(rclpy.node.Node):
                 self.cur_pose.position.x, self.cur_pose.position.y
             )
 
-            # self.log("x: " + str(self.cur_pose.position.x) + "y: " + str(self.cur_pose.position.y))
-
-            distance_remaining = self.calc_trip_dist(self.local_points, current_node)
-
+            # distance_remaining = self.calc_trip_dist(self.local_points, current_node)
 
             # # Remaining time in seconds
-            remaining_time = distance_remaining / self.cur_speed
+            # remaining_time = distance_remaining / self.cur_speed
             eta_msg = UInt64()
 
             # # Calculate the ETA to the end
             # arrival_time = time.time() + remaining_time
 
             # # Convert the time to milliseconds
-            eta_msg.data = int(remaining_time) # changed from arrival_time
-            # eta_msg.data = 0
+            # eta_msg.data = int(arrival_time * (1000))
+            eta_msg.data = 0
             self.eta_pub.publish(eta_msg)
 
     def calc_trip_dist(self, points_list, start):
-        """Calculates the trip distance from the "start" Point to the end of the "points_list"
+        """Calculates the trip distance from the "start" index to the end of the "points_list"
 
         Args:
             points_list(List): The list of path points to calculate the distance of
-            start(Point): The Point of which to start calculating the trip distance
+            start(int): The index of which to start calculating the trip distance
         """
-        total_distance = 0
-
-        for i in range(self.local_points.index(start), len(points_list)):
-            total_distance += self.calc_dist(
+        sum = 0
+        for i in range(start, len(points_list) - 1):
+            sum += self.calc_dist(
                 points_list[i].x,
                 points_list[i].y,
-                points_list[i - 1].x,
-                points_list[i - 1].y,
+                points_list[i + 1].x,
+                points_list[i + 1].y,
             )
-            # prev_node = i
-        # self.log(f"Distance remaining: {total_distance}")
-        return total_distance
+            prev_node = i
+
+        return sum
 
     def get_closest_point(self, pos_x, pos_y):
         """Get the closest point along the raw path from pos_x, pos_y
@@ -503,16 +500,15 @@ class LocalPlanner(rclpy.node.Node):
             pos_x(float): The x position of search center
             pos_y(float): The y position of search center
         """
-        min_node = None
+        min_node = 0
         min_dist = float("inf")
-        for point in self.local_points:
-            dist = self.calc_dist(pos_x, pos_y, point.x, point.y)
+        for i in range(len(self.local_points)):
+            dist = self.calc_dist(
+                pos_x, pos_y, self.local_points[i].x, self.local_points[i].y
+            )
             if dist < min_dist:
                 min_dist = dist
-                min_node = point
-        
-        # self.log(f"Closest point to x: {pos_x}, y: {pos_y} is x: {min_node.x}, y: {min_node.y}")
-        return min_node
+                min_node = i
 
     def calc_dist(self, x1, y1, x2, y2):
         return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))

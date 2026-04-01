@@ -21,6 +21,23 @@ def generate_launch_description():
                     get_package_share_directory("navigation"), "maps", "main_shift3.gml"
                 ),
             ),
+            # Declare whether the given graph is in GPS or ROS coordinates. 
+            DeclareLaunchArgument(
+                "graph_coordinate_format",
+                default_value="ros", # Options: "ros" or "gps"
+            ),
+            # Directory where the landmark calibration YAML file is located.
+            DeclareLaunchArgument(
+                "calibration_config_dir",
+                default_value=os.path.join(
+                    get_package_share_directory("navigation"), "maps",
+                ),
+            ),
+            # YAML file name for the landmark calibration
+            DeclareLaunchArgument(
+                "calibration_config_file",
+                default_value="main_graph_config.yaml",
+            ),
             Node(
                 package="navigation",
                 executable="global_planner",
@@ -28,6 +45,9 @@ def generate_launch_description():
                 parameters=[
                     {
                         "graph_file": LaunchConfiguration("graph_file"),
+                        "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
+                        "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
+                        "calibration_config_file": LaunchConfiguration("calibration_config_file"),
                     }
                 ],
             ),
@@ -51,6 +71,14 @@ def generate_launch_description():
                 package="navigation",
                 executable="visualize_graph",
                 output="screen",
+                parameters=[
+                    {
+                        "graph_file": LaunchConfiguration("graph_file"),
+                        "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
+                        "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
+                        "calibration_config_file": LaunchConfiguration("calibration_config_file"),
+                    }
+                ],
             ),
             Node(
                 package="navigation",

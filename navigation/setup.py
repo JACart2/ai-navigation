@@ -24,7 +24,7 @@ setup(
             glob(os.path.join("maps", "*")), 
         ),
     ],
-    install_requires=["setuptools"],
+    install_requires=["setuptools", "PyYAML"],
     zip_safe=True,
     maintainer="interfaces",
     maintainer_email="zanem@cox.net",

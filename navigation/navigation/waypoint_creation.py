@@ -1,6 +1,8 @@
+import math
+
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PointStamped, Point
+from geometry_msgs.msg import PointStamped, Point, PoseWithCovarianceStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
 import networkx as nx
@@ -20,6 +22,11 @@ class WaypointCreation(Node):
         self.new_map_mode = self.get_parameter('new_map_mode').value
         self.input_gml_file = self.get_parameter('input_gml_file').value
         self.output_gml_file = self.get_parameter('output_gml_file').value
+
+        self.recent_pos = None
+
+        # How many meters between points when auto-build map is toggled on
+        self.AUTO_POINT_GAP = 2
         
         # Ensure output directory exists
         if self.output_gml_file:
@@ -43,11 +50,21 @@ class WaypointCreation(Node):
             self.new_point_callback,
             10
         )
+
+        self.pose_sub = self.create_subscription(
+            PoseWithCovarianceStamped, "/pcl_pose", self.pose_callback, 10
+        )
         
         # Publisher for RViz markers
         self.marker_pub = self.create_publisher(
             MarkerArray,
             'waypoint_markers',
+            10
+        )
+
+        self.new_point_pub = self.create_publisher(
+            PointStamped,
+            'new_point',
             10
         )
         
@@ -56,6 +73,23 @@ class WaypointCreation(Node):
         # Publish initial markers if any exist
         if self.new_map_mode and (self.existing_waypoints or self.new_waypoints):
             self.publish_markers()
+
+    def pose_callback(self, msg):
+            current_pos = PointStamped()
+            
+            current_pos.point.x = msg.pose.pose.position.x
+            current_pos.point.y = msg.pose.pose.position.y
+        
+            if self.recent_pos is None:
+                self.recent_pos = current_pos
+        
+            # Place a new point down every specified amount of meters
+            if self.dis(self.recent_pos.point.x, self.recent_pos.point.y, current_pos.point.x, current_pos.point.y) > self.AUTO_POINT_GAP:
+                self.recent_pos = current_pos
+                self.new_point_pub.publish(current_pos)
+
+    def dis(self, x1, y1, x2, y2):
+        return math.sqrt((x2-x1)**2 + (y2-y1)**2)
 
     def load_waypoints_from_gml(self):
         if not os.path.exists(self.input_gml_file):

@@ -559,6 +559,29 @@ def create_marker(x, y, frame_id):
 
     return marker
 
+# def anomaly_detected(self, message, severity):
+#     """Helper function to publish an anomaly detection message to the anomaly logging topic.
+
+#     Args:
+#         message (str): A description of the detected anomaly.
+#         severity (str): The severity level of the anomaly (e.g., "info", "warning", "error").
+#     """
+#     anomaly_msg = AnomalyMsg()
+
+#     # Header
+#     anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+#     anomaly_msg.header.frame_id = "local_planner"
+
+#     # Required fields
+#     anomaly_msg.node_name = self.get_name()
+#     anomaly_msg.importance = severity
+#     anomaly_msg.type = AnomalyMsg.TEXT
+
+#     # Human-readable description of the anomaly
+#     anomaly_msg.msg= message
+    
+#     self.anomaly_pub.publish(anomaly_msg)
+
 
 def main():
     """The main method that actually handles spinning up the node."""

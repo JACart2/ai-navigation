@@ -76,6 +76,14 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Static TF publisher for base_link to velodyne transform
+    static_tf_publisher = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_link_to_velodyne_tf",
+        arguments=["0.5", "0", "1.75", "0", "0", "0", "base_link", "velodyne"],
+    )
+
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
@@ -85,6 +93,7 @@ def generate_launch_description():
             ),
             velodyne_driver_node,
             velodyne_transform_launch,
+            static_tf_publisher,
             lidar_localization_launch,
             cameras_launch,
             # liosam_localization_launch,

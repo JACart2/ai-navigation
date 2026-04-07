@@ -1,0 +1,16 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from navigation_interface/msg/ObstacleArray.msg
+// generated code does not contain a copyright notice
+
+#include "navigation_interface/msg/Obstacle.idl"
+#include "std_msgs/msg/Header.idl"
+
+module navigation_interface {
+  module msg {
+    struct ObstacleArray {
+      std_msgs::msg::Header header;
+
+      sequence<navigation_interface::msg::Obstacle> obstacles;
+    };
+  };
+};

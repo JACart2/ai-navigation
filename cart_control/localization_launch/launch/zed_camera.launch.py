@@ -34,9 +34,9 @@ from launch_ros.descriptions import ComposableNode
 
 # ZED Configurations to be loaded by ZED Node
 default_config_common = os.path.join(
-    get_package_share_directory('zed_wrapper'),
+    get_package_share_directory('localization_launch'),
     'config',
-    'common_stereo.yaml'
+    'common.yaml'
 )
 
 # URDF/xacro file to be loaded by the Robot State Publisher node
@@ -94,7 +94,7 @@ def launch_setup(context, *args, **kwargs):
         camera_name_val = 'zed'
 
     config_camera_path = os.path.join(
-        get_package_share_directory('zed_wrapper'),
+        get_package_share_directory('localization_launch'),
         'config',
         camera_model_val + '.yaml'
     )

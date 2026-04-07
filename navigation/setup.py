@@ -45,6 +45,7 @@ setup(
             "pose_bridge = navigation.pose_bridge:main",
             "zed_object_to_obstacle = navigation.zed_object_to_obstacle:main",
             "lidar_object_to_obstacle = navigation.lidar_object_to_obstacle:main",
+            "collision_avoidance_aad_log = navigation.collision_avoidance_aad_log:main"
         ],
     },
 )

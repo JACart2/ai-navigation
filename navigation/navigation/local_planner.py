@@ -29,6 +29,7 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
+from anomaly_msg.msg import AnomalyLog
 
 
 class LocalPlanner(rclpy.node.Node):
@@ -92,6 +93,10 @@ class LocalPlanner(rclpy.node.Node):
         # Share the current status of the vehicle's state
         self.vehicle_state_pub = self.create_publisher(
             VehicleState, "/vehicle_state", 10
+        )
+
+        self.anomaly_pub = self.create_publisher(
+            AnomalyLog, "/ai_anomaly_logging", 10
         )
 
         # Send out speed and steering requests to motor endpoint
@@ -175,7 +180,7 @@ class LocalPlanner(rclpy.node.Node):
         self.new_path = True
         self.log(f"Path received: {str(msg)}")
 
-        # self.anomaly_detected("New path received", AnomalyMsg.INFO)
+        self.anomaly_detected("info: New path received")
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -276,7 +281,7 @@ class LocalPlanner(rclpy.node.Node):
             else:
                 self.path_valid = False
                 self.log_header("It appears the cart is already at the destination")
-                # self.anomaly_detected("Cart is already at destination", AnomalyMsg.WARNING)
+                self.anomaly_detected("warning: Cart is already at destination")
 
         if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
@@ -334,13 +339,15 @@ class LocalPlanner(rclpy.node.Node):
                 # Let operator know why current path has stopped
                 if self.path_valid:
                     self.log("Reached Destination succesfully without interruption")
-                    # self.anomaly_detected("Arrived", AnomalyMsg.INFO)
+                    self.anomaly_detected("info: Arrived")
                     self.arrived_pub.publish(notify_server)
                 else:
                     self.log(
                         "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
                     )
-                    # self.anomaly_detected("Either already at destination or destination can't be reached", AnomalyMsg.WARNING)
+                    self.anomaly_detected(
+                        "warning: Either already at destination or destination can't be reached"
+                    )
 
                 # Update the internal state of the vehicle
                 self.vehicle_state_pub.publish(self.current_state)
@@ -529,6 +536,18 @@ class LocalPlanner(rclpy.node.Node):
         # self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
         self.log(log)
 
+    def anomaly_detected(self, description):
+        anomaly_msg = AnomalyLog()
+        anomaly_msg.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.source = "local_planner"
+        anomaly_msg.description = description
+        anomaly_msg.topic_name = "/ai_anomaly_logging"
+        anomaly_msg.data_type = "text"
+        anomaly_msg.data = []
+
+        self.anomaly_pub.publish(anomaly_msg)
+
 
 def create_pose_stamped(point):
     stamped = PoseStamped()
@@ -563,30 +582,6 @@ def create_marker(x, y, frame_id):
     marker.color.b = 0.0
 
     return marker
-
-# def anomaly_detected(self, message, severity):
-#     """Helper function to publish an anomaly detection message to the anomaly logging topic.
-
-#     Args:
-#         message (str): A description of the detected anomaly.
-#         severity (str): The severity level of the anomaly (e.g., "info", "warning", "error").
-#     """
-#     anomaly_msg = AnomalyMsg()
-
-#     # Header
-#     anomaly_msg.header.stamp = self.get_clock().now().to_msg()
-#     anomaly_msg.header.frame_id = "local_planner"
-
-#     # Required fields
-#     anomaly_msg.node_name = self.get_name()
-#     anomaly_msg.importance = severity
-#     anomaly_msg.type = AnomalyMsg.TEXT
-
-#     # Human-readable description of the anomaly
-#     anomaly_msg.msg= message
-    
-#     self.anomaly_pub.publish(anomaly_msg)
-
 
 def main():
     """The main method that actually handles spinning up the node."""

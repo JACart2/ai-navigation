@@ -136,8 +136,8 @@ class CollisionDetector(rclpy.node.Node):
             self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
         )
         # /speed uses km/h, matching the local planner's target-speed interface.
-        self.CRUISE_SPEED_KPH = (
-            self.get_parameter("cruise_speed_kph").get_parameter_value().double_value
+        self.CRUISE_SPEED = (
+            self.get_parameter("cruise_speed").get_parameter_value().double_value
         )
 
         # Subscribes to the /obstacles topic where ObstacleArray msg types are sent
@@ -197,10 +197,10 @@ class CollisionDetector(rclpy.node.Node):
             # Calculate the inner and outer radius for arcs and the center of their circ
             self.determine_collision()
 
-    def publish_speed_request(self, speed_kph):
-        """Publish a planner speed request in km/h."""
+    def publish_speed_request(self, speed):
+        """Publish a planner speed request."""
         speed_msg = Float32()
-        speed_msg.data = float(speed_kph)
+        speed_msg.data = float(speed)
         self.speed_pub.publish(speed_msg)
 
     def clear_follow_speed_override(self):
@@ -210,7 +210,7 @@ class CollisionDetector(rclpy.node.Node):
         self.prev_distance = None
         self.prev_time = None
         self.prev_obstacle_speed = 0
-        self.publish_speed_request(self.CRUISE_SPEED_KPH)
+        self.publish_speed_request(self.CRUISE_SPEED)
 
     def angle_callback(self, msg):
         self.requested_steering_angle = msg.angle

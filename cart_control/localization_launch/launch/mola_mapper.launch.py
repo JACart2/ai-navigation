@@ -67,6 +67,9 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "cart_config_path",
+                default_value=os.path.join(
+                    get_package_share_directory("cart_launch"), "config", "cart_james.yaml"
+                ),
                 description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
             ),
             velodyne_driver_node,

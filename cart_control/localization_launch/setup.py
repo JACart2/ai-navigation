@@ -17,6 +17,7 @@ setup(
         glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.cfg')),
         (os.path.join('share', package_name, 'param'), glob('param/*.yaml')),
         (os.path.join('share', package_name, 'param'), glob('param/*.xacro'))
     ],
@@ -29,6 +30,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'iwr6843_radar_node = localization_launch.iwr6843_radar_node:main',
         ],
     },
 )

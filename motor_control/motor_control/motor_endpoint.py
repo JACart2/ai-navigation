@@ -29,7 +29,6 @@ MOVING = 0
 BRAKING = 1
 STOPPED = 2
 
-AAD_LOGGING_ENABLED = True
 
 
 class MotorEndpoint(rclpy.node.Node):
@@ -44,6 +43,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.STEERING_TOLERANCE = 50
         self.COMFORT_STOP_DIST = 4.0
         self.STEERING_CORRECTION = 10
+        self.AAD_LOGGING_ENABLED = True
 
         # Driving vars
         self.state = STOPPED
@@ -77,7 +77,7 @@ class MotorEndpoint(rclpy.node.Node):
 
 
         # Sets up publishing to /ai_anomaly_logging
-        if AAD_LOGGING_ENABLED:
+        if self.AAD_LOGGING_ENABLED:
             self.aad_pub = self.create_publisher(
                 AnomalyMsg,
                 "/ai_anomaly_logging",
@@ -91,15 +91,16 @@ class MotorEndpoint(rclpy.node.Node):
             time.sleep(2)
             self.serial_connected = True
             self.log_header("CONNECTED TO ARDUINO")
-            
-            if AAD_LOGGING_ENABLED: #Anomaly Logging
+
+            if self.AAD_LOGGING_ENABLED: #Anomaly Logging
+                
                 self.log_aad(AnomalyMsg.INFO, "CONNECTED TO ARDUINO")
                 
         except Exception as e:
             self.log_header("MOTOR ENDPOINT: " + str(e))
             self.serial_connected = False
             
-            if AAD_LOGGING_ENABLED: #Anomaly Logging
+            if self.AAD_LOGGING_ENABLED: #Anomaly Logging
                 self.log_aad(AnomalyMsg.ERROR, "MOTOR ENDPOINT: " + str(e))
 
         # ROS2 SUBSCRIBERS
@@ -189,7 +190,7 @@ class MotorEndpoint(rclpy.node.Node):
         except Exception as e:
             self.log_header("MOTOR ENDPOINT: " + str(e))
 
-            if AAD_LOGGING_ENABLED: #Anomaly Logging
+            if self.AAD_LOGGING_ENABLED: #Anomaly Logging
                 self.log_aad(AnomalyMsg.ERROR, "MOTOR ENDPOINT: " + str(e))   
             
             self.serial_connected = False
@@ -222,7 +223,7 @@ class MotorEndpoint(rclpy.node.Node):
         except Exception as e:
             self.log_header("THE ARDUINO HAS BEEN DISCONNECTED")
             
-            if AAD_LOGGING_ENABLED: #Anomaly Logging
+            if self.AAD_LOGGING_ENABLED: #Anomaly Logging
                 self.log_aad(AnomalyMsg.ERROR, "THE ARDUINO HAS BEEN DISCONNECTED")       
 
             # Same thing as above. if the ardiuno had some problems... ie: it disconnected attempt to retry the connection.
@@ -240,10 +241,11 @@ class MotorEndpoint(rclpy.node.Node):
 
             # This check is here because the time between the first and 2nd heartbeat is always ~2.4s
             # This is because of the rest of the setup taking place at the same time
+  
             if heartbeat_delta_t >= 2.0:
                 self.log_header("TIME BETWEEN HEARTBEATS, > 2.0s | Things may be fine")
                 
-                if AAD_LOGGING_ENABLED: #Anomaly Logging
+                if self.AAD_LOGGING_ENABLED: #Anomaly Logging
                     self.log_aad(AnomalyMsg.WARNING, "TIME BETWEEN HEARTBEATS, > 2.0s | Things may be fine")
                     
         self.prev_time = cur_time
@@ -271,7 +273,7 @@ class MotorEndpoint(rclpy.node.Node):
             if self.vel_cart_units < 0:
                 self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
                 
-                if AAD_LOGGING_ENABLED: #Anomaly Logging
+                if self.AAD_LOGGING_ENABLED: #Anomaly Logging
                     self.log_aad(AnomalyMsg.ERROR, "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
 
         target_speed = int(self.vel_cart_units)  # float64
@@ -347,7 +349,7 @@ class MotorEndpoint(rclpy.node.Node):
             if self.vel_cart_units < 0:
                 self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
                 
-                if AAD_LOGGING_ENABLED: #Anomaly Logging
+                if self.AAD_LOGGING_ENABLED: #Anomaly Logging
                     self.log_aad(AnomalyMsg.ERROR, "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
                     
         target_speed = int(self.vel_cart_units)  # float64
@@ -444,6 +446,8 @@ class MotorEndpoint(rclpy.node.Node):
 
     # This is for publishing to anomaly logging
     def log_aad(self, importance: int, motor_endpoint_msg: str):
+
+
         anomaly = AnomalyMsg() 
         
         # Header 

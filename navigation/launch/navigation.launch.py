@@ -68,6 +68,11 @@ def generate_launch_description():
                     [FindPackageShare("navigation"), "/launch/pointcloud-to-laserscan.launch.py"]
                 )
             ),
+            Node(
+                package="navigation",          # <-- Replace with your package name
+                executable="collision_avoidance_anomaly_log",  # <-- Your node executable
+                output="screen",
+            ),
         ]
     )
 

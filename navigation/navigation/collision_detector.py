@@ -118,6 +118,7 @@ class CollisionDetector(rclpy.node.Node):
         # self.declare_parameter("min_obstacle_time", 2.5)
         self.declare_parameter("safe_obstacle_dist", 6 * factor)
         self.declare_parameter("safe_obstacle_time", 2 * factor)
+        self.declare_parameter("cruise_speed", 30.0)
 
         # self.MIN_OBSTACLE_DIST = (
         #     self.get_paramater("min_obstacle_dist").get_paramter_value().float_value
@@ -133,6 +134,10 @@ class CollisionDetector(rclpy.node.Node):
         )
         self.SAFE_OBSTACLE_TIME = (
             self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
+        )
+        # /speed uses km/h, matching the local planner's target-speed interface.
+        self.CRUISE_SPEED_KPH = (
+            self.get_parameter("cruise_speed_kph").get_parameter_value().double_value
         )
 
         # Subscribes to the /obstacles topic where ObstacleArray msg types are sent
@@ -191,6 +196,21 @@ class CollisionDetector(rclpy.node.Node):
         if self.cur_obstacles is not None:
             # Calculate the inner and outer radius for arcs and the center of their circ
             self.determine_collision()
+
+    def publish_speed_request(self, speed_kph):
+        """Publish a planner speed request in km/h."""
+        speed_msg = Float32()
+        speed_msg.data = float(speed_kph)
+        self.speed_pub.publish(speed_msg)
+
+    def clear_follow_speed_override(self):
+        """Restore the planner's normal cruise speed after obstacle following ends."""
+        self.obstacle_detected = False
+        self.resume_confid = 0
+        self.prev_distance = None
+        self.prev_time = None
+        self.prev_obstacle_speed = 0
+        self.publish_speed_request(self.CRUISE_SPEED_KPH)
 
     def angle_callback(self, msg):
         self.requested_steering_angle = msg.angle
@@ -292,6 +312,7 @@ class CollisionDetector(rclpy.node.Node):
 
         # Control for undoing a stop
         clear_path = True
+        follow_speed_active = False
 
         cur_obstacle_list = self.cur_obstacles
         for obstacle in cur_obstacle_list:
@@ -331,6 +352,7 @@ class CollisionDetector(rclpy.node.Node):
                     o for o in cur_obstacle_list if o.followable
                 ]
                 if self.followable_obstacles:
+                    follow_speed_active = True
                     # Calculate distance from front of cart to obstacle
                     distance = self.distance(
                         self.followable_obstacles[0].pos.point.x,
@@ -360,7 +382,9 @@ class CollisionDetector(rclpy.node.Node):
                             if not self.obstacle_detected:
                                 new_speed = (3.23 * obstacle_speed) + 4.254
                                 if new_speed < 3 and new_speed > 0:
-                                    self.speed_pub.publish(math.ceil(new_speed) + 1)
+                                    self.publish_speed_request(
+                                        float(math.ceil(new_speed) + 1)
+                                    )
                                     self.obstacle_detected = True
 
                     self.prev_distance = distance
@@ -395,16 +419,17 @@ class CollisionDetector(rclpy.node.Node):
                     display = self.show_colliding_obstacle(
                         obstacle.pos.point.x, obstacle.pos.point.y
                     )
-            else:
-                if self.obstacle_detected:
-                    self.resume_confid += 1
-                    if self.resume_confid > 8:
-                        self.obstacle_detected = False
-                        self.speed_pub.publish(10)
-                        self.resume_confid = 0
 
             if display is not None:
                 collision_array.markers.append(display)
+
+        if self.obstacle_detected:
+            if follow_speed_active:
+                self.resume_confid = 0
+            else:
+                self.resume_confid += 1
+                if self.resume_confid > 8:
+                    self.clear_follow_speed_override()
 
         # If a run detects a clear path, but we are still stopped. allow nav to continue, and we have confidence is clear (15 spins/3 seconds given rate of 5 hz)
         if clear_path:
@@ -493,21 +518,34 @@ class CollisionDetector(rclpy.node.Node):
         bound_display.lifetime = Duration(seconds=0.033).to_msg()
         bound_display.type = Marker.LINE_STRIP
         bound_display.header.frame_id = "/base_link"
-        bound_display.scale.x = 0.2
+        bound_display.scale.x = 0.05
         bound_display.color.r = 1.0
         bound_display.color.g = 1.0
         bound_display.color.b = 0.0
         bound_display.color.a = 1.0
         bound_display.action = Marker.ADD
 
-        # Obtain the angle range necessary for a certain arc length in this case 20
-        ang = 20 / (2 * radius)
+        # Build a fixed arc length (meters) and sample with a minimum number of points so
+        # the curve remains visible in RViz even when steering is near straight.
+        arc_length_m = 5.0
+        radius_abs = abs(radius)
+        if radius_abs < 1e-6:
+            return bound_display
 
-        # Setup arc display range
+        # Central angle swept by the requested arc length.
+        ang = arc_length_m / radius_abs
+
+        # Setup arc display range.
         if right_turn:
-            loop_range = np.arange((math.pi / 2) + ang, math.pi / 2, 0.10)
+            start_ang = (math.pi / 2) - ang
+            end_ang = math.pi / 2
         else:
-            loop_range = np.arange(-(math.pi / 2), (-(math.pi / 2)) + ang, 0.10)
+            start_ang = -(math.pi / 2)
+            end_ang = (-(math.pi / 2)) + ang
+
+        # Use linspace so we always get points, regardless of turn direction and angular span.
+        point_count = max(30, int(abs(end_ang - start_ang) / 0.02))
+        loop_range = np.linspace(start_ang, end_ang, point_count)
 
         # Obtain the points along the arc on the circle
         for ang in loop_range:

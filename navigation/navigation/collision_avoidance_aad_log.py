@@ -2,9 +2,10 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image
-from std_msgs.msg import Bool, Float32
+from std_msgs.msg import Float32
 from navigation_interface.msg import Stop
 from std_msgs.msg import Header
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from anomaly_msg.msg import AnomalyMsg
 
@@ -14,14 +15,23 @@ class CollisionAvoidanceAADLog(Node):
     def __init__(self):
         super().__init__('collision_avoidance_anomaly_log')
 
-        self.IMG_PUBLISH_SPEED = 2
+        self.IMG_PUBLISH_PERIOD = 0.5 
 
+        self.get_logger().info("Creating subsribers")
         # --- Subscribers ---
+
+
+        camera_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         self.camera_sub = self.create_subscription(
             Image,
             '/zed_front/zed_node_0/rgb/color/rect/image',
             self.camera_callback,
-            10
+            camera_qos
         )
 
         self.speed_sub = self.create_subscription(
@@ -37,30 +47,22 @@ class CollisionAvoidanceAADLog(Node):
             self.stop_callback,
             10
         )
+        self.get_logger().info("Finished creating subsribers")
+        self.get_logger().info("Creating publishers")
 
-        # --- Publishers ---
+        # --- Publisher ---
         self.anomaly_pub = self.create_publisher(
             AnomalyMsg,
             '/ai_anomaly_logging',
             10
         )
+        self.get_logger().info("Finished creating publishers")
 
-        self.speed_pub = self.create_publisher(
-            Float32,
-            '/speed_out',
-            10
-        )
-
-        self.stop_pub = self.create_publisher(
-            Stop,
-            '/stop_out',
-            10
-        )
         self.last_image = None
         self.last_speed = 0.0
 
         self.timer = self.create_timer(
-            self.IMG_PUBLISH_SPEED, 
+            self.IMG_PUBLISH_PERIOD, 
             self.timer_callback)
 
     # --- Callbacks ---
@@ -80,6 +82,7 @@ class CollisionAvoidanceAADLog(Node):
         anomaly = AnomalyMsg()
         anomaly.header = stop_msg.header
         anomaly.node_name = self.get_name()
+        anomaly.type = AnomalyMsg.MSG
 
         if stop_msg.stop:
             anomaly.importance = AnomalyMsg.WARNING
@@ -88,7 +91,7 @@ class CollisionAvoidanceAADLog(Node):
             self.anomaly_pub.publish(anomaly)
 
     def speed_callback(self, msg: Float32):
-        if abs(self.last_speed - msg.data) > 1e-3:
+        if abs(self.last_speed - msg.data) > 0.1:
             self.last_speed = msg.data
 
             anomaly = AnomalyMsg()
@@ -99,13 +102,20 @@ class CollisionAvoidanceAADLog(Node):
 
             anomaly.node_name = self.get_name()
             anomaly.importance = AnomalyMsg.INFO
+            anomaly.type = AnomalyMsg.MSG
             anomaly.msg = f"The speed of the cart is {msg.data}"
 
             self.anomaly_pub.publish(anomaly)
 
-    def timer_callback():
+    def timer_callback(self):
         if self.last_image: 
-            self.anomaly_pub.publish(last_image)
+            self.get_logger().info("Publishing image")
+
+
+            self.anomaly_pub.publish(self.last_image)
+            self.last_image = None
+        else:
+            self.get_logger().info("Issue with previous image")
     
 
 def main(args=None):

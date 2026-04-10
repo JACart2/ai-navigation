@@ -43,6 +43,9 @@ from navigation_interface.msg import ObstacleArray, Obstacle, Stop
 from motor_control_interface.msg import VelAngle
 
 
+ARC_DISPLAY_LENGTH_M = 5.0
+
+
 class CollisionDetector(rclpy.node.Node):
 
     def __init__(self):
@@ -331,11 +334,22 @@ class CollisionDetector(rclpy.node.Node):
                 < circle_obstacle_dist
                 < (abs(self.outer_radius) + obstacle_size)
             )
+            obstacle_in_front = self.is_obstacle_in_front(obstacle)
 
             # FIXME need to determine if this needs a different frame or not.
             self.display_circle("/base_link", self.front_axle_center, 24, 2, z=1)
 
             if potential_collision:
+                if not obstacle_in_front:
+                    # Keep visualizing rear obstacles that intersect the turning annulus,
+                    # but do not let them affect the cart's stop/follow decisions.
+                    display = self.show_colliding_obstacle(
+                        obstacle.pos.point.x, obstacle.pos.point.y, color=0.6
+                    )
+                    if display is not None:
+                        collision_array.markers.append(display)
+                    continue
+
                 # Prepare an emergency stop message
                 stop_msg = Stop()
                 stop_msg.stop = True
@@ -470,6 +484,10 @@ class CollisionDetector(rclpy.node.Node):
 
         return marker
 
+    def is_obstacle_in_front(self, obstacle):
+        """Return True when the obstacle is in the forward half of base_link."""
+        return obstacle.pos.point.x >= 0.0
+
     def display_circle(self, frame, corner, id, radius, color=0.0, z=0.05):
         """Create circle marker for RViz"""
         marker = Marker()
@@ -518,7 +536,7 @@ class CollisionDetector(rclpy.node.Node):
         bound_display.lifetime = Duration(seconds=0.033).to_msg()
         bound_display.type = Marker.LINE_STRIP
         bound_display.header.frame_id = "/base_link"
-        bound_display.scale.x = 0.05
+        bound_display.scale.x = 0.2
         bound_display.color.r = 1.0
         bound_display.color.g = 1.0
         bound_display.color.b = 0.0
@@ -527,7 +545,7 @@ class CollisionDetector(rclpy.node.Node):
 
         # Build a fixed arc length (meters) and sample with a minimum number of points so
         # the curve remains visible in RViz even when steering is near straight.
-        arc_length_m = 5.0
+        arc_length_m = ARC_DISPLAY_LENGTH_M
         radius_abs = abs(radius)
         if radius_abs < 1e-6:
             return bound_display

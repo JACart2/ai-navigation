@@ -29,7 +29,8 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-from anomaly_msg.msg import AnomalyLog
+from anomaly_msg.msg import AnomalyMsg 
+
 
 
 class LocalPlanner(rclpy.node.Node):
@@ -54,7 +55,6 @@ class LocalPlanner(rclpy.node.Node):
         self.path_total_distance = 0.0
         self.eta_initial_report_sent = False
         self.eta_next_report_percent = 20
-        self.eta_ignore_first_progress_sample = True
 
         self.current_state = VehicleState()
         self.stop_requests = {}
@@ -99,9 +99,10 @@ class LocalPlanner(rclpy.node.Node):
             VehicleState, "/vehicle_state", 10
         )
 
-        self.anomaly_pub = self.create_publisher(
-            AnomalyLog, "/ai_anomaly_logging", 10
-        )
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, 
+                                             '/ai_anomaly_logging',
+                                             10
+                                             )
 
         # Send out speed and steering requests to motor endpoint
         self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
@@ -188,10 +189,9 @@ class LocalPlanner(rclpy.node.Node):
         self.path_total_distance = 0.0
         self.eta_initial_report_sent = False
         self.eta_next_report_percent = 20
-        self.eta_ignore_first_progress_sample = True
         self.log(f"Path received: {str(msg)}")
 
-        self.anomaly_detected("info: New path received")
+        # self.anomaly_detected("New path received", AnomalyMsg.INFO)
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -299,7 +299,7 @@ class LocalPlanner(rclpy.node.Node):
             else:
                 self.path_valid = False
                 self.log_header("It appears the cart is already at the destination")
-                self.anomaly_detected("warning: Cart is already at destination")
+                self.anomaly_detected("Cart is already at destination", AnomalyMsg.WARNING)
 
         if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
@@ -357,15 +357,13 @@ class LocalPlanner(rclpy.node.Node):
                 # Let operator know why current path has stopped
                 if self.path_valid:
                     self.log("Reached Destination succesfully without interruption")
-                    self.anomaly_detected("info: Arrived")
+                    self.anomaly_detected("Arrived", AnomalyMsg.INFO)
                     self.arrived_pub.publish(notify_server)
                 else:
                     self.log(
                         "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
                     )
-                    self.anomaly_detected(
-                        "warning: Either already at destination or destination can't be reached"
-                    )
+                    self.anomaly_detected("Either already at destination or destination can't be reached", AnomalyMsg.WARNING)
 
                 # Update the internal state of the vehicle
                 self.vehicle_state_pub.publish(self.current_state)
@@ -513,12 +511,11 @@ class LocalPlanner(rclpy.node.Node):
             self.eta_pub.publish(eta_msg)
 
             if not self.eta_initial_report_sent:
-                self.anomaly_detected(f"ETA: {eta_msg.data}s at 0% complete")
+                self.anomaly_detected(
+                    f"ETA: {eta_msg.data}s at 0% complete",
+                    AnomalyMsg.INFO,
+                )
                 self.eta_initial_report_sent = True
-
-            if self.eta_ignore_first_progress_sample:
-                self.eta_ignore_first_progress_sample = False
-                return
 
             if len(self.local_points) > 1:
                 current_index = self.local_points.index(current_node)
@@ -539,7 +536,11 @@ class LocalPlanner(rclpy.node.Node):
                 and self.eta_next_report_percent <= 100
             ):
                 self.anomaly_detected(
-                    f"ETA progress: {self.eta_next_report_percent}% complete"
+                    f"ETA progress: {self.eta_next_report_percent}% complete, ETA: {eta_msg.data}s",
+                    AnomalyMsg.INFO,
+                )
+                self.log(
+                    f"ETA progress published: {self.eta_next_report_percent}%"
                 )
                 self.eta_next_report_percent += 20
 
@@ -595,15 +596,28 @@ class LocalPlanner(rclpy.node.Node):
         # self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
         self.log(log)
 
-    def anomaly_detected(self, description):
-        anomaly_msg = AnomalyLog()
-        anomaly_msg.stamp = self.get_clock().now().to_msg()
+    def publish_stop_nav_cmd(self):
+        """Sends a zero-velocity command to stop the cart immediately."""
+        stop_msg = VelAngle()
+        stop_msg.vel = 0.0
+        stop_msg.angle = 0.0
+        self.motion_pub.publish(stop_msg)
+
+    def anomaly_detected(self, message, severity):
+        """Helper function to publish an anomaly detection message to the anomaly logging topic.
+
+        Args:
+            message (str): A description of the detected anomaly.
+            severity (str): The severity level of the anomaly (e.g., "info", "warning", "error").
+        """
+        anomaly_msg = AnomalyMsg()
+
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "local_planner"
         anomaly_msg.node_name = self.get_name()
-        anomaly_msg.source = "local_planner"
-        anomaly_msg.description = description
-        anomaly_msg.topic_name = "/ai_anomaly_logging"
-        anomaly_msg.data_type = "text"
-        anomaly_msg.data = []
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
 
         self.anomaly_pub.publish(anomaly_msg)
 
@@ -642,6 +656,7 @@ def create_marker(x, y, frame_id):
 
     return marker
 
+
 def main():
     """The main method that actually handles spinning up the node."""
 
@@ -649,7 +664,6 @@ def main():
     node = LocalPlanner()
 
     rclpy.spin(node)
-
     node.destroy_node()
     rclpy.shutdown()
 

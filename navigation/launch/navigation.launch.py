@@ -29,14 +29,12 @@ def generate_launch_description():
             # Directory where the landmark calibration YAML file is located.
             DeclareLaunchArgument(
                 "calibration_config_dir",
-                default_value=os.path.join(
-                    get_package_share_directory("navigation"), "maps",
-                ),
+                default_value="/maps",
             ),
             # YAML file name for the landmark calibration
             DeclareLaunchArgument(
                 "calibration_config_file",
-                default_value="main_graph_config.yaml",
+                default_value="SpeedBoiMap.yaml",
             ),
             Node(
                 package="navigation",

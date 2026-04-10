@@ -51,6 +51,10 @@ class LocalPlanner(rclpy.node.Node):
         self.new_path = False
         self.path_valid = False
         self.local_points = []
+        self.path_total_distance = 0.0
+        self.eta_initial_report_sent = False
+        self.eta_next_report_percent = 20
+        self.eta_ignore_first_progress_sample = True
 
         self.current_state = VehicleState()
         self.stop_requests = {}
@@ -123,6 +127,9 @@ class LocalPlanner(rclpy.node.Node):
         # Publish the ETA
         self.eta_pub = self.create_publisher(UInt64, "/eta", 10)
 
+        # Publish ETA progress percentage
+        self.eta_progress_pub = self.create_publisher(UInt64, "/eta_progress", 10)
+
         # Publish the projected turning angle and path
         self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
 
@@ -178,6 +185,10 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
+        self.path_total_distance = 0.0
+        self.eta_initial_report_sent = False
+        self.eta_next_report_percent = 20
+        self.eta_ignore_first_progress_sample = True
         self.log(f"Path received: {str(msg)}")
 
         self.anomaly_detected("info: New path received")
@@ -271,6 +282,13 @@ class LocalPlanner(rclpy.node.Node):
                 self.target_ind = pure_pursuit.calc_target_index(
                     self.state, self.cx, self.cy, 0
                 )
+
+                if len(self.local_points) > 1:
+                    self.path_total_distance = self.calc_trip_dist(
+                        self.local_points, self.local_points[0]
+                    )
+                else:
+                    self.path_total_distance = 0.0
 
                 # Publish the ETA to the destination before we get started
                 self.calc_eta()
@@ -465,11 +483,17 @@ class LocalPlanner(rclpy.node.Node):
     def calc_eta(self):
         """Calculates the Estimated Time of Arrival to the destination"""
         # Attempt an update only while driving
-        if self.current_state.is_navigating:
+        if self.current_state.is_navigating and self.local_points:
+            if self.tar_speed <= 0:
+                return
+
             # Where are we at and how much further must we go
             current_node = self.get_closest_point(
                 self.cur_pose.position.x, self.cur_pose.position.y
             )
+
+            if current_node is None:
+                return
 
             # self.log("x: " + str(self.cur_pose.position.x) + "y: " + str(self.cur_pose.position.y))
 
@@ -488,6 +512,37 @@ class LocalPlanner(rclpy.node.Node):
             # eta_msg.data = 0
             self.eta_pub.publish(eta_msg)
 
+            if not self.eta_initial_report_sent:
+                self.anomaly_detected(f"ETA: {eta_msg.data}s at 0% complete")
+                self.eta_initial_report_sent = True
+
+            if self.eta_ignore_first_progress_sample:
+                self.eta_ignore_first_progress_sample = False
+                return
+
+            if len(self.local_points) > 1:
+                current_index = self.local_points.index(current_node)
+                progress_percent = int(
+                    round((current_index / (len(self.local_points) - 1)) * 100)
+                )
+            else:
+                progress_percent = 0
+
+            progress_percent = max(0, min(100, progress_percent))
+
+            progress_msg = UInt64()
+            progress_msg.data = progress_percent
+            self.eta_progress_pub.publish(progress_msg)
+
+            while (
+                progress_percent >= self.eta_next_report_percent
+                and self.eta_next_report_percent <= 100
+            ):
+                self.anomaly_detected(
+                    f"ETA progress: {self.eta_next_report_percent}% complete"
+                )
+                self.eta_next_report_percent += 20
+
     def calc_trip_dist(self, points_list, start):
         """Calculates the trip distance from the "start" Point to the end of the "points_list"
 
@@ -497,7 +552,11 @@ class LocalPlanner(rclpy.node.Node):
         """
         total_distance = 0
 
-        for i in range(self.local_points.index(start), len(points_list)):
+        start_index = self.local_points.index(start)
+        if start_index >= len(points_list) - 1:
+            return 0
+
+        for i in range(start_index + 1, len(points_list)):
             total_distance += self.calc_dist(
                 points_list[i].x,
                 points_list[i].y,

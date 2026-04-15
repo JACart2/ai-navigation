@@ -29,6 +29,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'garmin_gps18x_driver = localization_launch.garmin_gps18x_driver:main',
         ],
     },
 )

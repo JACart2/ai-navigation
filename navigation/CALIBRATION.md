@@ -157,6 +157,8 @@ The `gml_to_gps` CLI tool converts GML maps from local ROS coordinates to GPS co
 # 2. Create a landmarks config file (landmarks.yaml) with 4+ reference points
 
 # 3. Convert the map to GPS coordinates
+The landmarks file (landmarks.yaml) is assumed to be in /maps. If the landmarks file is somewhere else, change the source directory in navigation.launch.py.
+
 ros2 run navigation gml_to_gps \
   --input navigation/maps/main_local.gml \
   --output navigation/maps/main_gps.gml \

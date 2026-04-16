@@ -15,18 +15,14 @@ import math
 
 import rclpy
 import rclpy.node
-import tf_transformations
 import tf2_ros
-from tf2_geometry_msgs.tf2_geometry_msgs import do_transform_point
 from builtin_interfaces.msg import Duration
-from builtin_interfaces.msg import Time
 
 # ROS2 Messages.
 from geometry_msgs.msg import PointStamped
 from sensor_msgs.msg import LaserScan, PointCloud2
 from navigation_interface.msg import Obstacle, ObstacleArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy # needed to match QoS settings of /scanner/scan
-from navigation_interface.msg import Obstacle, ObstacleArray
 from visualization_msgs.msg import Marker
 from tf2_ros import Buffer
 
@@ -61,6 +57,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.last_scanned = None
+        self.sensor_frame = "velodyne"
 
         # Data related to incoming LaserScan (set in laserscan_callback).
         self.angle_max = 3.141592653589
@@ -74,6 +71,11 @@ class LidarObjectToObstacle(rclpy.node.Node):
         # listen for velodyne output
         self.lidar_ptcloud_sub = self.create_subscription(
             PointCloud2, "/velodyne_points", self.lidar_callback, 1
+        )
+
+        # listen for radar output
+        self.radar_ptcloud_sub = self.create_subscription(
+            PointCloud2, "/ti_mmwave/radar_scan_pcl", self.radar_callback, 1
         )
 
         # communication with the pointcloud_to_laserscan node
@@ -156,31 +158,32 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
     def lidar_callback(self, msg):
         # send the pointcloud to be converted to a laserscan
-        self.get_logger ().info ("LIDAR - Received Pointcloud, transforming...")
+        self.get_logger().info("LIDAR - Received Pointcloud, transforming...")
         self.converter_pub.publish(msg)
 
-        # Get the time of the message and store it.
-        self.last_scanned = Time()
-        self.last_scanned.sec = msg.header.stamp.sec
-        self.last_scanned.nanosec = msg.header.stamp.nanosec
+    def radar_callback(self, msg):
+        # send the radar PointCloud2 to be converted to a laserscan
+        self.get_logger().info("RADAR - Received Pointcloud, transforming...")
+        self.converter_pub.publish(msg)
 
     def laserscan_callback(self, msg):
         # Extract data from the last converted LaserScan data.
-        self.get_logger ().info ("LIDAR - LaserScan received!")
+        self.get_logger().info("LaserScan received from %s" % msg.header.frame_id)
         self.curr_data = msg
         self.angle_max = msg.angle_max
         self.angle_min = msg.angle_min
+        self.sensor_frame = msg.header.frame_id
+        self.last_scanned = msg.header.stamp
 
         # Cluster the raw LaserScan data.
-        self.cluster_points ()
+        self.cluster_points()
 
         # Construct Obstacle data from clustered points.
-        self.circularize () #TODO - untested
+        self.circularize()
 
         # Publish all detected Obstacles, then clear the buffer.
-        self.obstacle_pub.publish (self.obstacles)
+        self.obstacle_pub.publish(self.obstacles)
 
-        # TODO! - untested function
         self.local_display("base_link")
 
         # Clear the buffer.
@@ -189,7 +192,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
     def circularize(self):
         # Turn the point clusters stored in self.cluster_list to Obstacles with radii that cover the entire cluster
         self.obstacles = ObstacleArray()
-        self.obstacles.header.frame_id = "velodyne"
+        self.obstacles.header.frame_id = "base_link"
         # self.get_logger().info(str(type(self.last_scanned))) # debugging!
         # TODO - This throws errors sometimes between launches due to messages remaining in the ros2 /scanner/scan topic.
         # I see two potential ways to fix this:
@@ -217,23 +220,22 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
                 # Wait for transform to be available
                 try:
-                    transform = self.tf_buffer.lookup_transform('base_link', 'velodyne', self.last_scanned)
+                    transform = self.tf_buffer.lookup_transform('base_link', self.sensor_frame, self.last_scanned)
                 except (tf2_ros.TransformException) as e:
-                    self.get_logger().warn(f'LO2O: Could not transform: {e}')
+                    self.get_logger().warn(f'LO2O: Could not transform from {self.sensor_frame} to base_link: {e}')
                     continue
 
                 # Transforming the center point to 'base_link'
                 global_point = PointStamped()
-                global_point.header.frame_id = 'velodyne'
+                global_point.header.frame_id = self.sensor_frame
                 global_point.header.stamp = self.last_scanned
                 global_point.point.x = centerX
                 global_point.point.y = centerY
                 global_point.point.z = 0.0
 
-                # Apply the transform to convert from 'velodyne' frame to 'base_link'
+                # Apply the transform to convert from sensor frame to 'base_link'
                 try:
                     transformed_point = self.tf_buffer.transform(global_point, 'base_link')
-                    transformed_point = do_transform_point(global_point, transform)
                 except (tf2_ros.TransformException) as e:
                     self.get_logger().warn(f'Could not transform point: {e}')
                     continue

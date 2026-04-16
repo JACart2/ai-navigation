@@ -9,6 +9,8 @@ import launch_ros.actions
 import launch_ros.events
 
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch_ros.actions import LifecycleNode
 from launch_ros.actions import Node
 
@@ -22,11 +24,26 @@ def generate_launch_description():
 
     ld = launch.LaunchDescription()
 
+    enable_lidar = LaunchConfiguration("enable_lidar", default="true")
+    enable_radar = LaunchConfiguration("enable_radar", default="true")
+
+    declare_enable_lidar = DeclareLaunchArgument(
+        "enable_lidar",
+        default_value="true",
+        description="Enable lidar localization and lidar transform",
+    )
+    declare_enable_radar = DeclareLaunchArgument(
+        "enable_radar",
+        default_value="true",
+        description="Enable radar transform and radar obstacle pipeline",
+    )
+
     lidar_tf = launch_ros.actions.Node(
         name="lidar_tf",
         package="tf2_ros",
         executable="static_transform_publisher",
         arguments=["1", "0", "1.9", "0", "0", "0", "1", "base_link", "velodyne"],
+        condition=IfCondition(enable_lidar),
     )
 
     imu_tf = launch_ros.actions.Node(
@@ -46,6 +63,32 @@ def generate_launch_description():
         ),
     )
 
+    radar_x = LaunchConfiguration("radar_x", default="0.0")
+    radar_y = LaunchConfiguration("radar_y", default="0.0")
+    radar_z = LaunchConfiguration("radar_z", default="0.9")
+    radar_roll = LaunchConfiguration("radar_roll", default="0.0")
+    radar_pitch = LaunchConfiguration("radar_pitch", default="0.0")
+    radar_yaw = LaunchConfiguration("radar_yaw", default="0.0")
+    radar_parent_frame = LaunchConfiguration("radar_parent_frame", default="base_link")
+    radar_frame = LaunchConfiguration("radar_frame", default="ti_mmwave_0")
+
+    radar_tf = launch_ros.actions.Node(
+        name="radar_tf",
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        arguments=[
+            radar_x,
+            radar_y,
+            radar_z,
+            radar_roll,
+            radar_pitch,
+            radar_yaw,
+            radar_parent_frame,
+            radar_frame,
+        ],
+        condition=IfCondition(enable_radar),
+    )
+
     lidar_localization = launch_ros.actions.LifecycleNode(
         name="lidar_localization",
         namespace="",
@@ -58,6 +101,7 @@ def generate_launch_description():
             ("/imu", "/zed/zed_node/imu/data"),
         ],
         output="screen",
+        condition=IfCondition(enable_lidar),
     )
 
     to_inactive = launch.actions.EmitEvent(
@@ -104,11 +148,15 @@ def generate_launch_description():
         )
     )
 
+    ld.add_action(declare_enable_lidar)
+    ld.add_action(declare_enable_radar)
     ld.add_action(from_unconfigured_to_inactive)
     ld.add_action(from_inactive_to_active)
 
     ld.add_action(lidar_localization)
     ld.add_action(lidar_tf)
+    ld.add_action(imu_tf)
+    ld.add_action(radar_tf)
     ld.add_action(to_inactive)
 
     return ld

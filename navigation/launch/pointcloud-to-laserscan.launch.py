@@ -26,15 +26,30 @@ def generate_launch_description():
                 '--frame-id', 'map', '--child-frame-id', 'cloud'
             ]
         ),
+        # Lidar converter
         Node(
             package='pointcloud_to_laserscan', executable='pointcloud_to_laserscan_node',
-            remappings=[('cloud_in', '/cloud_in'),
-                        ('scan', '/scanner/scan')],
+            remappings=[('cloud_in', '/cloud_in_lidar'),
+                        ('scan', '/scanner/lidar_scan')],
             parameters=[{
-                'min_height': -1.0,
-                'max_height': 0.0,
-                'range_min': 0.8,
+                'min_height': -5.0,  # More lenient height range
+                'max_height': 5.0,
+                'range_min': 0.1,   # Allow closer ranges
+                'range_max': 50.0,  # Allow longer ranges
             }],
-            name='pointcloud_to_laserscan'
+            name='pointcloud_to_laserscan_lidar'
+        ),
+        # Radar converter
+        Node(
+            package='pointcloud_to_laserscan', executable='pointcloud_to_laserscan_node',
+            remappings=[('cloud_in', '/cloud_in_radar'),
+                        ('scan', '/scanner/radar_scan')],
+            parameters=[{
+                'min_height': -5.0,  # More lenient height range for radar
+                'max_height': 5.0,
+                'range_min': 0.1,   # Allow closer ranges
+                'range_max': 50.0,  # Allow longer ranges
+            }],
+            name='pointcloud_to_laserscan_radar'
         )
     ])

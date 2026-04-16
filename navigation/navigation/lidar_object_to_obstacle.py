@@ -68,6 +68,9 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.cluster_list = [] # raw clusters of points where obstacles may be
         self.obstacles = ObstacleArray() # stores the converted obstacles to be sent to /obstacles topic
 
+        # Rate limiting for radar
+        self.last_radar_time = self.get_clock().now()
+
         # listen for velodyne output
         self.lidar_ptcloud_sub = self.create_subscription(
             PointCloud2, "/velodyne_points", self.lidar_callback, 1
@@ -78,18 +81,24 @@ class LidarObjectToObstacle(rclpy.node.Node):
             PointCloud2, "/ti_mmwave/radar_scan_pcl", self.radar_callback, 1
         )
 
-        # communication with the pointcloud_to_laserscan node
+        # communication with the pointcloud_to_laserscan nodes
         qos_scanner = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, depth=10)
-        self.converter_sub = self.create_subscription(
-            LaserScan, "/scanner/scan", self.laserscan_callback, qos_scanner # Receives the converted LaserScan data back to be processed
+        self.lidar_converter_sub = self.create_subscription(
+            LaserScan, "/scanner/lidar_scan", self.laserscan_callback, qos_scanner
         )
-        self.converter_pub = self.create_publisher (PointCloud2, "/cloud_in", 10) # where received velodyne PointCloud data gets sent to be converted.
+        self.radar_converter_sub = self.create_subscription(
+            LaserScan, "/scanner/radar_scan", self.laserscan_callback, qos_scanner
+        )
+        self.lidar_converter_pub = self.create_publisher(PointCloud2, "/cloud_in_lidar", 10)
+        self.radar_converter_pub = self.create_publisher(PointCloud2, "/cloud_in_radar", 10)
 
         # Transmit aggregated ObstacleArray data to a topic to be handled separately.
         self.obstacle_pub = self.create_publisher (ObstacleArray, "/obstacles", 10)
 
         # Publish created markers to be displayed on RVIZ2.
-        self.display_pub = self.create_publisher (Marker, "lidar_obstacle_display", 10)
+        self.lidar_display_pub = self.create_publisher(Marker, "/lidar_obstacle_display", 10)
+        self.radar_display_pub = self.create_publisher(Marker, "/radar_obstacle_display", 10)
+        self.current_sensor = "lidar"
 
     def cluster_points(self):
         # LaserScan msg being processed.
@@ -159,12 +168,18 @@ class LidarObjectToObstacle(rclpy.node.Node):
     def lidar_callback(self, msg):
         # send the pointcloud to be converted to a laserscan
         self.get_logger().info("LIDAR - Received Pointcloud, transforming...")
-        self.converter_pub.publish(msg)
+        self.lidar_converter_pub.publish(msg)
 
     def radar_callback(self, msg):
+        # Rate limiting: only process radar data every 0.1 seconds
+        current_time = self.get_clock().now()
+        if (current_time - self.last_radar_time).nanoseconds / 1e9 < 0.1:
+            return
+        self.last_radar_time = current_time
+
         # send the radar PointCloud2 to be converted to a laserscan
         self.get_logger().info("RADAR - Received Pointcloud, transforming...")
-        self.converter_pub.publish(msg)
+        self.radar_converter_pub.publish(msg)
 
     def laserscan_callback(self, msg):
         # Extract data from the last converted LaserScan data.
@@ -174,6 +189,11 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.angle_min = msg.angle_min
         self.sensor_frame = msg.header.frame_id
         self.last_scanned = msg.header.stamp
+        self.current_sensor = (
+            "radar"
+            if "ti_mmwave" in msg.header.frame_id or "radar" in msg.header.frame_id
+            else "lidar"
+        )
 
         # Cluster the raw LaserScan data.
         self.cluster_points()
@@ -259,19 +279,25 @@ class LidarObjectToObstacle(rclpy.node.Node):
             marker = Marker()
             marker.header.frame_id = frame
 
-            marker.ns = "Object_NS"
+            if self.current_sensor == "radar":
+                marker.ns = "Radar_Objects"
+                marker.color.r = 1.0
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+            else:
+                marker.ns = "Lidar_Objects"
+                marker.color.r = 0.0
+                marker.color.g = 0.0
+                marker.color.b = 1.0
+
             marker.id = i
             marker.type = Marker.CYLINDER
             marker.action = Marker.ADD
-            marker.color.r = 0.0
-            marker.color.g = 0.0
-            marker.color.b = 1.0
             marker.color.a = 1.0
 
             # Use rclpy duration for marker lifetime
             dur = Duration()
             dur.nanosec = 1 * 10 ** 8
-            self.get_logger().info("Setting marker duration to :: " + str(type(dur))) # DEBUGGING!
             marker.lifetime = dur
 
             marker.pose.position.x = object_list[i].pos.point.x
@@ -283,8 +309,10 @@ class LidarObjectToObstacle(rclpy.node.Node):
             marker.scale.y = radius
             marker.scale.z = 0.3
 
-            # Publish marker
-            self.display_pub.publish(marker)
+            if self.current_sensor == "radar":
+                self.radar_display_pub.publish(marker)
+            else:
+                self.lidar_display_pub.publish(marker)
 
 def main():
     # node startup.

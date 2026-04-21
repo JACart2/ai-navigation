@@ -15,6 +15,7 @@ import math
 
 import rclpy
 import rclpy.node
+import tf2_geometry_msgs  # noqa: F401 Needed to register PointStamped transforms.
 import tf2_ros
 from builtin_interfaces.msg import Duration
 
@@ -117,11 +118,8 @@ class LidarObjectToObstacle(rclpy.node.Node):
         # Extract the cluster.
         cluster_list = self.cluster_list
         cur_cluster = []
-
-        # Initialize the starting Point to the beginning.
-        default_x, default_y = self.get_point (cur_angle, arr[0])
-        cur_point = Point(default_x, default_y)
-        last_point = cur_point
+        min_cluster_size = 1 if self.current_sensor == "radar" else 2
+        last_point = None
 
         # Begin iterating through the received ranges.
         for i in range(len(arr)):
@@ -130,24 +128,41 @@ class LidarObjectToObstacle(rclpy.node.Node):
             ray_dist = arr[i]
 
             # Only process scans 8 meters ahead; limit view to front 180 degrees.
-            if ray_dist <= 8 and ( (cur_angle > (-math.pi/2)) and (cur_angle < (math.pi/2)) ):
+            if (
+                math.isfinite(ray_dist)
+                and ray_dist <= 8
+                and ((cur_angle > (-math.pi / 2)) and (cur_angle < (math.pi / 2)))
+            ):
 
                 # Convert scan info to Point object.
                 cur_x, cur_y = self.get_point (cur_angle, ray_dist)
                 cur_point = Point(cur_x, cur_y)
 
                 # Cluster Point instances that are close together; clear current cluster if it's getting large.
-                if cur_point.equals(last_point) and len(cur_cluster) < 70:
+                if (
+                    last_point is not None
+                    and cur_point.equals(last_point)
+                    and len(cur_cluster) < 70
+                ):
                     cur_cluster.append (cur_point)
                 else:
                     # Keep only significant objects.
-                    if len(cur_cluster) > 1:
+                    if len(cur_cluster) >= min_cluster_size:
                         cluster_list.append(cur_cluster)
 
-                    # Prepare to process a new cluster.
-                    cur_cluster = []
+                    # Prepare to process a new cluster, including this first point.
+                    cur_cluster = [cur_point]
 
-            last_point = cur_point
+                last_point = cur_point
+            else:
+                if len(cur_cluster) >= min_cluster_size:
+                    cluster_list.append(cur_cluster)
+
+                cur_cluster = []
+                last_point = None
+
+        if len(cur_cluster) >= min_cluster_size:
+            cluster_list.append(cur_cluster)
 
     """Compute Cartesian coordinates given an angle and distance.
 
@@ -236,7 +251,10 @@ class LidarObjectToObstacle(rclpy.node.Node):
                 centerY = (first_point.y + last_point.y) / 2
 
                 # avg point spacing is maybe ~3 inches? Adjust the calculation if needed
-                radius = 0.01 * len(cluster)
+                if self.current_sensor == "radar":
+                    radius = max(0.25, 0.01 * len(cluster))
+                else:
+                    radius = 0.01 * len(cluster)
 
                 # Wait for transform to be available
                 try:

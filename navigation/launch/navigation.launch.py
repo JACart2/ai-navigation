@@ -77,7 +77,7 @@ def generate_launch_description():
             Node(
                 package="navigation",
                 executable="collision_avoidance_aad_log",
-                name="collision_avoidance_anomaly_log",
+                name="collision_avoidance_aad_log",
                 output="screen",
                 condition=IfCondition(LaunchConfiguration("enable_aad")),
             ),

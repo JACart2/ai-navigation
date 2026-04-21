@@ -43,7 +43,14 @@ class MotorEndpoint(rclpy.node.Node):
         self.STEERING_TOLERANCE = 50
         self.COMFORT_STOP_DIST = 4.0
         self.STEERING_CORRECTION = 10
-        self.AAD_LOGGING_ENABLED = True
+        
+        self.declare_parameter("enable_aad", True)
+
+        self.AAD_LOGGING_ENABLED = (
+            self.get_parameter("enable_aad")
+            .get_parameter_value()
+            .bool_value
+        )
 
         # Driving vars
         self.state = STOPPED

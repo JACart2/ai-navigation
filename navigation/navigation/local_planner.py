@@ -467,6 +467,9 @@ class LocalPlanner(rclpy.node.Node):
 
             distance_remaining = self.calc_trip_dist(self.local_points, current_node)
 
+            # Avoid division by zero when speed is zero or not yet initialized
+            if self.cur_speed <= 0:
+                return
 
             # # Remaining time in seconds
             remaining_time = distance_remaining / self.cur_speed

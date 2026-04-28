@@ -5,7 +5,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Float32
 from navigation_interface.msg import Stop
 from std_msgs.msg import Header
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, qos_profile_sensor_data
 
 from anomaly_msg.msg import AnomalyMsg
 
@@ -22,16 +22,16 @@ class CollisionAvoidanceAADLog(Node):
 
 
         camera_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
-            depth=1
+            depth=10
         )
 
         self.camera_sub = self.create_subscription(
             Image,
             '/zed_front/zed_node_0/rgb/color/rect/image',
             self.camera_callback,
-            camera_qos
+            qos_profile_sensor_data
         )
 
         self.speed_sub = self.create_subscription(

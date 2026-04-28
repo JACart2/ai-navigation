@@ -58,11 +58,6 @@ def generate_launch_description():
                 executable="visualize_graph",
                 output="screen",
             ),
-            Node(
-                package="navigation",
-                executable="pose_bridge",
-                output="screen",
-            ),
             # call other launchfiles from this package:
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(

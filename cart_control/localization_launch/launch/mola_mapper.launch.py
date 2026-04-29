@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -8,16 +8,22 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 
-def generate_launch_description():
-    """
-    Launch file for MOLA mapping mode.
-    Publishes only the essential topics needed for MOLA:
-    - /velodyne_points (lidar data)
-    - /zed_*/zed_node_*/imu/data (IMU data from ZED cameras)
-    - TF frames (base_link -> velodyne)
-    """
-    
-    cart_config_path = LaunchConfiguration("cart_config_path")
+def _launch_setup(context, *args, **kwargs):
+    """Build launch actions after resolving cart selection arguments."""
+    cart_name = LaunchConfiguration("cart_name").perform(context).strip().lower()
+    cart_config_path_arg = LaunchConfiguration("cart_config_path").perform(context).strip()
+
+    if cart_name not in {"james", "madison"}:
+        raise RuntimeError(
+            "Invalid cart_name. Use 'james' or 'madison', "
+            f"got: '{cart_name}'."
+        )
+
+    cart_config_path = cart_config_path_arg or os.path.join(
+        get_package_share_directory("cart_launch"),
+        "config",
+        f"cart_{cart_name}.yaml",
+    )
 
     # Launch the velodyne_driver node for VLP16
     velodyne_driver_node = Node(
@@ -62,19 +68,37 @@ def generate_launch_description():
         output="screen",
     )
 
-    # Combine all the above components into a single launch description
+    return [
+        velodyne_driver_node,
+        velodyne_transform_launch,
+        cameras_launch,
+        static_tf_publisher,
+    ]
+
+
+def generate_launch_description():
+    """
+    Launch file for MOLA mapping mode.
+    Publishes only the essential topics needed for MOLA:
+    - /velodyne_points (lidar data)
+    - /zed_*/zed_node_*/imu/data (IMU data from ZED cameras)
+    - TF frames (base_link -> velodyne)
+    """
     return LaunchDescription(
         [
             DeclareLaunchArgument(
-                "cart_config_path",
-                default_value=os.path.join(
-                    get_package_share_directory("cart_launch"), "config", "cart_james.yaml"
-                ),
-                description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
+                "cart_name",
+                default_value="james",
+                description="Cart profile to use: 'james' or 'madison'.",
             ),
-            velodyne_driver_node,
-            velodyne_transform_launch,
-            cameras_launch,
-            static_tf_publisher,
+            DeclareLaunchArgument(
+                "cart_config_path",
+                default_value="",
+                description=(
+                    "Optional path to cart-specific YAML config. "
+                    "If empty, uses cart_<cart_name>.yaml from cart_launch/config."
+                ),
+            ),
+            OpaqueFunction(function=_launch_setup),
         ]
     )

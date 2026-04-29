@@ -15,14 +15,14 @@ class CollisionAvoidanceAADLog(Node):
     def __init__(self):
         super().__init__('collision_avoidance_aad_log')
 
-        self.IMG_PUBLISH_PERIOD = 0.5 
+        self.IMG_PUBLISH_PERIOD = 2 
 
         self.get_logger().info("Creating subsribers")
         # --- Subscribers ---
 
 
         camera_qos = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
@@ -54,29 +54,29 @@ class CollisionAvoidanceAADLog(Node):
         self.anomaly_pub = self.create_publisher(
             AnomalyMsg,
             '/ai_anomaly_logging',
-            10
+            qos_profile_sensor_data
         )
         self.get_logger().info("Finished creating publishers")
 
-        self.last_image = None
+        self.last_pub_time = self.get_clock().now()
         self.last_speed = 0.0
-
-        self.timer = self.create_timer(
-            self.IMG_PUBLISH_PERIOD, 
-            self.timer_callback)
 
     # --- Callbacks ---
 
     def camera_callback(self, img_msg: Image):
-        anomaly = AnomalyMsg()
-        anomaly.header = img_msg.header
-        anomaly.node_name = self.get_name()
-        anomaly.importance = AnomalyMsg.INFO
-        anomaly.type = AnomalyMsg.IMAGE
-        anomaly.msg = "Camera frame received."
-        anomaly.image = img_msg
+        now = self.get_clock().now()
 
-        self.last_image = anomaly
+        if (now - self.last_pub_time).nanoseconds > self.IMAGE_PUBLISH_PERIOD * 1e9:  # 2 seconds
+            anomaly = AnomalyMsg()
+            anomaly.header = img_msg.header
+            anomaly.node_name = self.get_name()
+            anomaly.importance = AnomalyMsg.INFO
+            anomaly.type = AnomalyMsg.IMAGE
+            anomaly.msg = "Camera frame received."
+            anomaly.image = img_msg
+
+            self.anomaly_pub.publish(anomaly)
+            self.last_pub_time = now
 
     def stop_callback(self, stop_msg: Stop):
         anomaly = AnomalyMsg()
@@ -106,16 +106,6 @@ class CollisionAvoidanceAADLog(Node):
             anomaly.msg = f"The speed of the cart is {msg.data}"
 
             self.anomaly_pub.publish(anomaly)
-
-    def timer_callback(self):
-        if self.last_image: 
-            self.get_logger().info("Publishing image")
-
-
-            self.anomaly_pub.publish(self.last_image)
-            self.last_image = None
-        else:
-            self.get_logger().info("Issue with previous image")
     
 
 def main(args=None):

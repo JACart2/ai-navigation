@@ -58,7 +58,12 @@ def generate_launch_description():
 
     # Include the lidar_localization launch file using the new path
     lidar_localization_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([lidar_localization_launch_path])
+        PythonLaunchDescriptionSource([lidar_localization_launch_path]),
+        launch_arguments={
+            # The top-level cart launcher owns the radar TF so the calibrated
+            # radar pose is published in one place.
+            "enable_radar": "false",
+        }.items(),
     )
 
     # Specify the path to cameras.launch.py

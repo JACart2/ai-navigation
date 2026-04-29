@@ -32,6 +32,8 @@ def generate_launch_description():
             remappings=[('cloud_in', '/cloud_in_lidar'),
                         ('scan', '/scanner/lidar_scan')],
             parameters=[{
+                'target_frame': 'base_link',
+                'transform_tolerance': 0.05,
                 'min_height': -5.0,  # More lenient height range
                 'max_height': 5.0,
                 'range_min': 0.1,   # Allow closer ranges
@@ -45,6 +47,8 @@ def generate_launch_description():
             remappings=[('cloud_in', '/cloud_in_radar'),
                         ('scan', '/scanner/radar_scan')],
             parameters=[{
+                'target_frame': 'base_link',
+                'transform_tolerance': 0.05,
                 'min_height': -5.0,  # More lenient height range for radar
                 'max_height': 5.0,
                 'range_min': 0.1,   # Allow closer ranges

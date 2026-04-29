@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JACART Live View</title>
+    <link rel="stylesheet" href="./cart-viz.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <canvas id="scene" aria-label="Top-down cart visualization"></canvas>
+
+      <header class="panel panel-top">
+        <div class="brand-lockup">
+          <span class="eyebrow">Live Autonomy View</span>
+          <h1>JACART Cart Visualizer</h1>
+        </div>
+        <div class="status-row">
+          <div class="chip" data-tone="neutral">
+            <span class="chip-label">Connection</span>
+            <strong id="connection-status">Connecting</strong>
+          </div>
+          <div class="chip">
+            <span class="chip-label">Frame</span>
+            <strong id="frame-status">base_link</strong>
+          </div>
+          <div class="chip">
+            <span class="chip-label">Mode</span>
+            <strong id="mode-status">Idle</strong>
+          </div>
+        </div>
+      </header>
+
+      <aside class="panel panel-left">
+        <div class="metric-grid">
+          <div class="metric-card">
+            <span class="metric-label">Current Speed</span>
+            <strong id="speed-value">0.0 km/h</strong>
+            <span class="metric-sub" id="speed-value-secondary">0.0 m/s</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Target Speed</span>
+            <strong id="target-speed-value">0.0 km/h</strong>
+            <span class="metric-sub" id="target-speed-secondary">0.0 m/s</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Steering</span>
+            <strong id="steering-value">0.0°</strong>
+            <span class="metric-sub">front wheel command</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Obstacle Count</span>
+            <strong id="obstacle-count">0</strong>
+            <span class="metric-sub" id="obstacle-count-sub">0 in sweep zone</span>
+          </div>
+        </div>
+      </aside>
+
+      <aside class="panel panel-right">
+        <div class="event-card">
+          <span class="section-label">Scene Summary</span>
+          <ul class="summary-list">
+            <li><span>Critical</span><strong id="critical-count">0</strong></li>
+            <li><span>Followable</span><strong id="followable-count">0</strong></li>
+            <li><span>Path Points</span><strong id="path-count">0</strong></li>
+            <li><span>Target</span><strong id="target-status">Unavailable</strong></li>
+          </ul>
+        </div>
+
+        <div class="event-card">
+          <span class="section-label">Stop Status</span>
+          <p id="stop-summary">No active stop request.</p>
+        </div>
+
+        <div class="event-card">
+          <span class="section-label">Legend</span>
+          <div class="legend-list">
+            <div><span class="legend-swatch safe"></span><span>Detected obstacle</span></div>
+            <div><span class="legend-swatch sweep"></span><span>Inside wheel sweep</span></div>
+            <div><span class="legend-swatch danger"></span><span>Critical stop zone</span></div>
+            <div><span class="legend-swatch path"></span><span>Planned path</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <script src="./cart-viz.js" defer></script>
+  </body>
+</html>

@@ -68,6 +68,26 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.curr_data = None # most recent lidar scan data (after conversion to LaserScan)
         self.cluster_list = [] # raw clusters of points where obstacles may be
         self.obstacles = ObstacleArray() # stores the converted obstacles to be sent to /obstacles topic
+        self.sensor_obstacles = {
+            "lidar": ObstacleArray(),
+            "radar": ObstacleArray(),
+        }
+        self.sensor_last_seen = {
+            "lidar": None,
+            "radar": None,
+        }
+        self.declare_parameter("fusion_match_distance", 0.6)
+        self.declare_parameter("sensor_stale_timeout", 0.35)
+        self.fusion_match_distance = (
+            self.get_parameter("fusion_match_distance")
+            .get_parameter_value()
+            .double_value
+        )
+        self.sensor_stale_timeout = (
+            self.get_parameter("sensor_stale_timeout")
+            .get_parameter_value()
+            .double_value
+        )
 
         # Rate limiting for radar
         self.last_radar_time = self.get_clock().now()
@@ -85,10 +105,16 @@ class LidarObjectToObstacle(rclpy.node.Node):
         # communication with the pointcloud_to_laserscan nodes
         qos_scanner = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, depth=10)
         self.lidar_converter_sub = self.create_subscription(
-            LaserScan, "/scanner/lidar_scan", self.laserscan_callback, qos_scanner
+            LaserScan,
+            "/scanner/lidar_scan",
+            lambda msg: self.laserscan_callback(msg, "lidar"),
+            qos_scanner,
         )
         self.radar_converter_sub = self.create_subscription(
-            LaserScan, "/scanner/radar_scan", self.laserscan_callback, qos_scanner
+            LaserScan,
+            "/scanner/radar_scan",
+            lambda msg: self.laserscan_callback(msg, "radar"),
+            qos_scanner,
         )
         self.lidar_converter_pub = self.create_publisher(PointCloud2, "/cloud_in_lidar", 10)
         self.radar_converter_pub = self.create_publisher(PointCloud2, "/cloud_in_radar", 10)
@@ -196,7 +222,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.get_logger().info("RADAR - Received Pointcloud, transforming...")
         self.radar_converter_pub.publish(msg)
 
-    def laserscan_callback(self, msg):
+    def laserscan_callback(self, msg, sensor_name=None):
         # Extract data from the last converted LaserScan data.
         self.get_logger().info("LaserScan received from %s" % msg.header.frame_id)
         self.curr_data = msg
@@ -204,11 +230,13 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.angle_min = msg.angle_min
         self.sensor_frame = msg.header.frame_id
         self.last_scanned = msg.header.stamp
-        self.current_sensor = (
-            "radar"
-            if "ti_mmwave" in msg.header.frame_id or "radar" in msg.header.frame_id
-            else "lidar"
-        )
+        if sensor_name is None:
+            sensor_name = (
+                "radar"
+                if "ti_mmwave" in msg.header.frame_id or "radar" in msg.header.frame_id
+                else "lidar"
+            )
+        self.current_sensor = sensor_name
 
         # Cluster the raw LaserScan data.
         self.cluster_points()
@@ -216,13 +244,75 @@ class LidarObjectToObstacle(rclpy.node.Node):
         # Construct Obstacle data from clustered points.
         self.circularize()
 
-        # Publish all detected Obstacles, then clear the buffer.
-        self.obstacle_pub.publish(self.obstacles)
-
+        self.sensor_obstacles[self.current_sensor] = self.obstacles
+        self.sensor_last_seen[self.current_sensor] = self.get_clock().now()
+        self.publish_fused_obstacles()
         self.local_display("base_link")
 
         # Clear the buffer.
         self.cluster_list = []
+
+    def obstacle_distance(self, first, second):
+        return math.sqrt(
+            (first.pos.point.x - second.pos.point.x) ** 2
+            + (first.pos.point.y - second.pos.point.y) ** 2
+        )
+
+    def copy_obstacle(self, obstacle):
+        copied = Obstacle()
+        copied.header.frame_id = obstacle.header.frame_id
+        copied.header.stamp = obstacle.header.stamp
+        copied.pos.header.frame_id = obstacle.pos.header.frame_id
+        copied.pos.header.stamp = obstacle.pos.header.stamp
+        copied.pos.point.x = obstacle.pos.point.x
+        copied.pos.point.y = obstacle.pos.point.y
+        copied.pos.point.z = obstacle.pos.point.z
+        copied.radius = obstacle.radius
+        copied.followable = obstacle.followable
+        return copied
+
+    def sensor_is_recent(self, sensor_name):
+        last_seen = self.sensor_last_seen[sensor_name]
+        if last_seen is None:
+            return False
+
+        age = (self.get_clock().now() - last_seen).nanoseconds / 1e9
+        return age <= self.sensor_stale_timeout
+
+    def merge_obstacle(self, fused_obstacle, radar_obstacle):
+        # LiDAR is usually the better geometric estimate; keep its center and
+        # expand the safety radius when radar agrees with it.
+        fused_obstacle.radius = max(fused_obstacle.radius, radar_obstacle.radius)
+        fused_obstacle.followable = fused_obstacle.followable or radar_obstacle.followable
+
+    def publish_fused_obstacles(self):
+        fused = ObstacleArray()
+        fused.header.frame_id = "base_link"
+        fused.header.stamp = self.last_scanned
+
+        if self.sensor_is_recent("lidar"):
+            for obstacle in self.sensor_obstacles["lidar"].obstacles:
+                fused.obstacles.append(self.copy_obstacle(obstacle))
+
+        if self.sensor_is_recent("radar"):
+            for radar_obstacle in self.sensor_obstacles["radar"].obstacles:
+                best_index = None
+                best_distance = None
+
+                for index, fused_obstacle in enumerate(fused.obstacles):
+                    distance = self.obstacle_distance(fused_obstacle, radar_obstacle)
+                    if distance <= self.fusion_match_distance and (
+                        best_distance is None or distance < best_distance
+                    ):
+                        best_index = index
+                        best_distance = distance
+
+                if best_index is None:
+                    fused.obstacles.append(self.copy_obstacle(radar_obstacle))
+                else:
+                    self.merge_obstacle(fused.obstacles[best_index], radar_obstacle)
+
+        self.obstacle_pub.publish(fused)
 
     def circularize(self):
         # Turn the point clusters stored in self.cluster_list to Obstacles with radii that cover the entire cluster
@@ -256,13 +346,6 @@ class LidarObjectToObstacle(rclpy.node.Node):
                 else:
                     radius = 0.01 * len(cluster)
 
-                # Wait for transform to be available
-                try:
-                    transform = self.tf_buffer.lookup_transform('base_link', self.sensor_frame, self.last_scanned)
-                except (tf2_ros.TransformException) as e:
-                    self.get_logger().warn(f'LO2O: Could not transform from {self.sensor_frame} to base_link: {e}')
-                    continue
-
                 # Transforming the center point to 'base_link'
                 global_point = PointStamped()
                 global_point.header.frame_id = self.sensor_frame
@@ -272,11 +355,14 @@ class LidarObjectToObstacle(rclpy.node.Node):
                 global_point.point.z = 0.0
 
                 # Apply the transform to convert from sensor frame to 'base_link'
-                try:
-                    transformed_point = self.tf_buffer.transform(global_point, 'base_link')
-                except (tf2_ros.TransformException) as e:
-                    self.get_logger().warn(f'Could not transform point: {e}')
-                    continue
+                if self.sensor_frame == "base_link":
+                    transformed_point = global_point
+                else:
+                    try:
+                        transformed_point = self.tf_buffer.transform(global_point, 'base_link')
+                    except (tf2_ros.TransformException) as e:
+                        self.get_logger().warn(f'Could not transform point: {e}')
+                        continue
 
                 # self.get_logger().info("Transformed point to :: " + str(transformed_point)) # DEBUGGING!
                 # Create a new circle around the obstacle

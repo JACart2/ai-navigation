@@ -155,7 +155,7 @@ def generate_launch_description():
     )
     declare_radar_x = DeclareLaunchArgument(
         "radar_x",
-        default_value="0.0",
+        default_value="1.0",
         description="Radar X offset in meters relative to radar_parent_frame.",
     )
     declare_radar_y = DeclareLaunchArgument(
@@ -165,7 +165,7 @@ def generate_launch_description():
     )
     declare_radar_z = DeclareLaunchArgument(
         "radar_z",
-        default_value="0.0",
+        default_value="0.9",
         description="Radar Z offset in meters relative to radar_parent_frame.",
     )
     declare_radar_roll = DeclareLaunchArgument(

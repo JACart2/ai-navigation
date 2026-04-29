@@ -31,7 +31,7 @@ class CollisionAvoidanceAADLog(Node):
             Image,
             '/zed_front/zed_node_0/rgb/color/rect/image',
             self.camera_callback,
-            qos_profile_sensor_data
+            camera_qos
         )
 
         self.speed_sub = self.create_subscription(
@@ -66,7 +66,7 @@ class CollisionAvoidanceAADLog(Node):
     def camera_callback(self, img_msg: Image):
         now = self.get_clock().now()
 
-        if (now - self.last_pub_time).nanoseconds > self.IMAGE_PUBLISH_PERIOD * 1e9:  # 2 seconds
+        if (now - self.last_pub_time).nanoseconds > self.IMG_PUBLISH_PERIOD * 1e9:  # 2 seconds
             anomaly = AnomalyMsg()
             anomaly.header = img_msg.header
             anomaly.node_name = self.get_name()

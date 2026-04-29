@@ -143,47 +143,6 @@ def generate_launch_description():
             "in the sourced ROS environment."
         ),
     )
-    declare_radar_parent_frame = DeclareLaunchArgument(
-        "radar_parent_frame",
-        default_value="base_link",
-        description="Parent TF frame for the TI radar static transform.",
-    )
-    declare_radar_frame = DeclareLaunchArgument(
-        "radar_frame",
-        default_value="ti_mmwave_0",
-        description="Child TF frame for the TI radar static transform.",
-    )
-    declare_radar_x = DeclareLaunchArgument(
-        "radar_x",
-        default_value="0.0",
-        description="Radar X offset in meters relative to radar_parent_frame.",
-    )
-    declare_radar_y = DeclareLaunchArgument(
-        "radar_y",
-        default_value="0.0",
-        description="Radar Y offset in meters relative to radar_parent_frame.",
-    )
-    declare_radar_z = DeclareLaunchArgument(
-        "radar_z",
-        default_value="0.0",
-        description="Radar Z offset in meters relative to radar_parent_frame.",
-    )
-    declare_radar_roll = DeclareLaunchArgument(
-        "radar_roll",
-        default_value="0.0",
-        description="Radar roll in radians relative to radar_parent_frame.",
-    )
-    declare_radar_pitch = DeclareLaunchArgument(
-        "radar_pitch",
-        default_value="0.0",
-        description="Radar pitch in radians relative to radar_parent_frame.",
-    )
-    declare_radar_yaw = DeclareLaunchArgument(
-        "radar_yaw",
-        default_value="0.0",
-        description="Radar yaw in radians relative to radar_parent_frame.",
-    )
-
     swri_console_node = Node(
         package="swri_console",
         executable="swri_console",
@@ -239,24 +198,6 @@ def generate_launch_description():
         parameters=[],
     )
 
-    radar_tf = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="radar_tf",
-        arguments=[
-            LaunchConfiguration("radar_x"),
-            LaunchConfiguration("radar_y"),
-            LaunchConfiguration("radar_z"),
-            LaunchConfiguration("radar_roll"),
-            LaunchConfiguration("radar_pitch"),
-            LaunchConfiguration("radar_yaw"),
-            LaunchConfiguration("radar_parent_frame"),
-            LaunchConfiguration("radar_frame"),
-        ],
-        condition=IfCondition(enable_radar),
-        output="screen",
-    )
-
     radar_launch = OpaqueFunction(function=_include_radar_launch)
 
     delayed_stack = TimerAction(
@@ -265,7 +206,6 @@ def generate_launch_description():
             localization_launch,
             navigation_launch,
             motor_control_launch,
-            radar_tf,
             radar_launch,
             rviz2_command,
             rosbridge_node,
@@ -282,14 +222,6 @@ def generate_launch_description():
             declare_radar_command_port,
             declare_radar_data_port,
             declare_radar_setup_bash,
-            declare_radar_parent_frame,
-            declare_radar_frame,
-            declare_radar_x,
-            declare_radar_y,
-            declare_radar_z,
-            declare_radar_roll,
-            declare_radar_pitch,
-            declare_radar_yaw,
             swri_console_node,
             delayed_stack,
         ]

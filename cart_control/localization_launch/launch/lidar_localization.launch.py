@@ -63,7 +63,8 @@ def generate_launch_description():
         ),
     )
 
-    radar_x = LaunchConfiguration("radar_x", default="2.0")
+    # Single source of truth for the radar mount transform.
+    radar_x = LaunchConfiguration("radar_x", default="1.5")
     radar_y = LaunchConfiguration("radar_y", default="0.0")
     radar_z = LaunchConfiguration("radar_z", default="0.9")
     radar_roll = LaunchConfiguration("radar_roll", default="0.0")

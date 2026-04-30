@@ -18,7 +18,7 @@ class CollisionAvoidanceAADLog(Node):
     def __init__(self):
         super().__init__('collision_avoidance_aad_log')
 
-        self.IMG_PUBLISH_PERIOD = 8
+        self.IMG_PUBLISH_PERIOD = 15
 
         self.get_logger().info("Creating subscribers")
         # --- Subscribers ---

@@ -18,7 +18,7 @@ class CollisionAvoidanceAADLog(Node):
     def __init__(self):
         super().__init__('collision_avoidance_aad_log')
 
-        self.IMG_PUBLISH_PERIOD = 2 
+        self.IMG_PUBLISH_PERIOD = 8
 
         self.get_logger().info("Creating subscribers")
         # --- Subscribers ---
@@ -39,7 +39,7 @@ class CollisionAvoidanceAADLog(Node):
 
         self.camera_1_sub = self.create_subscription(
             Image,
-            '/zed_front/zed_node_1/rgb/color/rect/image',
+            '/zed_rear/zed_node_1/rgb/color/rect/image',
             self.camera_callback,
             camera_qos
         )
@@ -61,10 +61,17 @@ class CollisionAvoidanceAADLog(Node):
         self.get_logger().info("Creating publishers")
 
         # --- Publisher ---
-        self.anomaly_pub = self.create_publisher(
+        self.anomaly_camera_pub = self.create_publisher(
             AnomalyMsg,
             '/ai_anomaly_logging',
-            qos_profile_sensor_data
+            camera_qos
+        )
+
+                # --- Publisher ---
+        self.anomaly_log_pub = self.create_publisher(
+            AnomalyMsg,
+            '/ai_anomaly_logging',
+            10
         )
         self.get_logger().info("Finished creating publishers")
 
@@ -96,7 +103,7 @@ class CollisionAvoidanceAADLog(Node):
                     anomaly.msg = "Camera frame received."
                     anomaly.image = img_msg  # Full image is safe here - no blocking
 
-                    self.anomaly_pub.publish(anomaly)
+                    self.anomaly_camera_pub.publish(anomaly)
                     self.last_pub_time = now
                     
             except:
@@ -124,7 +131,7 @@ class CollisionAvoidanceAADLog(Node):
             anomaly.importance = AnomalyMsg.WARNING
             anomaly.msg = "Stop signal received."
 
-            self.anomaly_pub.publish(anomaly)
+            self.anomaly_log_pub.publish(anomaly)
 
     def speed_callback(self, msg: Float32):
         if abs(self.last_speed - msg.data) > 0.1:
@@ -141,7 +148,7 @@ class CollisionAvoidanceAADLog(Node):
             anomaly.type = AnomalyMsg.TEXT
             anomaly.msg = f"The speed of the cart is {msg.data}"
 
-            self.anomaly_pub.publish(anomaly)
+            self.anomaly_log_pub.publish(anomaly)
     
 
 def main(args=None):

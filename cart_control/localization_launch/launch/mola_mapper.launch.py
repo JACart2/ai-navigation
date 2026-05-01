@@ -56,6 +56,7 @@ def _launch_setup(context, *args, **kwargs):
         PythonLaunchDescriptionSource([cameras_launch_path]),
         launch_arguments={
             "cart_config_path": cart_config_path,
+            "disable_tf": "True",
         }.items(),
     )
 

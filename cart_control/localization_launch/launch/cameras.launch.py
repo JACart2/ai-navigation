@@ -11,6 +11,7 @@ import yaml
 
 def generate_launch_description():
     cart_config_path = LaunchConfiguration("cart_config_path")
+    disable_tf = LaunchConfiguration("disable_tf")
 
     # Specify the path to zed_multi_camera.launch.py
     zed_multi_camera_launch_path = os.path.join(
@@ -35,6 +36,8 @@ def generate_launch_description():
                 "cart_config_path YAML must define non-empty 'zed_front_serial' and 'zed_rear_serial'"
             )
 
+        disable_tf_val = disable_tf.perform(context).strip()
+
         # Include the zed_multi_camera launch file
         return [
             IncludeLaunchDescription(
@@ -44,7 +47,7 @@ def generate_launch_description():
                     "cam_names": "[zed_front, zed_rear]",  # Names of the cameras
                     "cam_models": "[zed2i, zed2i]",  # Models of the cameras
                     "cam_serials": f"[{zed_front_serial}, {zed_rear_serial}]",  # Serial numbers of the cameras
-                    "disable_tf": "False",  # Enable TF broadcasting (odom + map)
+                    "disable_tf": disable_tf_val,  # TF broadcasting control
                 }.items(),
             )
         ]
@@ -75,6 +78,11 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "cart_config_path",
                 description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
+            ),
+            DeclareLaunchArgument(
+                "disable_tf",
+                default_value="False",
+                description="Disable TF broadcasting from ZED cameras (odom->camera transforms)",
             ),
             zed_multi_camera_launch,
             multi_link_tf,

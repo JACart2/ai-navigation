@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
 from launch.actions import IncludeLaunchDescription
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory 
@@ -20,6 +21,11 @@ def generate_launch_description():
                 default_value=os.path.join(
                     get_package_share_directory("navigation"), "maps", "main_shift3.gml"
                 ),
+            ),
+            DeclareLaunchArgument(
+                "enable_aad",
+                default_value="true",
+                description="Enable collision avoidance anomaly logging node"
             ),
             # Declare whether the given graph is in GPS or ROS coordinates. 
             DeclareLaunchArgument(
@@ -69,19 +75,6 @@ def generate_launch_description():
                 package="navigation",
                 executable="visualize_graph",
                 output="screen",
-                parameters=[
-                    {
-                        "graph_file": LaunchConfiguration("graph_file"),
-                        "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
-                        "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
-                        "calibration_config_file": LaunchConfiguration("calibration_config_file"),
-                    }
-                ],
-            ),
-            Node(
-                package="navigation",
-                executable="pose_bridge",
-                output="screen",
             ),
             # call other launchfiles from this package:
             IncludeLaunchDescription(
@@ -93,6 +86,13 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(
                     [FindPackageShare("navigation"), "/launch/pointcloud-to-laserscan.launch.py"]
                 )
+            ),
+            Node(
+                package="navigation",
+                executable="collision_avoidance_aad_log",
+                name="collision_avoidance_aad_log",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_aad")),
             ),
         ]
     )

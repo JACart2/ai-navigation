@@ -29,7 +29,11 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-from anomaly_msg.msg import AnomalyMsg
+from anomaly_msg.msg import AnomalyLog
+
+
+ANOMALY_INFO = "INFO"
+ANOMALY_WARNING = "WARNING"
 
 
 
@@ -105,7 +109,7 @@ class LocalPlanner(rclpy.node.Node):
             VehicleState, "/vehicle_state", 10
         )
 
-        self.anomaly_pub = self.create_publisher(AnomalyMsg, 
+        self.anomaly_pub = self.create_publisher(AnomalyLog, 
                                              '/ai_anomaly_logging',
                                              10
                                              )
@@ -198,7 +202,7 @@ class LocalPlanner(rclpy.node.Node):
         #self.log(f"Path received: {str(msg)}")
         self.log(f"Path received. Navigating to {str(self.local_points[-1])}.")
 
-        # self.anomaly_logging("New path received", AnomalyMsg.INFO)
+        # self.anomaly_logging("New path received", ANOMALY_INFO)
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -306,7 +310,7 @@ class LocalPlanner(rclpy.node.Node):
             else:
                 self.path_valid = False
                 self.log_header("It appears the cart is already at the destination")
-                self.anomaly_logging("Cart is already at destination", AnomalyMsg.WARNING)
+                self.anomaly_logging("Cart is already at destination", ANOMALY_WARNING)
 
         if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
@@ -364,13 +368,13 @@ class LocalPlanner(rclpy.node.Node):
                 # Let operator know why current path has stopped
                 if self.path_valid:
                     self.log("Reached Destination succesfully without interruption")
-                    self.anomaly_logging("Arrived", AnomalyMsg.INFO)
+                    self.anomaly_logging("Arrived", ANOMALY_INFO)
                     self.arrived_pub.publish(notify_server)
                 else:
                     self.log(
                         "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
                     )
-                    self.anomaly_logging("Either already at destination or destination can't be reached", AnomalyMsg.WARNING)
+                    self.anomaly_logging("Either already at destination or destination can't be reached", ANOMALY_WARNING)
 
                 # Update the internal state of the vehicle
                 self.vehicle_state_pub.publish(self.current_state)
@@ -523,7 +527,7 @@ class LocalPlanner(rclpy.node.Node):
             if not self.eta_initial_report_sent:
                 self.anomaly_logging(
                     f"ETA: {eta_msg.data}s at 0% complete",
-                    AnomalyMsg.INFO,
+                    ANOMALY_INFO,
                 )
                 self.eta_initial_report_sent = True
 
@@ -547,7 +551,7 @@ class LocalPlanner(rclpy.node.Node):
             ):
                 self.anomaly_logging(
                     f"ETA progress: {self.eta_next_report_percent}% complete, ETA: {eta_msg.data}s",
-                    AnomalyMsg.INFO,
+                    ANOMALY_INFO,
                 )
                 self.log(
                     f"ETA progress published: {self.eta_next_report_percent}%"
@@ -561,22 +565,21 @@ class LocalPlanner(rclpy.node.Node):
             points_list(List): The list of path points to calculate the distance of
             start(int): The index of which to start calculating the trip distance
         """
-        total_distance = 0
+        total_distance = 0.0
 
-        start_index = self.local_points.index(start)
+        start_index = points_list.index(start)
         if start_index >= len(points_list) - 1:
             return 0
 
-        for i in range(start_index + 1, len(points_list)):
+        for i in range(start_index, len(points_list) - 1):
             total_distance += self.calc_dist(
                 points_list[i].x,
                 points_list[i].y,
                 points_list[i + 1].x,
                 points_list[i + 1].y,
             )
-            prev_node = i
 
-        return sum
+        return total_distance
 
     def get_closest_point(self, pos_x, pos_y):
         """Get the closest point along the raw path from pos_x, pos_y
@@ -614,14 +617,15 @@ class LocalPlanner(rclpy.node.Node):
         """
         if not self.anomaly_detection_enabled:
             return
-        anomaly_msg = AnomalyMsg()
+        anomaly_msg = AnomalyLog()
 
-        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
-        anomaly_msg.header.frame_id = "local_planner"
+        anomaly_msg.stamp = self.get_clock().now().to_msg()
         anomaly_msg.node_name = self.get_name()
-        anomaly_msg.importance = severity
-        anomaly_msg.type = AnomalyMsg.TEXT
-        anomaly_msg.msg = message
+        anomaly_msg.source = "navigation"
+        anomaly_msg.description = f"[{severity}] {message}"
+        anomaly_msg.topic_name = "/ai_anomaly_logging"
+        anomaly_msg.data_type = "text"
+        anomaly_msg.data = list(message.encode("utf-8"))
 
         self.anomaly_pub.publish(anomaly_msg)
 

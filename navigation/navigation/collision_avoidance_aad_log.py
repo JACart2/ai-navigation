@@ -7,10 +7,13 @@ from queue import Queue
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32
 from navigation_interface.msg import Stop
-from std_msgs.msg import Header
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, qos_profile_sensor_data
 
-from anomaly_msg.msg import AnomalyMsg
+from anomaly_msg.msg import AnomalyLog
+
+
+ANOMALY_INFO = "INFO"
+ANOMALY_WARNING = "WARNING"
 
 
 class CollisionAvoidanceAADLog(Node):
@@ -62,14 +65,14 @@ class CollisionAvoidanceAADLog(Node):
 
         # --- Publisher ---
         self.anomaly_camera_pub = self.create_publisher(
-            AnomalyMsg,
+            AnomalyLog,
             '/ai_anomaly_logging',
             camera_qos
         )
 
                 # --- Publisher ---
         self.anomaly_log_pub = self.create_publisher(
-            AnomalyMsg,
+            AnomalyLog,
             '/ai_anomaly_logging',
             10
         )
@@ -95,13 +98,14 @@ class CollisionAvoidanceAADLog(Node):
                 # Only process if enough time has passed
                 if (now - self.last_pub_time).nanoseconds > self.IMG_PUBLISH_PERIOD * 1e9:
                     # Create and publish anomaly with full image data
-                    anomaly = AnomalyMsg()
-                    anomaly.header = img_msg.header
+                    anomaly = AnomalyLog()
+                    anomaly.stamp = img_msg.header.stamp
                     anomaly.node_name = self.get_name()
-                    anomaly.importance = AnomalyMsg.INFO
-                    anomaly.type = AnomalyMsg.IMAGE
-                    anomaly.msg = "Camera frame received."
-                    anomaly.image = img_msg  # Full image is safe here - no blocking
+                    anomaly.source = "camera"
+                    anomaly.description = f"[{ANOMALY_INFO}] Camera frame received."
+                    anomaly.topic_name = "/zed_front_or_rear/rgb/color/rect/image"
+                    anomaly.data_type = "image"
+                    anomaly.data = list(img_msg.data)
 
                     self.anomaly_camera_pub.publish(anomaly)
                     self.last_pub_time = now
@@ -121,34 +125,34 @@ class CollisionAvoidanceAADLog(Node):
             # Queue full - that's okay, we'll process the next frame
             pass
 
-    def stop_callback(self, stop_msg: Stop):
-        anomaly = AnomalyMsg()
-        anomaly.header = stop_msg.header
+    def publish_text_anomaly(self, message: str, severity: str, topic_name: str):
+        anomaly = AnomalyLog()
+        anomaly.stamp = self.get_clock().now().to_msg()
         anomaly.node_name = self.get_name()
-        anomaly.type = AnomalyMsg.TEXT
+        anomaly.source = "collision_avoidance"
+        anomaly.description = f"[{severity}] {message}"
+        anomaly.topic_name = topic_name
+        anomaly.data_type = "text"
+        anomaly.data = list(message.encode("utf-8"))
+        self.anomaly_log_pub.publish(anomaly)
 
+    def stop_callback(self, stop_msg: Stop):
         if stop_msg.stop:
-            anomaly.importance = AnomalyMsg.WARNING
-            anomaly.msg = "Stop signal received."
-
-            self.anomaly_log_pub.publish(anomaly)
+            self.publish_text_anomaly(
+                "Stop signal received.",
+                ANOMALY_WARNING,
+                "/stop"
+            )
 
     def speed_callback(self, msg: Float32):
         if abs(self.last_speed - msg.data) > 0.1:
             self.last_speed = msg.data
 
-            anomaly = AnomalyMsg()
-
-            anomaly.header = Header()
-            anomaly.header.stamp = self.get_clock().now().to_msg()
-            anomaly.header.frame_id = "collision_avoidance_frame"
-
-            anomaly.node_name = self.get_name()
-            anomaly.importance = AnomalyMsg.INFO
-            anomaly.type = AnomalyMsg.TEXT
-            anomaly.msg = f"The speed of the cart is {msg.data}"
-
-            self.anomaly_log_pub.publish(anomaly)
+            self.publish_text_anomaly(
+                f"The speed of the cart is {msg.data}",
+                ANOMALY_INFO,
+                "/speed"
+            )
     
 
 def main(args=None):

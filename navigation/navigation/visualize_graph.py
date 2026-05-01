@@ -24,20 +24,19 @@ class GraphVisual(rclpy.node.Node):
         super().__init__("visualize_graph")
 
         self.declare_parameter(
-            "graph_file", "./src/ai-navigation/navigation/maps/main_shift3.gml"
+            "graph_file",
+            os.path.join(
+                get_package_share_directory("navigation"), "maps", "main_shift3.gml"
+            ),
         )
         self.declare_parameter("graph_coordinate_format", "ros")
-        default_config_dir = os.path.join(
-            get_package_share_directory("navigation"),
-            "maps",
-        )
         self.declare_parameter(
             "calibration_config_dir",
-            default_config_dir,
+            "/maps",
         )
         self.declare_parameter(
             "calibration_config_file",
-            "main_graph_config.yaml",
+            "SpeedBoiMap.yaml",
         )
 
         latching_qos = rclpy.qos.QoSProfile(

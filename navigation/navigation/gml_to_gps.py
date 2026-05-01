@@ -41,12 +41,12 @@ def main():
     )
     parser.add_argument(
         "--config-dir",
-        default=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "maps")),
+        default="/maps",
         help="Directory containing the landmark calibration YAML file.",
     )
     parser.add_argument(
         "--config-file",
-        default="main_graph_config.yaml",
+        default="SpeedBoiMap.yaml",
         help="Landmark calibration YAML file name.",
     )
     args = parser.parse_args()

@@ -159,10 +159,12 @@ The `gml_to_gps` CLI tool converts GML maps from local ROS coordinates to GPS co
 # 3. Convert the map to GPS coordinates
 # The landmarks file (landmarks.yaml) is assumed to be in /maps. If the landmarks file is somewhere else, change the source directory in navigation.launch.py.
 
+# Remember to colcon build and cd into dev_ws
 ros2 run navigation gml_to_gps \
-  --input navigation/maps/main_local.gml \
-  --output navigation/maps/main_gps.gml \
-  --config-file landmarks.yaml
+  --input src/ai-navigation/navigation/maps/main_shift3.gml \
+  --output src/ai-navigation/navigation/maps/main_shift3_gps.gml \
+  --config-dir /maps \
+  --config-file SpeedBoiMap.yaml
 
 # Output:
 # Loaded 5 landmark point(s) from navigation/maps/landmarks.yaml

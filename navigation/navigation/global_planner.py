@@ -73,17 +73,13 @@ class GlobalPlanner(rclpy.node.Node):
         self.cy_gps = 0.0
         self.calibration_theta = 0.0
 
-        default_config_dir = os.path.join(
-            get_package_share_directory("navigation"),
-            "maps",
-        )
         self.declare_parameter(
             "calibration_config_dir",
-            default_config_dir,
+            "/maps",
         )
         self.declare_parameter(
             "calibration_config_file",
-            "main_graph_config.yaml",
+            "SpeedBoiMap.yaml",
         )
         calibration_config_dir = self.get_parameter(
             "calibration_config_dir"
@@ -118,7 +114,10 @@ class GlobalPlanner(rclpy.node.Node):
         self.logic_graph = None
 
         self.declare_parameter(
-            "graph_file", "./src/ai-navigation/navigation/maps/main_shift3.gml"
+            "graph_file",
+            os.path.join(
+                get_package_share_directory("navigation"), "maps", "main_shift3.gml"
+            ),
         )
         self.declare_parameter("graph_coordinate_format", "ros")
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value
@@ -617,12 +616,24 @@ class GlobalPlanner(rclpy.node.Node):
 
             gps_path.gpspoints.append(final_pose)
 
-            # Testing log to make sure conversion is working correctly
-            # TODO: Remove logger after testing
-            self.get_logger().info(f"Converted local point ({pose.position.x}, {pose.position.y}) to GPS coordinates ({final_pose.latitude}, {final_pose.longitude})")
-
         # Publish here
         self.gps_path_pub.publish(gps_path)
+
+        # Logger for the destination node in both ROS and GPS coordinates
+        if self.destination_node is not None:
+            dest_x, dest_y = self.global_graph.nodes[self.destination_node]["pos"]
+            dest_lat, dest_lon = simple_gps_util.local_to_gps(
+                dest_x, dest_y,
+                self.ref_lat, self.ref_lon,
+                self.cx_local, self.cy_local,
+                self.cx_gps, self.cy_gps,
+                self.calibration_theta
+            )
+            self.get_logger().info(
+                f"Destination node {self.destination_node}: "
+                f"ROS coordinates ({dest_x}, {dest_y}), "
+                f"GPS coordinates ({dest_lat}, {dest_lon})"
+            )
 
     def output_pos_gps(self):
         """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution

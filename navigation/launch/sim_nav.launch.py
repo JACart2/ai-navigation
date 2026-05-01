@@ -31,6 +31,18 @@ def generate_launch_description():
                     get_package_share_directory("navigation"), "maps", "main_shift3.gml"
                 ),
             ),
+            DeclareLaunchArgument(
+                "graph_coordinate_format",
+                default_value="ros",
+            ),
+            DeclareLaunchArgument(
+                "calibration_config_dir",
+                default_value="/maps",
+            ),
+            DeclareLaunchArgument(
+                "calibration_config_file",
+                default_value="SpeedBoiMap.yaml",
+            ),
             Node(
                 package="navigation",
                 executable="global_planner",
@@ -38,6 +50,9 @@ def generate_launch_description():
                 parameters=[
                     {
                         "graph_file": LaunchConfiguration("graph_file"),
+                        "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
+                        "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
+                        "calibration_config_file": LaunchConfiguration("calibration_config_file"),
                     }
                 ],
             ),
@@ -65,6 +80,9 @@ def generate_launch_description():
                 parameters=[
                     {
                         "graph_file": LaunchConfiguration("graph_file"),
+                        "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
+                        "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
+                        "calibration_config_file": LaunchConfiguration("calibration_config_file"),
                     }
                 ],
             ),

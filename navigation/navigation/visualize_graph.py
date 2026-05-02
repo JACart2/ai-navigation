@@ -6,9 +6,7 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
 import networkx as nx
-import os
 import navigation.simple_gps_util as simple_gps_util
-from ament_index_python.packages import get_package_share_directory
 
 import rclpy
 import rclpy.qos
@@ -16,6 +14,8 @@ from std_msgs.msg import Header
 from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
+
+DEFAULT_GRAPH_FILE = "/root/dev_ws/src/ai-navigation/navigation/maps/main_shift3.gml"
 
 
 class GraphVisual(rclpy.node.Node):
@@ -25,9 +25,7 @@ class GraphVisual(rclpy.node.Node):
 
         self.declare_parameter(
             "graph_file",
-            os.path.join(
-                get_package_share_directory("navigation"), "maps", "main_shift3.gml"
-            ),
+            DEFAULT_GRAPH_FILE,
         )
         self.declare_parameter("graph_coordinate_format", "ros")
         self.declare_parameter(

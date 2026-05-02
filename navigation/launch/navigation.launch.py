@@ -4,23 +4,29 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition
 from launch.actions import IncludeLaunchDescription
 from launch_ros.substitutions import FindPackageShare
-from ament_index_python.packages import get_package_share_directory 
-import os
 
 
 def generate_launch_description():
+    graph_path = PathJoinSubstitution(
+        [LaunchConfiguration("graph_dir"), LaunchConfiguration("graph_file")]
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument(
+                "graph_dir",
+                default_value="/root/dev_ws/src/ai-navigation/navigation/maps",
+                description="Directory containing the graph GML file.",
+            ),
+            DeclareLaunchArgument(
                 "graph_file",
-                default_value=os.path.join(
-                    get_package_share_directory("navigation"), "maps", "main_shift3.gml"
-                ),
+                default_value="main_shift3.gml",
+                description="Graph GML file name inside graph_dir.",
             ),
             DeclareLaunchArgument(
                 "enable_aad",
@@ -48,7 +54,7 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     {
-                        "graph_file": LaunchConfiguration("graph_file"),
+                        "graph_file": graph_path,
                         "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
                         "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
                         "calibration_config_file": LaunchConfiguration("calibration_config_file"),
@@ -75,6 +81,14 @@ def generate_launch_description():
                 package="navigation",
                 executable="visualize_graph",
                 output="screen",
+                parameters=[
+                    {
+                        "graph_file": graph_path,
+                        "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
+                        "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
+                        "calibration_config_file": LaunchConfiguration("calibration_config_file"),
+                    }
+                ],
             ),
             # call other launchfiles from this package:
             IncludeLaunchDescription(

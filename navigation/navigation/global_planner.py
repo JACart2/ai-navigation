@@ -10,10 +10,8 @@ import sys
 print(sys.path)
 # Python based imports
 import math
-import os
 import networkx as nx
 import navigation.simple_gps_util as simple_gps_util
-from ament_index_python.packages import get_package_share_directory
 
 # ROS based import
 import rclpy.node
@@ -37,6 +35,8 @@ from navigation_interface.msg import (
     LocalPointsArray,
     LatLongArray,
 )
+
+DEFAULT_GRAPH_FILE = "/root/dev_ws/src/ai-navigation/navigation/maps/main_shift3.gml"
 
 
 class GlobalPlanner(rclpy.node.Node):
@@ -115,9 +115,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         self.declare_parameter(
             "graph_file",
-            os.path.join(
-                get_package_share_directory("navigation"), "maps", "main_shift3.gml"
-            ),
+            DEFAULT_GRAPH_FILE,
         )
         self.declare_parameter("graph_coordinate_format", "ros")
         file_name = self.get_parameter("graph_file").get_parameter_value().string_value

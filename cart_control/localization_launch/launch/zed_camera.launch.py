@@ -218,7 +218,7 @@ def generate_launch_description():
                 choices=['true', 'false']),
             DeclareLaunchArgument(
                 'camera_flip',
-                default_value='false',
+                default_value='true',
                 description='Enable upside-down camera mounting compensation in ZED SDK.',
                 choices=['true', 'false']),
             DeclareLaunchArgument(

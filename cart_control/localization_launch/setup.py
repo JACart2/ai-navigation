@@ -30,6 +30,7 @@ setup(
     entry_points={
         'console_scripts': [
             'garmin_gps18x_driver = localization_launch.garmin_gps18x_driver:main',
+            'gps_filter = localization_launch.gps_filter:main',
         ],
     },
 )

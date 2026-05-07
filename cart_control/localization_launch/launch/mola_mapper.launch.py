@@ -14,7 +14,8 @@ def generate_launch_description():
     Publishes only the essential topics needed for MOLA:
     - /velodyne_points (lidar data)
     - /zed_*/zed_node_*/imu/data (IMU data from ZED cameras)
-    - TF frames (base_link -> velodyne)
+    - /fix_filtered (GPS data with altitude)
+    - TF frames (base_link -> velodyne, base_link -> gps)
     """
     
     cart_config_path = LaunchConfiguration("cart_config_path")
@@ -62,6 +63,23 @@ def generate_launch_description():
         output="screen",
     )
 
+    # Static TF publisher for base_link to gps transform
+    gps_tf_publisher = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_link_to_gps_tf",
+        arguments=["0.0", "0", "0.5", "0", "0", "0", "base_link", "gps"],
+        output="screen",
+    )
+
+    # GPS filter node to filter out messages without altitude data
+    gps_filter_node = Node(
+        package="localization_launch",
+        executable="gps_filter",
+        name="gps_filter_node",
+        output="screen",
+    )
+
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
@@ -76,5 +94,7 @@ def generate_launch_description():
             velodyne_transform_launch,
             cameras_launch,
             static_tf_publisher,
+            gps_tf_publisher,
+            gps_filter_node,
         ]
     )

@@ -34,9 +34,9 @@ from launch_ros.descriptions import ComposableNode
 
 # ZED Configurations to be loaded by ZED Node
 default_config_common = os.path.join(
-    get_package_share_directory('zed_wrapper'),
+    get_package_share_directory('localization_launch'),
     'config',
-    'common_stereo.yaml'
+    'common.yaml'
 )
 
 # URDF/xacro file to be loaded by the Robot State Publisher node
@@ -78,6 +78,7 @@ def launch_setup(context, *args, **kwargs):
     publish_tf = LaunchConfiguration('publish_tf')
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     publish_imu_tf = LaunchConfiguration('publish_imu_tf')
+    camera_flip = LaunchConfiguration('camera_flip')
     xacro_path = LaunchConfiguration('xacro_path')
 
     ros_params_override_path = LaunchConfiguration('ros_params_override_path')
@@ -94,7 +95,7 @@ def launch_setup(context, *args, **kwargs):
         camera_name_val = 'zed'
 
     config_camera_path = os.path.join(
-        get_package_share_directory('zed_wrapper'),
+        get_package_share_directory('localization_launch'),
         'config',
         camera_model_val + '.yaml'
     )
@@ -140,7 +141,7 @@ def launch_setup(context, *args, **kwargs):
                 'simulation.sim_port': sim_port,
                 'general.camera_name': camera_name_val,
                 'general.camera_model': camera_model_val,
-                'general.camera_flip': True,
+                'general.camera_flip': camera_flip,
                 'general.svo_file': svo_path,
                 'general.serial_number': serial_number,
                 'general.camera_id': camera_id,
@@ -214,6 +215,11 @@ def generate_launch_description():
                 'publish_imu_tf',
                 default_value='true',
                 description='Enable publication of the IMU TF. Note: Ignored if `publish_tf` is False.',
+                choices=['true', 'false']),
+            DeclareLaunchArgument(
+                'camera_flip',
+                default_value='false',
+                description='Enable upside-down camera mounting compensation in ZED SDK.',
                 choices=['true', 'false']),
             DeclareLaunchArgument(
                 'xacro_path',

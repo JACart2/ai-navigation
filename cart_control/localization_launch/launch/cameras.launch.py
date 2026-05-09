@@ -44,7 +44,7 @@ def generate_launch_description():
                     "cam_names": "[zed_front, zed_rear]",  # Names of the cameras
                     "cam_models": "[zed2i, zed2i]",  # Models of the cameras
                     "cam_serials": f"[{zed_front_serial}, {zed_rear_serial}]",  # Serial numbers of the cameras
-                    "disable_tf": "False",  # Enable TF broadcasting
+                    "disable_tf": "True",  # Disable TF broadcasting (no odom)
                 }.items(),
             )
         ]

@@ -27,6 +27,8 @@
       use_odom: True
       use_imu: false
       enable_debug: true
+      enable_timer_publishing: true
+      pose_publish_frequency: 10.0
       global_frame_id: map
       odom_frame_id: odom
       base_frame_id: base_link

@@ -22,12 +22,12 @@ def generate_launch_description():
         parameters=[{"model": "VLP16"}],
     )
 
-    # Include the velodyne_transform_node-VLP16-launch.py directly
-    velodyne_transform_launch = IncludeLaunchDescription(
+    # Use convert node (non-TF-gated) to avoid drops between packets and points.
+    velodyne_convert_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [
                 FindPackageShare("velodyne_pointcloud"),
-                "/launch/velodyne_transform_node-VLP16-launch.py",
+                "/launch/velodyne_convert_node-VLP16-launch.py",
             ]
         )
     )
@@ -67,7 +67,7 @@ def generate_launch_description():
                 description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
             ),
             velodyne_driver_node,
-            velodyne_transform_launch,
+            velodyne_convert_launch,
             lidar_localization_launch,
             cameras_launch,
             # liosam_localization_launch,

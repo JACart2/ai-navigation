@@ -21,6 +21,11 @@ def generate_launch_description():
                     get_package_share_directory("navigation"), "maps", "main_shift3.gml"
                 ),
             ),
+            DeclareLaunchArgument(
+                "new_map_mode",
+                default_value="false",
+                description="Enable new map mode that records points from /new_point",
+            ),
             Node(
                 package="navigation",
                 executable="global_planner",
@@ -63,7 +68,7 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     {
-                        "new_map_mode": True,            
+                        "new_map_mode": LaunchConfiguration("new_map_mode"),
                     }
                 ],
             ),

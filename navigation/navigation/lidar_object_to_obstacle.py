@@ -12,6 +12,7 @@
 
 """
 import math
+import time
 
 import rclpy
 import rclpy.node
@@ -71,6 +72,37 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
         # Rate limiting for radar
         self.last_radar_time = self.get_clock().now()
+        self.radar_tracks = []
+
+        self.declare_parameter("radar_min_cluster_size", 2)
+        self.declare_parameter("radar_persistence_frames", 3)
+        self.declare_parameter("radar_persistence_match_radius", 0.75)
+        self.declare_parameter("radar_track_timeout_sec", 0.40)
+
+        self.radar_min_cluster_size = max(
+            1,
+            self.get_parameter("radar_min_cluster_size")
+            .get_parameter_value()
+            .integer_value,
+        )
+        self.radar_persistence_frames = max(
+            1,
+            self.get_parameter("radar_persistence_frames")
+            .get_parameter_value()
+            .integer_value,
+        )
+        self.radar_persistence_match_radius = max(
+            0.05,
+            self.get_parameter("radar_persistence_match_radius")
+            .get_parameter_value()
+            .double_value,
+        )
+        self.radar_track_timeout_sec = max(
+            0.05,
+            self.get_parameter("radar_track_timeout_sec")
+            .get_parameter_value()
+            .double_value,
+        )
 
         # listen for velodyne output
         self.lidar_ptcloud_sub = self.create_subscription(
@@ -118,7 +150,9 @@ class LidarObjectToObstacle(rclpy.node.Node):
         # Extract the cluster.
         cluster_list = self.cluster_list
         cur_cluster = []
-        min_cluster_size = 1 if self.current_sensor == "radar" else 2
+        min_cluster_size = (
+            self.radar_min_cluster_size if self.current_sensor == "radar" else 2
+        )
         last_point = None
 
         # Begin iterating through the received ranges.
@@ -210,11 +244,19 @@ class LidarObjectToObstacle(rclpy.node.Node):
             else "lidar"
         )
 
+        # Radar obstacles are produced by radar_pcl_to_obstacles directly from the
+        # 3D point cloud; the LaserScan path here drops sparse radar returns.
+        if self.current_sensor == "radar":
+            return
+
         # Cluster the raw LaserScan data.
         self.cluster_points()
 
         # Construct Obstacle data from clustered points.
         self.circularize()
+
+        if self.current_sensor == "radar":
+            self.apply_radar_persistence()
 
         # Publish all detected Obstacles, then clear the buffer.
         self.obstacle_pub.publish(self.obstacles)
@@ -289,6 +331,62 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
                 # Add the obstacle to the list
                 self.obstacles.obstacles.append(cur_circle)
+
+    def apply_radar_persistence(self):
+        """Require radar detections to persist across multiple frames before publishing."""
+        now = time.monotonic()
+        active_tracks = [
+            track
+            for track in self.radar_tracks
+            if now - track["last_seen"] <= self.radar_track_timeout_sec
+        ]
+        used_track_indices = set()
+        filtered_obstacles = []
+        new_tracks = []
+
+        for obstacle in self.obstacles.obstacles:
+            ox = obstacle.pos.point.x
+            oy = obstacle.pos.point.y
+
+            best_index = None
+            best_distance = None
+            for index, track in enumerate(active_tracks):
+                if index in used_track_indices:
+                    continue
+
+                distance = math.hypot(ox - track["x"], oy - track["y"])
+                if distance > self.radar_persistence_match_radius:
+                    continue
+
+                if best_distance is None or distance < best_distance:
+                    best_distance = distance
+                    best_index = index
+
+            if best_index is None:
+                track = {
+                    "x": ox,
+                    "y": oy,
+                    "radius": obstacle.radius,
+                    "count": 1,
+                    "last_seen": now,
+                }
+                new_tracks.append(track)
+            else:
+                track = active_tracks[best_index]
+                track["x"] = ox
+                track["y"] = oy
+                track["radius"] = obstacle.radius
+                track["last_seen"] = now
+                track["count"] = min(
+                    track["count"] + 1, self.radar_persistence_frames
+                )
+                used_track_indices.add(best_index)
+
+            if track["count"] >= self.radar_persistence_frames:
+                filtered_obstacles.append(obstacle)
+
+        self.radar_tracks = active_tracks + new_tracks
+        self.obstacles.obstacles = filtered_obstacles
 
     def local_display(self, frame):
         # Display the obstacles on the LIDAR frame, will appear jittery in Rviz as there is no interpolation

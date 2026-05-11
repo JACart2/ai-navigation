@@ -10,6 +10,14 @@ def generate_launch_description():
             name='scanner', default_value='scanner',
             description='Namespace for sample topics'
         ),
+        DeclareLaunchArgument(
+            name='radar_min_height', default_value='-0.10',
+            description='Minimum radar point height to keep when converting PointCloud2 to LaserScan.'
+        ),
+        DeclareLaunchArgument(
+            name='radar_max_height', default_value='0.75',
+            description='Maximum radar point height to keep when converting PointCloud2 to LaserScan.'
+        ),
         Node(
             package='pointcloud_to_laserscan', executable='dummy_pointcloud_publisher',
             remappings=[('cloud', [LaunchConfiguration(variable_name='scanner'), '/cloud'])],
@@ -45,8 +53,8 @@ def generate_launch_description():
             remappings=[('cloud_in', '/cloud_in_radar'),
                         ('scan', '/scanner/radar_scan')],
             parameters=[{
-                'min_height': -5.0,  # More lenient height range for radar
-                'max_height': 5.0,
+                'min_height': LaunchConfiguration('radar_min_height'),
+                'max_height': LaunchConfiguration('radar_max_height'),
                 'range_min': 0.1,   # Allow closer ranges
                 'range_max': 50.0,  # Allow longer ranges
             }],

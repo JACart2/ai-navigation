@@ -102,6 +102,21 @@ def generate_launch_description():
     console_start_delay_s = LaunchConfiguration("console_start_delay_s")
     cart_config_path = LaunchConfiguration("cart_config_path")
     enable_radar = LaunchConfiguration("enable_radar")
+    motor_baudrate = LaunchConfiguration("motor_baudrate")
+    motor_arduino_port = LaunchConfiguration("motor_arduino_port")
+    radar_min_height = LaunchConfiguration("radar_min_height")
+    radar_max_height = LaunchConfiguration("radar_max_height")
+    radar_min_cluster_size = LaunchConfiguration("radar_min_cluster_size")
+    radar_persistence_frames = LaunchConfiguration("radar_persistence_frames")
+    radar_persistence_match_radius = LaunchConfiguration("radar_persistence_match_radius")
+    radar_track_timeout_sec = LaunchConfiguration("radar_track_timeout_sec")
+    radar_filter_x_min = LaunchConfiguration("radar_filter_x_min")
+    radar_filter_x_max = LaunchConfiguration("radar_filter_x_max")
+    radar_filter_y_min = LaunchConfiguration("radar_filter_y_min")
+    radar_filter_y_max = LaunchConfiguration("radar_filter_y_max")
+    radar_filter_z_min = LaunchConfiguration("radar_filter_z_min")
+    radar_filter_z_max = LaunchConfiguration("radar_filter_z_max")
+    radar_filter_gui = LaunchConfiguration("radar_filter_gui")
 
     declare_console_start_delay_s = DeclareLaunchArgument(
         "console_start_delay_s",
@@ -143,6 +158,74 @@ def generate_launch_description():
             "in the sourced ROS environment."
         ),
     )
+    declare_motor_baudrate = DeclareLaunchArgument(
+        "motor_baudrate",
+        default_value="57600",
+        description="Baudrate used by the motor controller Arduino serial interface.",
+    )
+    declare_motor_arduino_port = DeclareLaunchArgument(
+        "motor_arduino_port",
+        default_value="/dev/ttyUSB0",
+        description="Serial port used by the motor controller Arduino interface.",
+    )
+    declare_radar_min_height = DeclareLaunchArgument(
+        "radar_min_height",
+        default_value="-0.10",
+        description="Minimum radar point height kept during PointCloud2->LaserScan conversion.",
+    )
+    declare_radar_max_height = DeclareLaunchArgument(
+        "radar_max_height",
+        default_value="0.75",
+        description="Maximum radar point height kept during PointCloud2->LaserScan conversion.",
+    )
+    declare_radar_min_cluster_size = DeclareLaunchArgument(
+        "radar_min_cluster_size",
+        default_value="2",
+        description="Minimum number of adjacent radar points required to form an obstacle cluster.",
+    )
+    declare_radar_persistence_frames = DeclareLaunchArgument(
+        "radar_persistence_frames",
+        default_value="3",
+        description="Number of consecutive radar frames an object must persist before publishing.",
+    )
+    declare_radar_persistence_match_radius = DeclareLaunchArgument(
+        "radar_persistence_match_radius",
+        default_value="0.75",
+        description="Maximum XY distance in meters for associating radar detections across frames.",
+    )
+    declare_radar_track_timeout_sec = DeclareLaunchArgument(
+        "radar_track_timeout_sec",
+        default_value="0.40",
+        description="How long to retain an unmatched radar track while waiting for persistence.",
+    )
+    declare_radar_filter_x_min = DeclareLaunchArgument(
+        "radar_filter_x_min", default_value="0.25",
+        description="Radar XYZ filter: minimum x in radar frame (meters).",
+    )
+    declare_radar_filter_x_max = DeclareLaunchArgument(
+        "radar_filter_x_max", default_value="3.58",
+        description="Radar XYZ filter: maximum x in radar frame (meters).",
+    )
+    declare_radar_filter_y_min = DeclareLaunchArgument(
+        "radar_filter_y_min", default_value="-2.10",
+        description="Radar XYZ filter: minimum y in radar frame (meters).",
+    )
+    declare_radar_filter_y_max = DeclareLaunchArgument(
+        "radar_filter_y_max", default_value="5.00",
+        description="Radar XYZ filter: maximum y in radar frame (meters).",
+    )
+    declare_radar_filter_z_min = DeclareLaunchArgument(
+        "radar_filter_z_min", default_value="-0.65",
+        description="Radar XYZ filter: minimum z in radar frame (meters). Defaults filter out the ground.",
+    )
+    declare_radar_filter_z_max = DeclareLaunchArgument(
+        "radar_filter_z_max", default_value="1.11",
+        description="Radar XYZ filter: maximum z in radar frame (meters).",
+    )
+    declare_radar_filter_gui = DeclareLaunchArgument(
+        "radar_filter_gui", default_value="true",
+        description="Open the Tk slider window for adjusting the radar XYZ filter live.",
+    )
     swri_console_node = Node(
         package="swri_console",
         executable="swri_console",
@@ -167,14 +250,33 @@ def generate_launch_description():
     navigation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [FindPackageShare("navigation"), "/launch/navigation.launch.py"]
-        )
+        ),
+        launch_arguments={
+            "radar_min_height": radar_min_height,
+            "radar_max_height": radar_max_height,
+            "radar_min_cluster_size": radar_min_cluster_size,
+            "radar_persistence_frames": radar_persistence_frames,
+            "radar_persistence_match_radius": radar_persistence_match_radius,
+            "radar_track_timeout_sec": radar_track_timeout_sec,
+            "radar_filter_x_min": radar_filter_x_min,
+            "radar_filter_x_max": radar_filter_x_max,
+            "radar_filter_y_min": radar_filter_y_min,
+            "radar_filter_y_max": radar_filter_y_max,
+            "radar_filter_z_min": radar_filter_z_min,
+            "radar_filter_z_max": radar_filter_z_max,
+            "radar_filter_gui": radar_filter_gui,
+        }.items(),
     )
 
     # Launch the motor control launcher
     motor_control_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [FindPackageShare("motor_control"), "/launch/motor.launch.py"]
-        )
+        ),
+        launch_arguments={
+            "baudrate": motor_baudrate,
+            "arduino_port": motor_arduino_port,
+        }.items(),
     )
 
     # Execute the RViz2 command with the specified configuration file
@@ -184,6 +286,19 @@ def generate_launch_description():
             "-d",
             os.path.join(
                 get_package_share_directory("cart_launch"), "rviz", "localization.rviz"
+            ),
+        ],
+        shell=True,
+    )
+
+    # Second RViz window — locked to the radar's frame so we can see the radar POV
+    # alongside the map view. Same data, different camera.
+    rviz2_radar_pov = ExecuteProcess(
+        cmd=[
+            "rviz2",
+            "-d",
+            os.path.join(
+                get_package_share_directory("cart_launch"), "rviz", "radar_pov.rviz"
             ),
         ],
         shell=True,
@@ -208,6 +323,7 @@ def generate_launch_description():
             motor_control_launch,
             radar_launch,
             rviz2_command,
+            rviz2_radar_pov,
             rosbridge_node,
         ],
     )
@@ -222,6 +338,21 @@ def generate_launch_description():
             declare_radar_command_port,
             declare_radar_data_port,
             declare_radar_setup_bash,
+            declare_motor_baudrate,
+            declare_motor_arduino_port,
+            declare_radar_min_height,
+            declare_radar_max_height,
+            declare_radar_min_cluster_size,
+            declare_radar_persistence_frames,
+            declare_radar_persistence_match_radius,
+            declare_radar_track_timeout_sec,
+            declare_radar_filter_x_min,
+            declare_radar_filter_x_max,
+            declare_radar_filter_y_min,
+            declare_radar_filter_y_max,
+            declare_radar_filter_z_min,
+            declare_radar_filter_z_max,
+            declare_radar_filter_gui,
             swri_console_node,
             delayed_stack,
         ]

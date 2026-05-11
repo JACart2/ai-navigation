@@ -1,0 +1,252 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 0
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+      Splitter Ratio: 0.5
+    Tree Height: 540
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.4
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: -0.9
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: ti_mmwave_0
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        ti_mmwave_0:
+          Value: true
+        base_link:
+          Value: true
+      Marker Scale: 0.4
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 0; 255; 0
+      Color Transformer: FlatColor
+      Decay Time: 0.25
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 0; 255; 0
+      Min Color: 0; 255; 0
+      Name: RadarFilterKept
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 5
+      Size (m): 0.18
+      Style: Spheres
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ti_mmwave/radar_scan_pcl_filtered
+      Use Fixed Frame: true
+      Use rainbow: false
+      Value: true
+    - Alpha: 0.6
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 30; 30
+      Color Transformer: FlatColor
+      Decay Time: 0.25
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 30; 30
+      Min Color: 255; 30; 30
+      Name: RadarFilterRejected
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.08
+      Style: Spheres
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ti_mmwave/radar_scan_pcl_rejected
+      Use Fixed Frame: true
+      Use rainbow: false
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: RadarFilterBox
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /radar_filter_box
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: RadarObstacles
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /radar_obstacle_display
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: RadarTracks
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ti_mmwave/radar_track_marker
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 38
+    Fixed Frame: ti_mmwave_0
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/FPS
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Invert Z Axis: false
+      Name: Radar POV (Forward)
+      Near Clip Distance: 0.01
+      Pitch: 0
+      Position:
+        X: -0.3
+        Y: 0
+        Z: 0.05
+      Target Frame: ti_mmwave_0
+      Value: FPS (rviz_default_plugins)
+      Yaw: 0
+    Saved:
+      - Class: rviz_default_plugins/Orbit
+        Distance: 8
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.06
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Focal Point:
+          X: 4
+          Y: 0
+          Z: 0
+        Focal Shape Fixed Size: true
+        Focal Shape Size: 0.05
+        Invert Z Axis: false
+        Name: Radar Birds-eye
+        Near Clip Distance: 0.01
+        Pitch: 1.5
+        Target Frame: ti_mmwave_0
+        Value: Orbit (rviz_default_plugins)
+        Yaw: 0
+      - Class: rviz_default_plugins/Orbit
+        Distance: 6
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.06
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Focal Point:
+          X: 3
+          Y: 0
+          Z: 0
+        Focal Shape Fixed Size: true
+        Focal Shape Size: 0.05
+        Invert Z Axis: false
+        Name: Radar Behind
+        Near Clip Distance: 0.01
+        Pitch: 0.35
+        Target Frame: ti_mmwave_0
+        Value: Orbit (rviz_default_plugins)
+        Yaw: 3.14159
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 800
+  Hide Left Dock: false
+  Hide Right Dock: false
+  Selection:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 1280
+  X: 120
+  Y: 80

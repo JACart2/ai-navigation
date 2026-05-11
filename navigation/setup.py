@@ -45,6 +45,9 @@ setup(
             "pose_bridge = navigation.pose_bridge:main",
             "zed_object_to_obstacle = navigation.zed_object_to_obstacle:main",
             "lidar_object_to_obstacle = navigation.lidar_object_to_obstacle:main",
+            "radar_xyz_filter = navigation.radar_xyz_filter:main",
+            "radar_filter_sliders = navigation.radar_filter_sliders:main",
+            "radar_pcl_to_obstacles = navigation.radar_pcl_to_obstacles:main",
         ],
     },
 )

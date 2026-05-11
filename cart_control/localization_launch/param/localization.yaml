@@ -13,6 +13,8 @@
       scan_max_range: 100.0
       scan_min_range: 1.0
       scan_period: 0.1
+      # Upstream package historically used this misspelled key; keep both for compatibility.
+      scan_periad: 0.1
       use_pcd_map: true
       map_path: "/maps/speedBoiMap.pcd"
       # map_path: "/maps/final_map_condensed_5-22.pcd"
@@ -28,7 +30,7 @@
       use_imu: false
       enable_debug: true
       enable_timer_publishing: true
-      pose_publish_frequency: 10.0
+      pose_publish_frequency: 20.0
       global_frame_id: map
       odom_frame_id: odom
       base_frame_id: base_link

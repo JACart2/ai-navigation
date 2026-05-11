@@ -22,12 +22,12 @@ def generate_launch_description():
         parameters=[{"model": "VLP16"}],
     )
 
-    # Run the non-TF-gated convert node directly.
+    # Run transform node directly with empty frames so conversion does not depend on TF.
     velodyne_pointcloud_share = get_package_share_directory("velodyne_pointcloud")
-    velodyne_convert_node = Node(
+    velodyne_transform_node = Node(
         package="velodyne_pointcloud",
-        executable="velodyne_convert_node",
-        name="velodyne_convert_node",
+        executable="velodyne_transform_node",
+        name="velodyne_transform_node",
         output="screen",
         parameters=[
             {
@@ -80,7 +80,7 @@ def generate_launch_description():
                 description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
             ),
             velodyne_driver_node,
-            velodyne_convert_node,
+            velodyne_transform_node,
             lidar_localization_launch,
             cameras_launch,
             # liosam_localization_launch,

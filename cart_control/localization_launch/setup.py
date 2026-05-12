@@ -30,6 +30,7 @@ setup(
     entry_points={
         'console_scripts': [
             'garmin_gps18x_driver = localization_launch.garmin_gps18x_driver:main',
+            'pcl_pose_relay = localization_launch.pcl_pose_relay:main',
         ],
     },
 )

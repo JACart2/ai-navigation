@@ -122,7 +122,7 @@ radar_filter_gui:=false
 # Override bounds at launch (skips the saved defaults above)
 radar_filter_x_max:=5.0 radar_filter_z_min:=-0.4
 
-# Slower cruise for indoor testing — local_planner default is 30 km/h
+# Slower cruise for indoor testing — local_planner default is 5 m/s
 cruise_speed_kph:=5.0
 ```
 

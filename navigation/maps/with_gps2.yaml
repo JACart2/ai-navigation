@@ -13,7 +13,7 @@ landmarks:
       y: 75.1
     gps:
       latitude: 38.433615431295344
-      longitude: 78.861342273652
+      longitude: -78.861342273652
 
   - name: "3"
     local:

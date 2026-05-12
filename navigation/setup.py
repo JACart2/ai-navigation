@@ -43,6 +43,7 @@ setup(
             "collision_detector = navigation.collision_detector:main",
             "display_global_path = navigation.display_global_path:main",
             "gml_to_gps = navigation.gml_to_gps:main",
+            "gps_to_gml = navigation.gps_to_gml:main",
             "zed_object_to_obstacle = navigation.zed_object_to_obstacle:main",
             "lidar_object_to_obstacle = navigation.lidar_object_to_obstacle:main",
             "collision_avoidance_aad_log = navigation.collision_avoidance_aad_log:main",

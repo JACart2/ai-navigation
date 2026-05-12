@@ -3,13 +3,17 @@
 This is the ROS 2 node that handles the global planning for the JACART.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
+Modified by Joshua Sun in Spring 2026.
+
 """
 import sys
 print(sys.path)
 # Python based imports
 import math
+import os
 import networkx as nx
 import navigation.simple_gps_util as simple_gps_util
+from ament_index_python.packages import get_package_share_directory
 
 # ROS based import
 import rclpy.node
@@ -19,6 +23,7 @@ import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
 import rclpy
 from geometry_msgs.msg import (
+    Point,
     Pose,
     PoseStamped,
     PointStamped,
@@ -58,18 +63,72 @@ class GlobalPlanner(rclpy.node.Node):
 
         self.minimize_travel = True  # TODO - Consider removing or setting another way
 
-        # TODO MAKE THIS A LAUNCH PARAM
-        self.ANCHOR_GPS = [38.433939, -78.862157]
+
+        # GPS calibration state using landmark-based calibration
+        self.ref_lat = 0.0
+        self.ref_lon = 0.0
+        self.cx_local = 0.0
+        self.cy_local = 0.0
+        self.cx_gps = 0.0
+        self.cy_gps = 0.0
+        self.calibration_theta = 0.0
+
+        self.declare_parameter(
+            "calibration_config_dir",
+            "/maps",
+        )
+        self.declare_parameter(
+            "calibration_config_file",
+            "SpeedBoiMap.yaml",
+        )
+        calibration_config_dir = self.get_parameter(
+            "calibration_config_dir"
+        ).get_parameter_value().string_value
+        calibration_config_file = self.get_parameter(
+            "calibration_config_file"
+        ).get_parameter_value().string_value
+        calibration_config_path = simple_gps_util.resolve_config_path(
+            calibration_config_dir,
+            calibration_config_file,
+        )
+        self.test_location_local, self.test_location_gps = (
+            simple_gps_util.load_landmark_calibration(calibration_config_path)
+        )
+
+        # Run GPS calibration at startup using landmark-based method
+        self.ref_lat, self.ref_lon, self.cx_local, self.cy_local, self.cx_gps, self.cy_gps, self.calibration_theta = simple_gps_util.calibrate_with_landmarks(
+            self.test_location_local,
+            self.test_location_gps,
+        )
+        self.gps_calibrated = True
+        self.get_logger().info(
+            f"GPS calibrated at startup using {len(self.test_location_gps)} landmark point(s), "
+            f"rotation: {self.calibration_theta:.4f} degrees"
+        )
+        self.get_logger().info(
+            f"Loaded calibration landmarks from {calibration_config_path}"
+        )
 
         # Graphing variables
         self.global_graph = nx.DiGraph()
         self.logic_graph = None
 
         self.declare_parameter(
-            "graph_file", "./src/ai-navigation/navigation/maps/main_shift3.gml"
+            "graph_dir",
+            os.path.join(
+                get_package_share_directory("navigation"), "maps"
+            ),
         )
-        file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file(file_name)
+        self.declare_parameter("graph_file", "main_shift3.gml")
+        self.declare_parameter("graph_coordinate_format", "ros")
+        graph_path = simple_gps_util.resolve_graph_path(
+            self.get_parameter("graph_dir").get_parameter_value().string_value,
+            self.get_parameter("graph_file").get_parameter_value().string_value,
+        )
+        graph_coordinate_format = self.get_parameter(
+            "graph_coordinate_format"
+        ).get_parameter_value().string_value
+        self.load_file(graph_path, graph_coordinate_format)
 
         # ROS2 SUBSCRIBERS
         # ------------------------------------------
@@ -95,10 +154,10 @@ class GlobalPlanner(rclpy.node.Node):
             Float32, "/estimated_vel_mps", self.vel_callback, 10
         )
 
-        # This is to orient the gps. (GPS IS NON OPERATION AS OF 4/10/2024)
-        # self.lat_long_req = self.create_subscription(
-        #     LatLongPoint, "/gps_request", self.gps_request_cb, 10
-        # )
+        # Listen for GPS destination requests
+        self.lat_long_req = self.create_subscription(
+            LatLongPoint, "/gps_request", self.gps_request_cb, 10
+        )
 
         # Listen for standard destination requests
         # self.dest_req_sub = rospy.Subscriber('/destination_request', String, self.request_callback, queue_size=10)
@@ -109,19 +168,16 @@ class GlobalPlanner(rclpy.node.Node):
         # Publish the path for local planner to begin navigating
         self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
 
-        # THESE CALLBACKS ARE NOT USED BECAUSE GPS IS NON OPERATION
-        # ----------------------------------------------------------
-
-        # Publishes the path but in GPS coordinates
-        # self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
-        # self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
-        # Published the current cart position but in GPS coordinates TODO move to local planner
-        # self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
-        # How often to update the gps position of the cart
-        # self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
+        # GPS publishers and position update timer
+        self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
+        self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
+        # Publishes current cart position in GPS coordinates
+        self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
+        # Publish cart GPS position at 10 Hz while navigating
+        self.gps_timer = self.create_timer(0.1, self.output_pos_gps)
 
     # Load the graph file as the global graph
-    def load_file(self, file_name):
+    def load_file(self, file_name, graph_coordinate_format="ros"):
         """Loads a file and sets all nodes to active(allowed to take part in pathfinding).
 
         Args:
@@ -131,6 +187,17 @@ class GlobalPlanner(rclpy.node.Node):
 
         try:
             self.global_graph = nx.read_gml(file_name)
+            self.global_graph = simple_gps_util.convert_graph_to_local(
+                self.global_graph,
+                graph_coordinate_format,
+                self.ref_lat,
+                self.ref_lon,
+                self.cx_local,
+                self.cy_local,
+                self.cx_gps,
+                self.cy_gps,
+                self.calibration_theta,
+            )
 
             for node in self.global_graph:
                 self.global_graph.nodes[node]["active"] = True
@@ -225,9 +292,9 @@ class GlobalPlanner(rclpy.node.Node):
             # Allows for class changes again
             self.calculating_nav = False
 
-            # Convert the path to GPS to give to Networking.
-            # if self.gps_calibrated:
-            #     self.output_path_gps(points_arr)
+            # Convert the path to GPS coordinates and publish for networking
+            if self.gps_calibrated:
+                self.output_path_gps(points_arr)
 
             self.path_pub.publish(points_arr)
             self.get_logger().info(
@@ -524,135 +591,113 @@ class GlobalPlanner(rclpy.node.Node):
             self.vel_polls = 0
             self.cur_speed = 0
 
-    # def output_path_gps(self, path, single=False):
-    #     """Function for converting the list of points along a path to latitude and longitude
+    def output_path_gps(self, path, single=False):
+        """Function for converting the list of points along a path to latitude and longitude
 
-    #     Args:
-    #         path (LocalPointsArray message): List of X,Y points along the path
-    #         single (Boolean): Whether or not you're sending a path with a single point or not (e.g. see output_pos_gps below)
-    #     """
-    #     gps_path = LatLongArray()
+        Args:
+            path (LocalPointsArray message): List of X,Y points along the path
+            single (Boolean): Whether or not you're sending a path with a single point or not (e.g. see output_pos_gps below)
+        """
+        gps_path = LatLongArray()
 
-    #     for pose in path.localpoints:
-    #         # Testing conversion back to latitude/longitude
-    #         stock_point = Point()
+        for pose in path.localpoints:
+            # Convert local coordinates to GPS using landmark-based calibration
+            lat, lon = simple_gps_util.local_to_gps(
+                pose.position.x, pose.position.y,
+                self.ref_lat, self.ref_lon,
+                self.cx_local, self.cy_local,
+                self.cx_gps, self.cy_gps,
+                self.calibration_theta
+            )
 
-    #         # Correct the angle of the points from offset of map
-    #         stock_point.x = pose.position.x
-    #         stock_point.y = pose.position.y
-    #         stock_point = simple_gps_util.heading_correction(
-    #             0, 0, -(self.anchor_theta), stock_point
-    #         )
+            final_pose = LatLongPoint()
+            final_pose.latitude = lat
+            final_pose.longitude = lon
 
-    #         # Convert to latitude and longitude
-    #         lat, lon = simple_gps_util.xy2latlon(
-    #             stock_point.x, stock_point.y, self.anchor_gps[0], self.anchor_gps[1]
-    #         )
+            # If we only care about a single point (e.g. cart position) send it off
+            if single:
+                return final_pose
 
-    #         final_pose = LatLongPoint()
-    #         final_pose.latitude = lat
-    #         final_pose.longitude = lon
+            gps_path.gpspoints.append(final_pose)
 
-    #         # If we only care about a single point (e.g. cart position) send it off
-    #         if single:
-    #             return final_pose
+        # Publish here
+        self.gps_path_pub.publish(gps_path)
 
-    #         gps_path.gpspoints.append(final_pose)
+        # Logger for the destination node in both ROS and GPS coordinates
+        if self.destination_node is not None:
+            dest_x, dest_y = self.global_graph.nodes[self.destination_node]["pos"]
+            dest_lat, dest_lon = simple_gps_util.local_to_gps(
+                dest_x, dest_y,
+                self.ref_lat, self.ref_lon,
+                self.cx_local, self.cy_local,
+                self.cx_gps, self.cy_gps,
+                self.calibration_theta
+            )
+            self.get_logger().info(
+                f"Destination node {self.destination_node}: "
+                f"ROS coordinates ({dest_x}, {dest_y}), "
+                f"GPS coordinates ({dest_lat}, {dest_lon})"
+            )
 
-    #     # Publish here
-    #     self.gps_path_pub.publish(gps_path)
+    def output_pos_gps(self):
+        """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution
+        rather than GPS which can be relatively inaccurate.
 
-    # def output_pos_gps(self):
-    #     """Outputs the cart location in GPS and publishes. This uses the GPS Util for an approximate solution
-    #     rather than GPS which can be relatively inaccurate.
+        """
+        if self.navigating and self.gps_calibrated and self.current_pos is not None:
+            package_point = LocalPointsArray()
+            cart_pos = self.current_pos.pose
+            package_point.localpoints.append(cart_pos)
 
-    #     """
-    #     if self.navigating:
-    #         package_point = LocalPointsArray()
-    #         cart_pos = self.current_pos.pose
-    #         package_point.localpoints.append(cart_pos)
+            point_in_gps = self.output_path_gps(package_point, single=True)
 
-    #         point_in_gps = self.output_path_gps(package_point, single=True)
+            self.gps_pose_pub.publish(point_in_gps)
 
-    #         self.gps_pose_pub.publish(point_in_gps)
+    def gps_request_cb(self, msg):
+        """Converts a GPS point from Lat, Long to local coordinates using landmark-based calibration. Also displays the GPS once converted, in RViz
 
-    # def gps_request_cb(self, msg):
-    #     """Converts a GPS point from Lat, Long to UTM coordinate system using AlvinXY. Also displays the GPS once converted, in RViz
-    #     Note: Information on calibrating can be found here:
-    #     https://git.cs.jmu.edu/av-xlabs-19/robotics/ai-navigation/wikis/Setting-Up-a-New-Driving-Environment#4-calibrating-the-gps-utility-for-the-new-map
+        Args:
+            msg (ROS LatLongPoint Message): Message containing the latitude and longitude to convert and navigate to
+        """
+        local_point = Point()
 
-    #     Args:
-    #         msg (ROS LatLongPoint Message): Message containing the latitude and longitude to convert and navigate to
-    #     """
-    #     local_point = Point()
+        # Convert GPS to local using landmark-based calibration
+        local_point.x, local_point.y = simple_gps_util.gps_to_local(
+            msg.latitude, msg.longitude,
+            self.ref_lat, self.ref_lon,
+            self.cx_local, self.cy_local,
+            self.cx_gps, self.cy_gps,
+            self.calibration_theta
+        )
 
-    #     anchor_gps = self.anchor_gps
+        self.calc_nav(local_point)
 
-    #     # Calibrate GPS Utility if not yet calibrated
-    #     if not self.gps_calibrated:
-    #         # A test point on the map X, Y
-    #         test_local = self.test_location_local
+        marker = Marker()
+        marker.header = Header()
+        marker.header.frame_id = "/map"
 
-    #         # Origin of the map X, Y
-    #         anchor_local = self.anchor_local
+        marker.ns = "GPS_NS"
+        marker.id = 0
+        marker.type = marker.CUBE
+        marker.action = 0
 
-    #         # That same test point but in latitude, longitude from Google Maps
-    #         test_gps = self.test_location_gps
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
 
-    #         # Get the calibrated heading and set
-    #         self.anchor_theta = simple_gps_util.calibrate_util(
-    #             test_local, anchor_local, test_gps, anchor_gps
-    #         )
+        # rclpy uses Duration from the rclpy.duration module, not rclpy directly
+        marker.lifetime = rclpy.duration.Duration(seconds=10).to_msg()
 
-    #         # FIXME THIS NEEDS TO BE LOOKED INTO
-    #         # rospy.set_param("anchor_theta", float(self.anchor_theta))
-    #         # rospy.loginfo(
-    #         #     "Calibrated GPS Utility With Heading Offset: "
-    #         #     + str(self.anchor_theta)
-    #         #     + " degrees"
-    #         # )
-    #         self.gps_calibrated = True
+        marker.pose.position.x = local_point.x
+        marker.pose.position.y = local_point.y
+        marker.pose.position.z = 0.0
 
-    #     # the anchor point is the latitude/longitude for the pcd origin
-    #     x, y = simple_gps_util.latlon2xy(
-    #         msg.latitude, msg.longitude, anchor_gps[0], anchor_gps[1]
-    #     )
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 0.8
 
-    #     local_point.x = x
-    #     local_point.y = y
-
-    #     # Currect the heading of the point by map offset around origin
-    #     local_point = simple_gps_util.heading_correction(
-    #         0, 0, self.anchor_theta, local_point
-    #     )
-    #     self.calc_nav(local_point)
-
-    #     marker = Marker()
-    #     marker.header = Header()
-    #     marker.header.frame_id = "/map"
-
-    #     marker.ns = "GPS_NS"
-    #     marker.id = 0
-    #     marker.type = marker.CUBE
-    #     marker.action = 0
-
-    #     marker.color.r = 0.0
-    #     marker.color.g = 1.0
-    #     marker.color.b = 0.0
-    #     marker.color.a = 1.0
-
-    #     # FIXME THIS NEEDS TO BE LOOKED INTO. I think its right but i dont know.
-    #     marker.lifetime = rclpy.duration.Duration(seconds=10)
-
-    #     marker.pose.position.x = local_point.x
-    #     marker.pose.position.y = local_point.y
-    #     marker.pose.position.z = 0.0
-
-    #     marker.scale.x = 1
-    #     marker.scale.y = 1
-    #     marker.scale.z = 0.8
-
-    #     self.display_pub.publish(marker)
+        self.display_pub.publish(marker)
 
     def log_header(self, msg):
         """Helper method to print noticeable log statements."""

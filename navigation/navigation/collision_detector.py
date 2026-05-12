@@ -118,9 +118,6 @@ class CollisionDetector(rclpy.node.Node):
         # self.declare_parameter("min_obstacle_time", 2.5)
         self.declare_parameter("safe_obstacle_dist", 6 * factor)
         self.declare_parameter("safe_obstacle_time", 2 * factor)
-        self.declare_parameter("max_brake_decel_mps2", 2.0)
-        self.declare_parameter("control_latency_sec", 0.35)
-        self.declare_parameter("safety_buffer_m", 0.75)
 
         # self.MIN_OBSTACLE_DIST = (
         #     self.get_paramater("min_obstacle_dist").get_paramter_value().float_value
@@ -136,17 +133,6 @@ class CollisionDetector(rclpy.node.Node):
         )
         self.SAFE_OBSTACLE_TIME = (
             self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
-        )
-        self.MAX_BRAKE_DECEL_MPS2 = (
-            self.get_parameter("max_brake_decel_mps2")
-            .get_parameter_value()
-            .double_value
-        )
-        self.CONTROL_LATENCY_SEC = (
-            self.get_parameter("control_latency_sec").get_parameter_value().double_value
-        )
-        self.SAFETY_BUFFER_M = (
-            self.get_parameter("safety_buffer_m").get_parameter_value().double_value
         )
 
         # Subscribes to the /obstacles topic where ObstacleArray msg types are sent
@@ -379,18 +365,10 @@ class CollisionDetector(rclpy.node.Node):
 
                     self.prev_distance = distance
                     self.prev_time = time.time()
-                # Physics-based safety gate: request stop when available distance
-                # is lower than required stopping distance + response margin.
-                min_safe_speed = max(self.cur_speed, 0.1)
-                stopping_distance = (min_safe_speed * min_safe_speed) / (
-                    2.0 * max(self.MAX_BRAKE_DECEL_MPS2, 0.1)
-                )
-                reaction_distance = min_safe_speed * max(self.CONTROL_LATENCY_SEC, 0.0)
-                required_distance = (
-                    stopping_distance + reaction_distance + max(self.SAFETY_BUFFER_M, 0.0)
-                )
-
-                if distance <= required_distance:
+                # if distance < self.min_obstacle_dist or impact_time < self.min_obstacle_time:
+                if distance < (self.SAFE_OBSTACLE_DIST / 3) or impact_time < (
+                    self.SAFE_OBSTACLE_TIME / 3
+                ):
                     clear_path = False
                     self.cleared_confidence = 0
                     if not self.stopped:

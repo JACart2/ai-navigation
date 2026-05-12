@@ -37,8 +37,8 @@ class LocalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("local_planner")
 
-        # driving constants
-        self.METERS = 10.0  # Restored for physical turning safety
+        # driving constants THIS USED TO BE 10 and 3.6 respectively
+        self.METERS = 30.0
         self.SECONDS = 3.6
 
         # driving variables

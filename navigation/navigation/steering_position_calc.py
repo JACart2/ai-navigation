@@ -14,9 +14,8 @@
 import numpy as np
 import time
 
-WHEELBASE = 1.676  # Matches pure_pursuit.py real cart wheelbase.
-LF = WHEELBASE / 2.0  # Front distance from the center of mass of the cart.
-LB = WHEELBASE / 2.0  # Back distance from the center of mass of the cart.
+LF = 1.25  # Front distance from the center of mass of the cart.
+LB = 1.25  # Back distance from the center of mass of the cart.
 LW = 1  # Half of the width of the cart.
 prev_phi = 0
 steering_angle = 0

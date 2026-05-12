@@ -26,34 +26,15 @@ By default, the system looks for calibration files in the `navigation/maps/` dir
 When launching the navigation system, override the parameters:
 
 ```bash
-ros2 launch navigation navigation.launch.py \
-  calibration_config_dir:=/path/to/configs \
-  calibration_config_file:=my_landmarks.yaml
+ros2 launch cart_launch autonomous_launcher.py
+  calibration_config_dir:=/maps \
+  calibration_config_file:=SpeedBoiMap.yaml \
+  graph_dir:=<user>/install/navigation/share/navigation/maps \
+  graph_file:=main_shift3.gml \
+  graph_coordinate_format:=ros # Can be "ros" or "gps"
 ```
 
-### Method 2: Modify the Launch File Directly
-
-Edit [navigation.launch.py](launch/navigation.launch.py) to change default values:
-
-```python
-DeclareLaunchArgument(
-    "calibration_config_dir",
-    default_value="/path/to/your/config/dir",  # Change this
-),
-DeclareLaunchArgument(
-    "calibration_config_file",
-    default_value="your_config.yaml",  # Change this
-),
-```
-
-### Method 3: Runtime Configuration via ROS Parameters
-
-If you need to change the config file at runtime (before nodes are initialized), you can set parameters directly:
-
-```bash
-ros2 param set global_planner calibration_config_dir /new/path
-ros2 param set global_planner calibration_config_file new_file.yaml
-```
+Listed values are the defaults.
 
 ## How to Make a Calibration File
 
@@ -116,34 +97,6 @@ landmarks:
     gps:
       latitude: 38.43390
       longitude: -78.86211
-```
-
-## How to Enable Auto-Converting a .gml GPS File to ROS Coordinates
-
-tl;dr - in navigation.launch.py, change graph_coordinate_format:=gps => ros and vice versa.
-
-The `global_planner` node can automatically convert GPS-format GML maps to local ROS coordinates when the map is loaded, using a calibration .yaml file.
-
-### Method 1: Via Launch Arguments (Recommended)
-
-Set the `graph_coordinate_format` parameter to `"gps"`:
-
-```bash
-ros2 launch navigation navigation.launch.py \
-  graph_file:=path/to/your/map_gps.gml \
-  graph_coordinate_format:=gps \
-  calibration_config_file:=your_landmarks.yaml
-```
-
-### Method 2: Modify Launch File Default
-
-Edit [navigation.launch.py](launch/navigation.launch.py):
-
-```python
-DeclareLaunchArgument(
-    "graph_coordinate_format",
-    default_value="gps",  # Change from "ros" to "gps"
-),
 ```
 
 ## How to Convert a .gml File from ROS Coordinates to GPS Lat-Long

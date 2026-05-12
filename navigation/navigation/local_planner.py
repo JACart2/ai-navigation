@@ -2,7 +2,7 @@
 """
 This is the ROS 2 node that handles the local planning for the JACART.
 
-Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
+Authors: Zane Metz, Lorenzo Ashurst, Zach Putz, Hunter Fauntleroy
 """
 # Python based imports
 import math
@@ -29,6 +29,8 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
+from anomaly_msg.msg import AnomalyMsg
+
 
 
 class LocalPlanner(rclpy.node.Node):
@@ -51,9 +53,14 @@ class LocalPlanner(rclpy.node.Node):
 
         self.cur_speed = 0  # Another estimate of speed used for eta calculations
 
+        self.anomaly_detection_enabled = True
+
         self.new_path = False
         self.path_valid = False
         self.local_points = []
+        self.path_total_distance = 0.0
+        self.eta_initial_report_sent = False
+        self.eta_next_report_percent = 20
 
         self.current_state = VehicleState()
         self.stop_requests = {}
@@ -98,6 +105,11 @@ class LocalPlanner(rclpy.node.Node):
             VehicleState, "/vehicle_state", 10
         )
 
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, 
+                                             '/ai_anomaly_logging',
+                                             10
+                                             )
+
         # Send out speed and steering requests to motor endpoint
         self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
 
@@ -121,6 +133,9 @@ class LocalPlanner(rclpy.node.Node):
 
         # Publish the ETA
         self.eta_pub = self.create_publisher(UInt64, "/eta", 10)
+
+        # Publish ETA progress percentage
+        self.eta_percentage_pub = self.create_publisher(UInt64, "/eta_percentage", 10)
 
         # Publish the projected turning angle and path
         self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
@@ -177,7 +192,12 @@ class LocalPlanner(rclpy.node.Node):
 
         self.path_valid = False
         self.new_path = True
+        self.path_total_distance = 0.0
+        self.eta_initial_report_sent = False
+        self.eta_next_report_percent = 20
         self.log(f"Path received: {str(msg)}")
+
+        # self.anomaly_logging("New path received", AnomalyMsg.INFO)
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points
@@ -269,6 +289,13 @@ class LocalPlanner(rclpy.node.Node):
                     self.state, self.cx, self.cy, 0
                 )
 
+                if len(self.local_points) > 1:
+                    self.path_total_distance = self.calc_trip_dist(
+                        self.local_points, self.local_points[0]
+                    )
+                else:
+                    self.path_total_distance = 0.0
+
                 # Publish the ETA to the destination before we get started
                 self.calc_eta()
                 rate = 1.0 / 30.0  # 30 cycles per second
@@ -278,6 +305,7 @@ class LocalPlanner(rclpy.node.Node):
             else:
                 self.path_valid = False
                 self.log_header("It appears the cart is already at the destination")
+                self.anomaly_logging("Cart is already at destination", AnomalyMsg.WARNING)
 
         if self.current_state.is_navigating:
             # Continue to loop while we have not hit the target destination, and the path is still valid
@@ -335,11 +363,13 @@ class LocalPlanner(rclpy.node.Node):
                 # Let operator know why current path has stopped
                 if self.path_valid:
                     self.log("Reached Destination succesfully without interruption")
+                    self.anomaly_logging("Arrived", AnomalyMsg.INFO)
                     self.arrived_pub.publish(notify_server)
                 else:
                     self.log(
                         "Already at destination, or there may be no path to get to the destination or navigation was interrupted."
                     )
+                    self.anomaly_logging("Either already at destination or destination can't be reached", AnomalyMsg.WARNING)
 
                 # Update the internal state of the vehicle
                 self.vehicle_state_pub.publish(self.current_state)
@@ -457,44 +487,92 @@ class LocalPlanner(rclpy.node.Node):
     def calc_eta(self):
         """Calculates the Estimated Time of Arrival to the destination"""
         # Attempt an update only while driving
-        if self.current_state.is_navigating:
+        if self.current_state.is_navigating and self.local_points:
+            if self.tar_speed <= 0:
+                return
+
             # Where are we at and how much further must we go
             current_node = self.get_closest_point(
                 self.cur_pose.position.x, self.cur_pose.position.y
             )
 
-            # distance_remaining = self.calc_trip_dist(self.local_points, current_node)
+            if current_node is None:
+                return
+
+            # self.log("x: " + str(self.cur_pose.position.x) + "y: " + str(self.cur_pose.position.y))
+
+            distance_remaining = self.calc_trip_dist(self.local_points, current_node)
+
 
             # # Remaining time in seconds
-            # remaining_time = distance_remaining / self.cur_speed
+            remaining_time = distance_remaining / self.tar_speed # use target speed to avoid incorrect eta during speed up
             eta_msg = UInt64()
 
             # # Calculate the ETA to the end
             # arrival_time = time.time() + remaining_time
 
             # # Convert the time to milliseconds
-            # eta_msg.data = int(arrival_time * (1000))
-            eta_msg.data = 0
+            eta_msg.data = int(remaining_time) # changed from arrival_time
+            # eta_msg.data = 0
             self.eta_pub.publish(eta_msg)
 
+            if not self.eta_initial_report_sent:
+                self.anomaly_logging(
+                    f"ETA: {eta_msg.data}s at 0% complete",
+                    AnomalyMsg.INFO,
+                )
+                self.eta_initial_report_sent = True
+
+            if len(self.local_points) > 1:
+                current_index = self.local_points.index(current_node)
+                progress_percent = int(
+                    round((current_index / (len(self.local_points) - 1)) * 100)
+                )
+            else:
+                progress_percent = 0
+
+            progress_percent = max(0, min(100, progress_percent))
+
+            progress_msg = UInt64()
+            progress_msg.data = progress_percent
+            self.eta_percentage_pub.publish(progress_msg)
+
+            while (
+                progress_percent >= self.eta_next_report_percent
+                and self.eta_next_report_percent <= 100
+            ):
+                self.anomaly_logging(
+                    f"ETA progress: {self.eta_next_report_percent}% complete, ETA: {eta_msg.data}s",
+                    AnomalyMsg.INFO,
+                )
+                self.log(
+                    f"ETA progress published: {self.eta_next_report_percent}%"
+                )
+                self.eta_next_report_percent += 20
+
     def calc_trip_dist(self, points_list, start):
-        """Calculates the trip distance from the "start" index to the end of the "points_list"
+        """Calculates the trip distance from the "start" Point to the end of the "points_list"
 
         Args:
             points_list(List): The list of path points to calculate the distance of
-            start(int): The index of which to start calculating the trip distance
+            start(Point): The Point of which to start calculating the trip distance
         """
-        sum = 0
-        for i in range(start, len(points_list) - 1):
-            sum += self.calc_dist(
+        total_distance = 0
+
+        start_index = self.local_points.index(start)
+        if start_index >= len(points_list) - 1:
+            return 0
+
+        for i in range(start_index + 1, len(points_list)):
+            total_distance += self.calc_dist(
                 points_list[i].x,
                 points_list[i].y,
-                points_list[i + 1].x,
-                points_list[i + 1].y,
+                points_list[i - 1].x,
+                points_list[i - 1].y,
             )
-            prev_node = i
-
-        return sum
+            # prev_node = i
+        # self.log(f"Distance remaining: {total_distance}")
+        return total_distance
 
     def get_closest_point(self, pos_x, pos_y):
         """Get the closest point along the raw path from pos_x, pos_y
@@ -503,15 +581,16 @@ class LocalPlanner(rclpy.node.Node):
             pos_x(float): The x position of search center
             pos_y(float): The y position of search center
         """
-        min_node = 0
+        min_node = None
         min_dist = float("inf")
-        for i in range(len(self.local_points)):
-            dist = self.calc_dist(
-                pos_x, pos_y, self.local_points[i].x, self.local_points[i].y
-            )
+        for point in self.local_points:
+            dist = self.calc_dist(pos_x, pos_y, point.x, point.y)
             if dist < min_dist:
                 min_dist = dist
-                min_node = i
+                min_node = point
+        
+        # self.log(f"Closest point to x: {pos_x}, y: {pos_y} is x: {min_node.x}, y: {min_node.y}")
+        return min_node
 
     def calc_dist(self, x1, y1, x2, y2):
         return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
@@ -522,6 +601,26 @@ class LocalPlanner(rclpy.node.Node):
     def log_header(self, log):
         # self.get_logger().info(f'{'#' * 20}\n{log}\n{'#' * 20}')
         self.log(log)
+
+    def anomaly_logging(self, message, severity):
+        """Helper function to publish an anomaly detection message to the anomaly logging topic.
+
+        Args:
+            message (str): A description of the detected anomaly.
+            severity (str): The severity level of the anomaly (e.g., "info", "warning", "error").
+        """
+        if not self.anomaly_detection_enabled:
+            return
+        anomaly_msg = AnomalyMsg()
+
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "local_planner"
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
+
+        self.anomaly_pub.publish(anomaly_msg)
 
 
 def create_pose_stamped(point):
@@ -566,7 +665,6 @@ def main():
     node = LocalPlanner()
 
     rclpy.spin(node)
-
     node.destroy_node()
     rclpy.shutdown()
 

@@ -12,6 +12,11 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("baudrate", default_value="57600"),
             DeclareLaunchArgument("arduino_port", default_value="/dev/ttyUSB0"),
+            DeclareLaunchArgument(
+                "enable_aad",
+                default_value="true",
+                description="Enable anomaly logging node"
+            ),
             Node(
                 package="motor_control",
                 executable="motor_endpoint",
@@ -20,6 +25,7 @@ def generate_launch_description():
                     {
                         "baudrate": LaunchConfiguration("baudrate"),
                         "arduino_port": LaunchConfiguration("arduino_port"),
+                        "enable_aad": LaunchConfiguration("enable_aad")
                     }
                 ],
             ),

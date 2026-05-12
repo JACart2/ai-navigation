@@ -42,12 +42,12 @@ setup(
             "obstacle_converter = navigation.zed_object_to_obstacle:main",
             "collision_detector = navigation.collision_detector:main",
             "display_global_path = navigation.display_global_path:main",
-            "pose_bridge = navigation.pose_bridge:main",
             "zed_object_to_obstacle = navigation.zed_object_to_obstacle:main",
             "lidar_object_to_obstacle = navigation.lidar_object_to_obstacle:main",
             "radar_xyz_filter = navigation.radar_xyz_filter:main",
             "radar_filter_sliders = navigation.radar_filter_sliders:main",
             "radar_pcl_to_obstacles = navigation.radar_pcl_to_obstacles:main",
+            "collision_avoidance_aad_log = navigation.collision_avoidance_aad_log:main",
         ],
     },
 )

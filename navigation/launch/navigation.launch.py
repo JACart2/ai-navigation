@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
 from launch.actions import IncludeLaunchDescription
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory 
@@ -56,6 +57,11 @@ def generate_launch_description():
                 default_value="true",
                 description="Open the Tk slider window for the radar xyz filter.",
             ),
+            DeclareLaunchArgument(
+                "enable_aad",
+                default_value="true",
+                description="Enable collision avoidance anomaly logging node",
+            ),
             Node(
                 package="navigation",
                 executable="global_planner",
@@ -87,11 +93,6 @@ def generate_launch_description():
                 executable="visualize_graph",
                 output="screen",
             ),
-            Node(
-                package="navigation",
-                executable="pose_bridge",
-                output="screen",
-            ),
             # call other launchfiles from this package:
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -119,6 +120,13 @@ def generate_launch_description():
                     "radar_min_height": LaunchConfiguration("radar_min_height"),
                     "radar_max_height": LaunchConfiguration("radar_max_height"),
                 }.items(),
+            ),
+            Node(
+                package="navigation",
+                executable="collision_avoidance_aad_log",
+                name="collision_avoidance_aad_log",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_aad")),
             ),
         ]
     )

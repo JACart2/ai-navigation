@@ -32,23 +32,6 @@ def generate_launch_description():
         )
     )
 
-    # Specify the new path to liosam.launch.py
-    lio_sam_launch_path = os.path.join(
-        get_package_share_directory("localization_launch"),
-        "launch",
-        "lio-sam.launch.py",
-    )
-
-    # Include the lidar_localization launch file using the new path
-    # liosam_localization_launch = IncludeLaunchDescription(
-    #     PythonLaunchDescriptionSource([lio_sam_launch_path]),
-    #     launch_arguments={
-    #         "localization_only": "true",
-    #         "loop_closure_flag": "false",
-    #         "static_map_path": "/home/jacart/jacart-project/dev_ws/src/maps/final_map_condensed_5-22.pcd",
-    #     }.items(),
-    # )
-
     # Specify the new path to lidar_localization.launch.py
     lidar_localization_launch_path = os.path.join(
         get_package_share_directory("localization_launch"),

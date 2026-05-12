@@ -226,6 +226,12 @@ def generate_launch_description():
         "radar_filter_gui", default_value="true",
         description="Open the Tk slider window for adjusting the radar XYZ filter live.",
     )
+    declare_enable_aad = DeclareLaunchArgument(
+        "enable_aad",
+        default_value="true",
+        description="Enable anomaly logging",
+    )
+
     swri_console_node = Node(
         package="swri_console",
         executable="swri_console",
@@ -265,6 +271,7 @@ def generate_launch_description():
             "radar_filter_z_min": radar_filter_z_min,
             "radar_filter_z_max": radar_filter_z_max,
             "radar_filter_gui": radar_filter_gui,
+            "enable_aad": LaunchConfiguration("enable_aad"),
         }.items(),
     )
 
@@ -276,6 +283,7 @@ def generate_launch_description():
         launch_arguments={
             "baudrate": motor_baudrate,
             "arduino_port": motor_arduino_port,
+            "enable_aad": LaunchConfiguration("enable_aad"),
         }.items(),
     )
 
@@ -353,6 +361,7 @@ def generate_launch_description():
             declare_radar_filter_z_min,
             declare_radar_filter_z_max,
             declare_radar_filter_gui,
+            declare_enable_aad,
             swri_console_node,
             delayed_stack,
         ]

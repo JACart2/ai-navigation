@@ -230,6 +230,30 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /graph_visual
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: CollisionBoundaries
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 100
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /boundaries_array
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: CollisionCandidates
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 100
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /collision_pub
+      Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1

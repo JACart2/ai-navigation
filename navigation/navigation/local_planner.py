@@ -39,8 +39,12 @@ class LocalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("local_planner")
 
+        self.declare_parameter("cruise_speed", 30.0)
+
         # driving constants THIS USED TO BE 10 and 3.6 respectively
-        self.METERS = 30.0
+        self.METERS = (
+            self.get_parameter("cruise_speed").get_parameter_value().double_value
+        )
         self.SECONDS = 3.6
 
         # driving variables
@@ -499,6 +503,9 @@ class LocalPlanner(rclpy.node.Node):
 
             distance_remaining = self.calc_trip_dist(self.local_points, current_node)
 
+            # Avoid division by zero when speed is zero or not yet initialized
+            if self.cur_speed <= 0:
+                return
 
             # # Remaining time in seconds
             remaining_time = distance_remaining / self.tar_speed # use target speed to avoid incorrect eta during speed up

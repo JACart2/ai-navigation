@@ -147,7 +147,6 @@ class LidarObjectToObstacle(rclpy.node.Node):
         A pair of (x, y) coordinates.
     """
     def get_point(self, angle, distance):
-
         # LaserScan polar->Cartesian in ROS convention:
         # x forward, y left, angle measured from +x toward +y.
         x = math.cos(angle) * distance

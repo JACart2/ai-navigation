@@ -661,6 +661,9 @@ def create_marker(x, y, frame_id):
     return marker
 
 
+
+
+
 def main():
     """The main method that actually handles spinning up the node."""
 

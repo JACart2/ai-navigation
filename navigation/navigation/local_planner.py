@@ -7,6 +7,7 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 # Python based imports
 import math
 from navigation import pure_pursuit, cubic_spline_planner
+from navigation.off_path_detector import compute_off_path_distance
 
 # ROS based imports
 import rclpy
@@ -56,10 +57,17 @@ class LocalPlanner(rclpy.node.Node):
         self.off_path = False
         self.off_path_distance = 0.0
         self.off_path_node_index = -1
+        self.off_path_strikes = 0
+        self.cur_path_ind = 0
+        self.pose_received = False
 
-        self.declare_parameter("off_path_threshold_m", 2.0)
+        self.declare_parameter("off_path_threshold_m", 0.5)
+        self.declare_parameter("off_path_debounce_strikes", 3)
         self.OFF_PATH_THRESHOLD_M = (
             self.get_parameter("off_path_threshold_m").get_parameter_value().double_value
+        )
+        self.OFF_PATH_DEBOUNCE_STRIKES = (
+            self.get_parameter("off_path_debounce_strikes").get_parameter_value().integer_value
         )
 
         # ros variables
@@ -160,6 +168,7 @@ class LocalPlanner(rclpy.node.Node):
     def pose_cb(self, msg):
         """Getting current believed cart position"""
         self.cur_pose = msg.pose.pose
+        self.pose_received = True
 
     def stop_cb(self, msg):
         self.stop_requests[str(msg.sender_id.data).lower()] = [msg.stop, msg.distance]
@@ -189,13 +198,21 @@ class LocalPlanner(rclpy.node.Node):
         self.off_path = False
         self.off_path_distance = 0.0
         self.off_path_node_index = -1
+        self.off_path_strikes = 0
+        self.cur_path_ind = 0
         self.off_path_pub.publish(Bool(data=False))
         self.log(f"Path received: {str(msg)}")
 
     def publish_stop_nav_cmd(self):
-        """Sends a zero-velocity command to stop the cart immediately."""
+        """Sends a stop command to the motor endpoint.
+
+        If the cart is currently moving, send a small negative velocity which
+        motor_endpoint treats as an obstacle-distance and uses to drive a fast
+        brake ramp. If stopped, send 0 to avoid a ZeroDivision in the brake-time
+        math on the motor side.
+        """
         stop_msg = VelAngle()
-        stop_msg.vel = 0.0
+        stop_msg.vel = -0.5 if self.cur_vel > 0.1 else 0.0
         stop_msg.angle = 0.0
         self.motion_pub.publish(stop_msg)
 
@@ -303,41 +320,40 @@ class LocalPlanner(rclpy.node.Node):
             # Continue to loop while we have not hit the target destination, and the path is still valid
             if self.last_index > self.target_ind and self.path_valid:
 
-                # Calculate distance ONLY to the local segment around target index.
-                search_start = max(0, self.target_ind - 30)
-                search_end = min(len(self.cx), self.target_ind + 30)
-
-                min_dist = float("inf")
-                min_idx = search_start
-
-                for i in range(search_start, search_end):
-                    d = self.calc_dist(
+                # Off-path detection: cart-centered window, with debounce, gated
+                # on having a real pose fix.
+                if self.pose_received:
+                    min_dist, self.cur_path_ind = compute_off_path_distance(
                         self.cur_pose.position.x,
                         self.cur_pose.position.y,
-                        self.cx[i],
-                        self.cy[i],
+                        self.cx,
+                        self.cy,
+                        self.cur_path_ind,
                     )
-                    if d < min_dist:
-                        min_dist = d
-                        min_idx = i
+                    self.off_path_distance = min_dist
+                    self.off_path_node_index = self.cur_path_ind
 
-                self.off_path_distance = min_dist
-                self.off_path_node_index = min_idx
+                    if min_dist > self.OFF_PATH_THRESHOLD_M:
+                        self.off_path_strikes += 1
+                    else:
+                        self.off_path_strikes = 0
 
-                if min_dist > self.OFF_PATH_THRESHOLD_M:
-                    self.log_header(
-                        f"ABORT: Cart is {min_dist:.2f}m off path! (Threshold: {self.OFF_PATH_THRESHOLD_M}m)"
-                    )
-                    self.off_path = True
-                    self.path_valid = False
-                    self.off_path_pub.publish(Bool(data=True))
+                    if self.off_path_strikes >= self.OFF_PATH_DEBOUNCE_STRIKES:
+                        self.log_header(
+                            f"ABORT: Cart is {min_dist:.2f}m off path "
+                            f"(threshold {self.OFF_PATH_THRESHOLD_M}m, "
+                            f"{self.off_path_strikes} consecutive strikes)"
+                        )
+                        self.off_path = True
+                        self.path_valid = False
+                        self.off_path_pub.publish(Bool(data=True))
 
-                    self.current_state.is_navigating = False
-                    self.current_state.reached_destination = False
-                    self.current_state.stopped = True
-                    self.vehicle_state_pub.publish(self.current_state)
-                    self.publish_stop_nav_cmd()
-                    return
+                        self.current_state.is_navigating = False
+                        self.current_state.reached_destination = False
+                        self.current_state.stopped = True
+                        self.vehicle_state_pub.publish(self.current_state)
+                        self.publish_stop_nav_cmd()
+                        return
 
                 # Uneeded unless testing (floods the terminal with messages when active)
                 # self.get_logger().info(
@@ -414,12 +430,6 @@ class LocalPlanner(rclpy.node.Node):
         display_angle.data = plan_msg.angle
 
         self.steering_pub.publish(display_angle)
-
-        if self.off_path:
-            plan_msg.vel = 0.0
-            plan_msg.angle = 0.0
-            self.motion_pub.publish(plan_msg)
-            return state
 
         # Check if any node wants us to stop
         for x in self.stop_requests.values():

@@ -2,14 +2,17 @@
     ros__parameters:
       registration_method: "NDT_OMP"
       score_threshold: 2.0
-      ndt_resolution: 2.0
+      # NDT cell resolution: smaller -> finer matching, more discrimination in
+      # feature-poor outdoor areas. Was 2.0, which was too coarse.
+      ndt_resolution: 1.0
       ndt_step_size: 0.1
       ndt_num_threads: 0
       transform_epsilon: 0.01
-      # Increase the leaf size to reduce the density of the point cloud data, 
-      # which can help in processing larger outdoor environments more efficiently.
-      # default 0.2
-      voxel_leaf_size: 2.0
+      # Voxel downsampling of the live scan before NDT. Was 2.0 (10x the
+      # library default of 0.2), which threw away enough structure that NDT
+      # could not find a unique match in open/featureless areas. 0.5 keeps
+      # enough detail to localize outdoors while staying cheap on a VLP-16.
+      voxel_leaf_size: 0.5
       # default 100.0  Bigger distance.  Middle of quad for example
       scan_max_range: 100.0
       scan_min_range: 1.0
@@ -26,7 +29,10 @@
       initial_pose_qz: 0.0
       initial_pose_qw: 0.0
       use_odom: True
-      use_imu: false
+      # IMU fusion was disabled even though the launcher remaps /imu to the
+      # ZED IMU topic. Enabling so NDT can use angular-rate prediction to
+      # bridge brief scan-matching dropouts.
+      use_imu: true
       enable_debug: true
       global_frame_id: map
       odom_frame_id: odom

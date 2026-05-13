@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped
 
 
@@ -12,14 +13,17 @@ class PclPoseRelay(Node):
             10,
         )
         self.subscription = self.create_subscription(
-            PoseWithCovarianceStamped,
+            Odometry,
             "/lidar_odometry/pose",
             self._pose_callback,
             10,
         )
 
-    def _pose_callback(self, msg: PoseWithCovarianceStamped) -> None:
-        self.publisher_.publish(msg)
+    def _pose_callback(self, msg: Odometry) -> None:
+        out = PoseWithCovarianceStamped()
+        out.header = msg.header
+        out.pose = msg.pose
+        self.publisher_.publish(out)
 
 
 def main(args=None) -> None:

@@ -26,10 +26,12 @@ def generate_launch_description():
                 ],
             ),
             DeclareLaunchArgument(
+                "graph_dir",
+                default_value="/root/dev_ws/src/ai-navigation/navigation/maps",
+            ),
+            DeclareLaunchArgument(
                 "graph_file",
-                default_value=os.path.join(
-                    get_package_share_directory("navigation"), "maps", "main_shift3.gml"
-                ),
+                default_value="main_shift3.gml",
             ),
             DeclareLaunchArgument(
                 "graph_coordinate_format",
@@ -49,6 +51,7 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     {
+                        "graph_dir": LaunchConfiguration("graph_dir"),
                         "graph_file": LaunchConfiguration("graph_file"),
                         "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
                         "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),
@@ -79,6 +82,7 @@ def generate_launch_description():
                 executable="visualize_graph",
                 parameters=[
                     {
+                        "graph_dir": LaunchConfiguration("graph_dir"),
                         "graph_file": LaunchConfiguration("graph_file"),
                         "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
                         "calibration_config_dir": LaunchConfiguration("calibration_config_dir"),

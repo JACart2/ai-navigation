@@ -19,6 +19,17 @@ def resolve_config_path(config_dir, config_file):
     return os.path.abspath(os.path.join(config_dir, config_file))
 
 
+def resolve_graph_path(graph_dir, graph_file):
+    """Build an absolute graph path from a directory and file name."""
+    if not graph_file:
+        raise ValueError("Graph file name must not be empty")
+    if os.path.isabs(graph_file):
+        return graph_file
+    if not graph_dir:
+        raise ValueError("Graph directory must not be empty")
+    return os.path.abspath(os.path.join(graph_dir, graph_file))
+
+
 def load_landmark_calibration(config_path):
     """Load landmark calibration pairs from a YAML config file."""
     with open(config_path, "r", encoding="utf-8") as config_stream:

@@ -114,17 +114,19 @@ class GlobalPlanner(rclpy.node.Node):
         self.logic_graph = None
 
         self.declare_parameter(
-            "graph_file",
-            os.path.join(
-                get_package_share_directory("navigation"), "maps", "main_shift3.gml"
-            ),
+            "graph_dir",
+            "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
+        self.declare_parameter("graph_file", "main_shift3.gml")
         self.declare_parameter("graph_coordinate_format", "ros")
-        file_name = self.get_parameter("graph_file").get_parameter_value().string_value
+        graph_path = simple_gps_util.resolve_graph_path(
+            self.get_parameter("graph_dir").get_parameter_value().string_value,
+            self.get_parameter("graph_file").get_parameter_value().string_value,
+        )
         graph_coordinate_format = self.get_parameter(
             "graph_coordinate_format"
         ).get_parameter_value().string_value
-        self.load_file(file_name, graph_coordinate_format)
+        self.load_file(graph_path, graph_coordinate_format)
 
         # ROS2 SUBSCRIBERS
         # ------------------------------------------

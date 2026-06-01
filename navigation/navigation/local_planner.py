@@ -40,6 +40,7 @@ class LocalPlanner(rclpy.node.Node):
         super().__init__("local_planner")
 
         self.declare_parameter("cruise_speed", 30.0)
+        self.declare_parameter("goal_tolerance", 1.0)
 
         # driving constants THIS USED TO BE 10 and 3.6 respectively
         self.METERS = (
@@ -52,6 +53,9 @@ class LocalPlanner(rclpy.node.Node):
         self.tar_speed = self.METERS / self.SECONDS  # Target speed?
 
         self.cur_speed = 0  # Another estimate of speed used for eta calculations
+        self.goal_tolerance = (
+            self.get_parameter("goal_tolerance").get_parameter_value().double_value
+        )
 
         self.anomaly_detection_enabled = True
 
@@ -308,8 +312,10 @@ class LocalPlanner(rclpy.node.Node):
                 self.anomaly_logging("Cart is already at destination", AnomalyMsg.WARNING)
 
         if self.current_state.is_navigating:
+            goal_reached = self.reached_goal()
+
             # Continue to loop while we have not hit the target destination, and the path is still valid
-            if self.last_index > self.target_ind and self.path_valid:
+            if self.path_valid and not goal_reached:
 
                 # Uneeded unless testing (floods the terminal with messages when active)
                 # self.get_logger().info(
@@ -378,6 +384,20 @@ class LocalPlanner(rclpy.node.Node):
                 plan_msg.angle = 0.0
 
                 self.motion_pub.publish(plan_msg)
+
+    def reached_goal(self):
+        if not self.path_valid or not hasattr(self, "cx") or not self.cx:
+            return False
+
+        return (
+            self.calc_dist(
+                self.cur_pose.position.x,
+                self.cur_pose.position.y,
+                self.cx[self.last_index],
+                self.cy[self.last_index],
+            )
+            <= self.goal_tolerance
+        )
 
     def update(self, state, a, delta):
         """Updates the carts position by a given state and delta"""

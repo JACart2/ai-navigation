@@ -28,7 +28,7 @@ class GraphVisual(rclpy.node.Node):
         latching_qos = rclpy.qos.QoSProfile(
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
-            durability=rclpy.qos.DurabilityPolicy.VOLATILE,
+            durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
         )
         self.global_graph = nx.DiGraph()
 
@@ -39,11 +39,19 @@ class GraphVisual(rclpy.node.Node):
             MarkerArray, "/graph_visual", qos_profile=latching_qos
         )
 
-        self.timer = self.create_timer(3, self.timer_cb)
+        self.timer = self.create_timer(1.0, self.timer_cb)
         self.edge_id = 0
+        self.published = False
 
     def timer_cb(self):
         """Simple timer callback responsible for publishing the MarkerArray with node/edge information."""
+        if self.published:
+            return
+
+        if self.visual_pub.get_subscription_count() == 0:
+            self.get_logger().info("Waiting for RViz subscriber on /graph_visual")
+            return
+
         self.get_logger().info("Looping over path")
 
         # This first for loop adds every node to some Marker array
@@ -111,6 +119,7 @@ class GraphVisual(rclpy.node.Node):
             marker_array.markers.append(marker)
             self.edge_id += 1
         self.visual_pub.publish(marker_array)
+        self.published = True
         self.destroy_timer(self.timer)
 
     def load_file(self, file_name):

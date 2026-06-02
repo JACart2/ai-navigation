@@ -24,10 +24,11 @@
       initial_pose_qx: 0.0
       initial_pose_qy: 0.0
       initial_pose_qz: 0.0
-      initial_pose_qw: 0.0
-      use_odom: True
+      initial_pose_qw: 1.0
+      use_odom: false
       use_imu: false
       enable_debug: true
       global_frame_id: map
       odom_frame_id: odom
       base_frame_id: base_link
+      enable_map_odom_tf: false

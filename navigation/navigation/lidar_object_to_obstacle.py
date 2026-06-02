@@ -15,6 +15,7 @@ import math
 
 import rclpy
 import rclpy.node
+from rclpy.duration import Duration as RclpyDuration
 import tf_transformations
 import tf2_ros
 from tf2_geometry_msgs.tf2_geometry_msgs import do_transform_point
@@ -25,7 +26,7 @@ from builtin_interfaces.msg import Time
 from geometry_msgs.msg import PointStamped
 from sensor_msgs.msg import LaserScan, PointCloud2
 from navigation_interface.msg import Obstacle, ObstacleArray
-from rclpy.qos import QoSProfile, ReliabilityPolicy # needed to match QoS settings of /scanner/scan
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from navigation_interface.msg import Obstacle, ObstacleArray
 from visualization_msgs.msg import Marker
 from tf2_ros import Buffer
@@ -61,6 +62,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.last_scanned = None
+        self.last_frame_id = None
 
         # Data related to incoming LaserScan (set in laserscan_callback).
         self.angle_max = 3.141592653589
@@ -157,12 +159,8 @@ class LidarObjectToObstacle(rclpy.node.Node):
     def lidar_callback(self, msg):
         # send the pointcloud to be converted to a laserscan
         self.get_logger ().info ("LIDAR - Received Pointcloud, transforming...")
+        self.last_frame_id = msg.header.frame_id
         self.converter_pub.publish(msg)
-
-        # Get the time of the message and store it.
-        self.last_scanned = Time()
-        self.last_scanned.sec = msg.header.stamp.sec
-        self.last_scanned.nanosec = msg.header.stamp.nanosec
 
     def laserscan_callback(self, msg):
         # Extract data from the last converted LaserScan data.
@@ -170,6 +168,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.curr_data = msg
         self.angle_max = msg.angle_max
         self.angle_min = msg.angle_min
+        self.last_scanned = msg.header.stamp
 
         # Cluster the raw LaserScan data.
         self.cluster_points ()
@@ -198,57 +197,67 @@ class LidarObjectToObstacle(rclpy.node.Node):
         #       That way, the execution flow follows the expected flow of execution.
         # 
         # Discuss potential solutions w/ Nate and Sprague to see what works best.
-        if self.last_scanned != None:
-            self.obstacles.header.stamp = self.last_scanned
+        if self.last_scanned is None or self.last_frame_id is None:
+            return
 
-            for cluster in self.cluster_list:
-                cur_circle = Obstacle()
-                radius = 0
+        self.obstacles.header.stamp = self.last_scanned
 
-                first_point = cluster[0]
-                last_point = cluster[len(cluster) - 1]
+        try:
+            if not self.tf_buffer.can_transform(
+                "base_link",
+                self.last_frame_id,
+                Time(),
+                timeout=RclpyDuration(seconds=0.5),
+            ):
+                self.get_logger().warn(
+                    f"LO2O: TF not ready for {self.last_frame_id} -> base_link"
+                )
+                return
 
-                # Local to the base_laser_link
-                centerX = (first_point.x + last_point.x) / 2
-                centerY = (first_point.y + last_point.y) / 2
+            transform = self.tf_buffer.lookup_transform(
+                "base_link", self.last_frame_id, Time()
+            )
+        except (tf2_ros.TransformException) as e:
+            self.get_logger().warn(f"LO2O: Could not transform: {e}")
+            return
 
-                # avg point spacing is maybe ~3 inches? Adjust the calculation if needed
-                radius = 0.01 * len(cluster)
+        for cluster in self.cluster_list:
+            first_point = cluster[0]
+            last_point = cluster[len(cluster) - 1]
 
-                # Wait for transform to be available
-                try:
-                    transform = self.tf_buffer.lookup_transform('base_link', 'velodyne', self.last_scanned)
-                except (tf2_ros.TransformException) as e:
-                    self.get_logger().warn(f'LO2O: Could not transform: {e}')
-                    continue
+            # Local to the base_laser_link
+            centerX = (first_point.x + last_point.x) / 2
+            centerY = (first_point.y + last_point.y) / 2
 
-                # Transforming the center point to 'base_link'
-                global_point = PointStamped()
-                global_point.header.frame_id = 'velodyne'
-                global_point.header.stamp = self.last_scanned
-                global_point.point.x = centerX
-                global_point.point.y = centerY
-                global_point.point.z = 0.0
+            # avg point spacing is maybe ~3 inches? Adjust the calculation if needed
+            radius = 0.01 * len(cluster)
 
-                # Apply the transform to convert from 'velodyne' frame to 'base_link'
-                try:
-                    transformed_point = self.tf_buffer.transform(global_point, 'base_link')
-                    transformed_point = do_transform_point(global_point, transform)
-                except (tf2_ros.TransformException) as e:
-                    self.get_logger().warn(f'Could not transform point: {e}')
-                    continue
+            # Transforming the center point to 'base_link'
+            global_point = PointStamped()
+            global_point.header.frame_id = self.last_frame_id
+            global_point.header.stamp = self.last_scanned
+            global_point.point.x = centerX
+            global_point.point.y = centerY
+            global_point.point.z = 0.0
 
-                # self.get_logger().info("Transformed point to :: " + str(transformed_point)) # DEBUGGING!
-                # Create a new circle around the obstacle
-                cur_circle = Obstacle()
-                cur_circle.header.frame_id = 'base_link'
-                cur_circle.header.stamp = self.last_scanned
-                cur_circle.pos = transformed_point
-                cur_circle.radius = radius
-                cur_circle.followable = True
+            # Apply the transform to convert from the lidar frame to `base_link`.
+            try:
+                transformed_point = do_transform_point(global_point, transform)
+            except (tf2_ros.TransformException) as e:
+                self.get_logger().warn(f'Could not transform point: {e}')
+                continue
 
-                # Add the obstacle to the list
-                self.obstacles.obstacles.append(cur_circle)
+            # self.get_logger().info("Transformed point to :: " + str(transformed_point)) # DEBUGGING!
+            # Create a new circle around the obstacle
+            cur_circle = Obstacle()
+            cur_circle.header.frame_id = 'base_link'
+            cur_circle.header.stamp = self.last_scanned
+            cur_circle.pos = transformed_point
+            cur_circle.radius = radius
+            cur_circle.followable = True
+
+            # Add the obstacle to the list
+            self.obstacles.obstacles.append(cur_circle)
 
     def local_display(self, frame):
         # Display the obstacles on the LIDAR frame, will appear jittery in Rviz as there is no interpolation

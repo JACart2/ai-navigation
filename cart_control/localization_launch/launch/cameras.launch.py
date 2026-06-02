@@ -57,14 +57,22 @@ def generate_launch_description():
         executable="static_transform_publisher",
         name="multi_link_tf",
         arguments=[
-            "1.0",  # X position (adjust as needed)
-            "0.0",  # Y position (adjust as needed)
-            "1.6",  # Z position (height of cameras above ground)
-            "0.0",  # Roll (rotation around X-axis)
-            "0.0",  # Pitch (rotation around Y-axis)
-            "0.0",  # Yaw (rotation around Z-axis)
-            "base_link",  # Parent frame (golf cart base)
-            "zed_front_camera_link",  # Child frame (reference link for cameras)
+            "--x",
+            "1.0",
+            "--y",
+            "0.0",
+            "--z",
+            "1.6",
+            "--roll",
+            "0.0",
+            "--pitch",
+            "0.0",
+            "--yaw",
+            "0.0",
+            "--frame-id",
+            "base_link",
+            "--child-frame-id",
+            "zed_front_camera_link",
         ],
         output="screen",
     )

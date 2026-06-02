@@ -9,6 +9,7 @@ import networkx as nx
 
 import rclpy
 import rclpy.qos
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Header
 from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker, MarkerArray
@@ -25,7 +26,9 @@ class GraphVisual(rclpy.node.Node):
         )
 
         latching_qos = rclpy.qos.QoSProfile(
-            depth=1, durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=rclpy.qos.DurabilityPolicy.VOLATILE,
         )
         self.global_graph = nx.DiGraph()
 

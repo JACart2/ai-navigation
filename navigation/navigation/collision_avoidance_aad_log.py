@@ -23,9 +23,9 @@ class CollisionAvoidanceAADLog(Node):
         self.get_logger().info("Creating subscribers")
         # --- Subscribers ---
 
-        # Use minimal QoS for camera - drop frames if can't keep up
+        # Use reliable QoS for camera frames and anomaly publishing.
         camera_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
             depth=1  # Only keep latest frame
         )
@@ -71,7 +71,7 @@ class CollisionAvoidanceAADLog(Node):
         self.anomaly_log_pub = self.create_publisher(
             AnomalyMsg,
             '/ai_anomaly_logging',
-            10
+            camera_qos
         )
         self.get_logger().info("Finished creating publishers")
 

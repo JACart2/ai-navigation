@@ -9,6 +9,7 @@ import launch_ros.actions
 import launch_ros.events
 
 from launch import LaunchDescription
+from launch.actions import TimerAction
 from launch_ros.actions import LifecycleNode
 from launch_ros.actions import Node
 
@@ -26,14 +27,48 @@ def generate_launch_description():
         name="lidar_tf",
         package="tf2_ros",
         executable="static_transform_publisher",
-        arguments=["1", "0", "1.9", "0", "0", "0", "1", "base_link", "velodyne"],
+        arguments=[
+            "--x",
+            "1",
+            "--y",
+            "0",
+            "--z",
+            "1.9",
+            "--roll",
+            "0",
+            "--pitch",
+            "0",
+            "--yaw",
+            "0",
+            "--frame-id",
+            "base_link",
+            "--child-frame-id",
+            "velodyne",
+        ],
     )
 
     imu_tf = launch_ros.actions.Node(
         name="imu_tf",
         package="tf2_ros",
         executable="static_transform_publisher",
-        arguments=["0", "0", "0", "0", "0", "0", "1", "base_link", "imu_link"],
+        arguments=[
+            "--x",
+            "0",
+            "--y",
+            "0",
+            "--z",
+            "0",
+            "--roll",
+            "0",
+            "--pitch",
+            "0",
+            "--yaw",
+            "0",
+            "--frame-id",
+            "base_link",
+            "--child-frame-id",
+            "imu_link",
+        ],
     )
 
     # Set the default path directly to the specific YAML file location
@@ -107,8 +142,11 @@ def generate_launch_description():
     ld.add_action(from_unconfigured_to_inactive)
     ld.add_action(from_inactive_to_active)
 
-    ld.add_action(lidar_localization)
-    ld.add_action(lidar_tf)
-    ld.add_action(to_inactive)
+    ld.add_action(
+        TimerAction(
+            period=2.0,
+            actions=[lidar_localization, lidar_tf, imu_tf, to_inactive],
+        )
+    )
 
     return ld

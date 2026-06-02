@@ -1,5 +1,11 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    ExecuteProcess,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -32,6 +38,11 @@ def generate_launch_description():
         "enable_aad",
         default_value="true",
         description="Enable anomaly logging",
+    )
+    declare_rosbridge_port = DeclareLaunchArgument(
+        "rosbridge_port",
+        default_value="9091",
+        description="Websocket port for rosbridge_server.",
     )
 
     swri_console_node = Node(
@@ -92,7 +103,7 @@ def generate_launch_description():
         executable='rosbridge_websocket',
         name='rosbridge_websocket_server',
         output='screen',
-        parameters=[],
+        parameters=[{"port": LaunchConfiguration("rosbridge_port")}],
     )
 
     delayed_stack = TimerAction(
@@ -112,6 +123,8 @@ def generate_launch_description():
             declare_console_start_delay_s,
             declare_cart_config_path,
             declare_enable_aad,
+            declare_rosbridge_port,
+            SetEnvironmentVariable(name="FASTDDS_BUILTIN_TRANSPORTS", value="UDPv4"),
             swri_console_node,
             delayed_stack,
         ]

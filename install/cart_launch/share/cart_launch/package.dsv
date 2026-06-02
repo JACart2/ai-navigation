@@ -1,0 +1,9 @@
+source;share/cart_launch/hook/pythonpath.ps1
+source;share/cart_launch/hook/pythonpath.dsv
+source;share/cart_launch/hook/pythonpath.sh
+source;share/cart_launch/hook/ament_prefix_path.ps1
+source;share/cart_launch/hook/ament_prefix_path.dsv
+source;share/cart_launch/hook/ament_prefix_path.sh
+source;../../build/cart_launch/share/cart_launch/hook/pythonpath_develop.ps1
+source;../../build/cart_launch/share/cart_launch/hook/pythonpath_develop.dsv
+source;../../build/cart_launch/share/cart_launch/hook/pythonpath_develop.sh

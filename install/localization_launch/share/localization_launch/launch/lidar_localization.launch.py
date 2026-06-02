@@ -1,0 +1,1 @@
+/root/dev_ws/src/ai-navigation/build/localization_launch/launch/lidar_localization.launch.py

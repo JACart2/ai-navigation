@@ -9,18 +9,20 @@ import launch_ros.actions
 import launch_ros.events
 
 from launch import LaunchDescription
-from launch_ros.actions import LifecycleNode
-from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 import lifecycle_msgs.msg
 
 from ament_index_python.packages import get_package_share_directory
-from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
+    ld = LaunchDescription()
 
-    ld = launch.LaunchDescription()
+    cloud_topic = LaunchConfiguration("cloud_topic")
+    odom_topic = LaunchConfiguration("odom_topic")
+    imu_topic = LaunchConfiguration("imu_topic")
 
     lidar_tf = launch_ros.actions.Node(
         name="lidar_tf",
@@ -36,7 +38,6 @@ def generate_launch_description():
         arguments=["0", "0", "0", "0", "0", "0", "1", "base_link", "imu_link"],
     )
 
-    # Set the default path directly to the specific YAML file location
     localization_param_dir = LaunchConfiguration(
         "localization_param_dir",
         default=os.path.join(
@@ -53,9 +54,9 @@ def generate_launch_description():
         executable="lidar_localization_node",
         parameters=[localization_param_dir],
         remappings=[
-            ("/cloud", "/velodyne_points"),
-            ("/odom", "/zed_front/zed_node_0/odom"),
-            ("/imu", "/zed/zed_node/imu/data"),
+            ("/cloud", cloud_topic),
+            ("/odom", odom_topic),
+            ("/imu", imu_topic),
         ],
         output="screen",
     )
@@ -104,11 +105,33 @@ def generate_launch_description():
         )
     )
 
+    ld.add_action(
+        DeclareLaunchArgument(
+            "cloud_topic",
+            default_value="/velodyne_points",
+            description="PointCloud2 topic published by velodyne_pointcloud.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            "odom_topic",
+            default_value="/zed_multi/zed_front/zed_node_0/odom",
+            description="Odometry topic used by lidar_localization_ros2.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            "imu_topic",
+            default_value="/zed_multi/zed_front/zed_node_0/imu/data",
+            description="IMU topic used when localization.yaml enables use_imu.",
+        )
+    )
     ld.add_action(from_unconfigured_to_inactive)
     ld.add_action(from_inactive_to_active)
 
     ld.add_action(lidar_localization)
     ld.add_action(lidar_tf)
+    ld.add_action(imu_tf)
     ld.add_action(to_inactive)
 
     return ld

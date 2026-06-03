@@ -57,6 +57,11 @@ def generate_launch_description():
                 package="navigation",
                 executable="visualize_graph",
                 output="screen",
+                parameters=[
+                    {
+                        "graph_file": LaunchConfiguration("graph_file"),
+                    }
+                ],
             ),
             # call other launchfiles from this package:
             IncludeLaunchDescription(

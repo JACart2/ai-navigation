@@ -154,7 +154,7 @@ def launch_setup(context, *args, **kwargs):
                 'serial_number': serial,
                 'camera_id': id,
                 'publish_tf': publish_tf,
-                'publish_map_tf': publish_tf,
+                'publish_map_tf': 'false',
                 'namespace': namespace_val,
                 'node_name': node_name,
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.

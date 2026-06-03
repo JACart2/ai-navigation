@@ -44,6 +44,13 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([lidar_localization_launch_path])
     )
 
+    initial_map_viz = Node(
+        package="navigation",
+        executable="publish_initial_map_viz",
+        name="publish_initial_map_viz",
+        output="screen",
+    )
+
     # Specify the path to cameras.launch.py
     cameras_launch_path = os.path.join(
         get_package_share_directory("localization_launch"),
@@ -69,6 +76,7 @@ def generate_launch_description():
             velodyne_driver_node,
             velodyne_transform_launch,
             lidar_localization_launch,
+            initial_map_viz,
             cameras_launch,
             # liosam_localization_launch,
         ]

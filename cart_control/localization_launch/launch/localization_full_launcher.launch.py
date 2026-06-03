@@ -22,6 +22,22 @@ def generate_launch_description():
         parameters=[{"model": "VLP16"}],
     )
 
+    identity_odom_node = Node(
+        package="lidar_localization_ros2",
+        executable="publish_identity_odom.py",
+        name="publish_identity_odom",
+        parameters=[
+            {
+                "odom_topic": "/odom",
+                "odom_frame_id": "odom",
+                "base_frame_id": "base_link",
+                "rate_hz": 20.0,
+                "publish_tf": True,
+            }
+        ],
+        output="screen",
+    )
+
     # Include the velodyne_transform_node-VLP16-launch.py directly
     velodyne_transform_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -51,21 +67,6 @@ def generate_launch_description():
         output="screen",
     )
 
-    # Specify the path to cameras.launch.py
-    cameras_launch_path = os.path.join(
-        get_package_share_directory("localization_launch"),
-        "launch",
-        "cameras.launch.py",
-    )
-
-    # Include the cameras launch file
-    cameras_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([cameras_launch_path]),
-        launch_arguments={
-            "cart_config_path": cart_config_path,
-        }.items(),
-    )
-
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
@@ -74,10 +75,10 @@ def generate_launch_description():
                 description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
             ),
             velodyne_driver_node,
+            identity_odom_node,
             velodyne_transform_launch,
             lidar_localization_launch,
             initial_map_viz,
-            cameras_launch,
             # liosam_localization_launch,
         ]
     )

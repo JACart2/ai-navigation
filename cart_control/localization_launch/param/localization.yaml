@@ -14,6 +14,8 @@
       scan_max_range: 100.0
       scan_min_range: 1.0
       scan_period: 0.1
+      cloud_queue_depth: 5
+      cloud_qos_reliability: "reliable"
       use_pcd_map: true
       map_path: "/maps/speedBoiMap.pcd"
       # map_path: "/maps/final_map_condensed_5-22.pcd"
@@ -26,10 +28,13 @@
       initial_pose_qz: 0.0
       initial_pose_qw: 1.0
       use_odom: true
+      max_twist_prediction_dt: 0.35
       use_imu: false
       use_imu_preintegration: false
-      enable_map_odom_tf: false
+      enable_map_odom_tf: true
       enable_debug: false
       global_frame_id: map
       odom_frame_id: odom
       base_frame_id: base_link
+      enable_timer_publishing: true
+      pose_publish_frequency: 30.0

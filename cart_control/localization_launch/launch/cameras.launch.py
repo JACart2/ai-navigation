@@ -69,20 +69,20 @@ def generate_launch_description():
 
     zed_multi_camera_launch = OpaqueFunction(function=_include_zed_multi_camera)
 
-    # Static transform for the reference link (zed_multi_link) to base_link
+    # Static transform from the front camera tracking frame back to the cart base.
     multi_link_tf = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
         name="multi_link_tf",
         arguments=[
-            "1.0",  # X position (adjust as needed)
+            "-1.0",  # X position (adjust as needed)
             "0.0",  # Y position (adjust as needed)
-            "1.6",  # Z position (height of cameras above ground)
+            "-1.6",  # Z position (height of cameras above ground)
             "0.0",  # Roll (rotation around X-axis)
             "0.0",  # Pitch (rotation around Y-axis)
             "0.0",  # Yaw (rotation around Z-axis)
-            "base_link",  # Parent frame (golf cart base)
-            "zed_front_camera_link",  # Child frame (reference link for cameras)
+            "zed_front_camera_link",  # Parent frame (front camera tracking frame)
+            "base_link",  # Child frame (golf cart base)
         ],
         output="screen",
     )

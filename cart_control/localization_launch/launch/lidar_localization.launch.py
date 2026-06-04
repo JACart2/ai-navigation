@@ -52,7 +52,20 @@ def generate_launch_description():
         namespace="",
         package="lidar_localization_ros2",
         executable="lidar_localization_node",
-        parameters=[localization_param_dir],
+        parameters=[
+            localization_param_dir,
+            {
+                "enable_map_odom_tf": True,
+                "global_frame_id": "map",
+                "odom_frame_id": "odom",
+                "base_frame_id": "base_link",
+                "enable_timer_publishing": True,
+                "pose_publish_frequency": 30.0,
+                "max_twist_prediction_dt": 0.35,
+                "cloud_queue_depth": 5,
+                "cloud_qos_reliability": "reliable",
+            },
+        ],
         remappings=[
             ("/cloud", cloud_topic),
             ("/odom", odom_topic),

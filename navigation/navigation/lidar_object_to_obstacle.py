@@ -72,11 +72,12 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.obstacles = ObstacleArray() # stores the converted obstacles to be sent to /obstacles topic
 
         # listen for velodyne output
+        velodyne_qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, depth=10)
         self.lidar_ptcloud_sub = self.create_subscription(
             PointCloud2,
             "/velodyne_points",
             self.lidar_callback,
-            qos_profile_sensor_data,
+            velodyne_qos,
         )
 
         # communication with the pointcloud_to_laserscan node

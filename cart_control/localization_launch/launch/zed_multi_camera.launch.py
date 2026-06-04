@@ -131,9 +131,9 @@ def launch_setup(context, *args, **kwargs):
 
         actions.append(LogInfo(msg=TextSubstitution(text=info)))
 
-        # Lidar localization owns the global/base TF tree. Keep ZED odom as a
-        # topic input only so it cannot fight the static camera/base transforms.
-        publish_tf = 'false'
+        # Only the front tracking camera should own odom -> camera_link.
+        # Additional cameras are statically attached by robot_state_publisher.
+        publish_tf = 'true' if cam_idx == 0 else 'false'
         publish_map_tf = 'false'
 
         # A different node name is required by the Diagnostic Updated

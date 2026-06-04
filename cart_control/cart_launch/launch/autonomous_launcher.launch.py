@@ -24,7 +24,7 @@ def generate_launch_description():
     declare_cart_config_path = DeclareLaunchArgument(
         "cart_config_path",
         default_value=os.path.join(
-            get_package_share_directory("cart_launch"), "config", "cart_james.yaml"
+            get_package_share_directory("cart_launch"), "config", "cart_madison.yaml"
         ),
         description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
     )

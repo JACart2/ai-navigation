@@ -22,22 +22,24 @@ def generate_launch_description():
         parameters=[{"model": "VLP16"}],
     )
 
-    # Include the velodyne_transform_node-VLP16-launch.py directly
-    velodyne_transform_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("velodyne_pointcloud"),
-                "/launch/velodyne_transform_node-VLP16-launch.py",
-            ]
-        ),
-        launch_arguments={
+    # Launch the velodyne_transform_node directly so our params actually apply
+    velodyne_transform_node = Node(
+        package="velodyne_pointcloud",
+        executable="velodyne_transform_node",
+        name="velodyne_transform_node",
+        output="screen",
+        parameters=[{
+            "calibration": "/opt/ros/jazzy/share/velodyne_pointcloud/params/VLP16db.yaml",
             "model": "VLP16",
-            "min_range": "1.0",
-            "max_range": "50.0",
-            "organize_cloud": "false",
+            "min_range": 1.0,
+            "max_range": 50.0,
+            "organize_cloud": False,
             "fixed_frame": "",
             "target_frame": "",
-        }.items(),
+            "use_sim_time": False,
+            "view_direction": 0.0,
+            "view_width": 6.283185307179586,
+        }],
     )
 
     # Specify the new path to lidar_localization.launch.py
@@ -75,7 +77,7 @@ def generate_launch_description():
                 description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
             ),
             velodyne_driver_node,
-            velodyne_transform_launch,
+            velodyne_transform_node,
             lidar_localization_launch,
             cameras_launch,
             # liosam_localization_launch,

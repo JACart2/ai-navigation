@@ -19,7 +19,14 @@ def generate_launch_description():
         package="velodyne_driver",
         executable="velodyne_driver_node",
         name="velodyne_driver_node",
-        parameters=[{"model": "VLP16"}],
+        parameters=[{
+        "model": "VLP16",
+        "min_range": 1.0,
+        "max_range": 50.0,
+        "organize_cloud": False,
+        "fixed_frame": "",
+        "target_frame": "",
+    }],
     )
 
     # Include the velodyne_transform_node-VLP16-launch.py directly

@@ -131,11 +131,10 @@ def launch_setup(context, *args, **kwargs):
 
         actions.append(LogInfo(msg=TextSubstitution(text=info)))
 
-        # Only the first camera send odom and map TF
+        # Lidar localization owns the global/base TF tree. Keep ZED odom as a
+        # topic input only so it cannot fight the static camera/base transforms.
         publish_tf = 'false'
-        if (cam_idx == 0):
-            if (disable_tf_val == 'False' or disable_tf_val == 'false'):
-                publish_tf = 'true'
+        publish_map_tf = 'false'
 
         # A different node name is required by the Diagnostic Updated
         node_name = 'zed_node_' + str(cam_idx)
@@ -154,7 +153,8 @@ def launch_setup(context, *args, **kwargs):
                 'serial_number': serial,
                 'camera_id': id,
                 'publish_tf': publish_tf,
-                'publish_map_tf': publish_tf,
+                'publish_map_tf': publish_map_tf,
+                'publish_imu_tf': 'false',
                 'namespace': namespace_val,
                 'node_name': node_name,
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.

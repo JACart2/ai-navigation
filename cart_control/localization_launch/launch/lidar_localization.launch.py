@@ -9,7 +9,7 @@ import launch_ros.actions
 import launch_ros.events
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
 
 import lifecycle_msgs.msg
@@ -115,14 +115,14 @@ def generate_launch_description():
     ld.add_action(
         DeclareLaunchArgument(
             "odom_topic",
-            default_value="/zed_multi/zed_front/zed_node_0/odom",
+            default_value="/zed_front/zed_node_0/odom",
             description="Odometry topic used by lidar_localization_ros2.",
         )
     )
     ld.add_action(
         DeclareLaunchArgument(
             "imu_topic",
-            default_value="/zed_multi/zed_front/zed_node_0/imu/data",
+            default_value="/zed_front/zed_node_0/imu/data",
             description="IMU topic used when localization.yaml enables use_imu.",
         )
     )
@@ -132,6 +132,6 @@ def generate_launch_description():
     ld.add_action(lidar_localization)
     ld.add_action(lidar_tf)
     ld.add_action(imu_tf)
-    ld.add_action(to_inactive)
+    ld.add_action(TimerAction(period=3.0, actions=[to_inactive]))
 
     return ld

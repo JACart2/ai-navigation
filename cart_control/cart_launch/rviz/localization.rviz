@@ -67,10 +67,10 @@ Visualization Manager:
       Size (m): 0.009999999776482582
       Style: Points
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Reliable
+        Reliability Policy: Best Effort
         Value: /velodyne_points
       Use Fixed Frame: true
       Use rainbow: true
@@ -96,7 +96,7 @@ Visualization Manager:
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last
@@ -128,7 +128,7 @@ Visualization Manager:
       Size (m): 0.30000001192092896
       Style: Points
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -161,7 +161,7 @@ Visualization Manager:
       Size (m): 0.009999999776482582
       Style: Flat Squares
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -197,7 +197,7 @@ Visualization Manager:
       Shaft Radius: 0.05000000074505806
       Shape: Arrow
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last
@@ -210,7 +210,7 @@ Visualization Manager:
       Namespaces:
         "": true
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last
@@ -224,7 +224,7 @@ Visualization Manager:
         "": true
         Path_NS: true
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -236,7 +236,7 @@ Visualization Manager:
       Namespaces:
         "": true
       Topic:
-        Depth: 100
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -248,7 +248,7 @@ Visualization Manager:
       Namespaces:
         "": true
       Topic:
-        Depth: 100
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -262,10 +262,10 @@ Visualization Manager:
       Name: ZedFront
       Normalize Range: true
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Reliable
+        Reliability Policy: Best Effort
         Value: /zed_front/zed_node_0/rgb/color/rect/image
       Value: true
     - Class: rviz_default_plugins/Image
@@ -276,10 +276,10 @@ Visualization Manager:
       Name: ZedRear
       Normalize Range: true
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Reliable
+        Reliability Policy: Best Effort
         Value: /zed_rear/zed_node_1/rgb/color/rect/image
       Value: true
     - Class: rviz_default_plugins/MarkerArray
@@ -288,7 +288,7 @@ Visualization Manager:
       Namespaces:
         "": true
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -298,7 +298,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Fixed Frame: map
-    Frame Rate: 30
+    Frame Rate: 15
   Name: root
   Tools:
     - Class: rviz_default_plugins/MoveCamera

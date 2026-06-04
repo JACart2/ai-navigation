@@ -25,7 +25,7 @@ from builtin_interfaces.msg import Time
 from geometry_msgs.msg import PointStamped
 from sensor_msgs.msg import LaserScan, PointCloud2
 from navigation_interface.msg import Obstacle, ObstacleArray
-from rclpy.qos import QoSProfile, ReliabilityPolicy # needed to match QoS settings of /scanner/scan
+from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from navigation_interface.msg import Obstacle, ObstacleArray
 from visualization_msgs.msg import Marker
 from tf2_ros import Buffer
@@ -73,7 +73,10 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
         # listen for velodyne output
         self.lidar_ptcloud_sub = self.create_subscription(
-            PointCloud2, "/velodyne_points", self.lidar_callback, 1
+            PointCloud2,
+            "/velodyne_points",
+            self.lidar_callback,
+            qos_profile_sensor_data,
         )
 
         # communication with the pointcloud_to_laserscan node
@@ -81,7 +84,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.converter_sub = self.create_subscription(
             LaserScan, "/scanner/scan", self.laserscan_callback, qos_scanner # Receives the converted LaserScan data back to be processed
         )
-        self.converter_pub = self.create_publisher (PointCloud2, "/cloud_in", 10) # where received velodyne PointCloud data gets sent to be converted.
+        self.converter_pub = self.create_publisher (PointCloud2, "/cloud_in", qos_profile_sensor_data) # where received velodyne PointCloud data gets sent to be converted.
 
         # Transmit aggregated ObstacleArray data to a topic to be handled separately.
         self.obstacle_pub = self.create_publisher (ObstacleArray, "/obstacles", 10)
@@ -156,7 +159,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
     def lidar_callback(self, msg):
         # send the pointcloud to be converted to a laserscan
-        self.get_logger ().info ("LIDAR - Received Pointcloud, transforming...")
+        self.get_logger ().debug ("LIDAR - Received Pointcloud, transforming...")
         self.converter_pub.publish(msg)
 
         # Get the time of the message and store it.
@@ -166,7 +169,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
     def laserscan_callback(self, msg):
         # Extract data from the last converted LaserScan data.
-        self.get_logger ().info ("LIDAR - LaserScan received!")
+        self.get_logger ().debug ("LIDAR - LaserScan received!")
         self.curr_data = msg
         self.angle_max = msg.angle_max
         self.angle_min = msg.angle_min
@@ -269,7 +272,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
             # Use rclpy duration for marker lifetime
             dur = Duration()
             dur.nanosec = 1 * 10 ** 8
-            self.get_logger().info("Setting marker duration to :: " + str(type(dur))) # DEBUGGING!
+            self.get_logger().debug("Setting marker duration to :: " + str(type(dur)))
             marker.lifetime = dur
 
             marker.pose.position.x = object_list[i].pos.point.x

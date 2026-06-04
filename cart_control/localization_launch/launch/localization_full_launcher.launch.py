@@ -7,6 +7,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
 import os
+import yaml
 
 
 def generate_launch_description():
@@ -20,6 +21,20 @@ def generate_launch_description():
         "config",
         "VLP16-velodyne_driver_node-params.yaml",
     )
+    velodyne_pointcloud_share = get_package_share_directory("velodyne_pointcloud")
+    velodyne_transform_params_file = os.path.join(
+        velodyne_pointcloud_share,
+        "config",
+        "VLP16-velodyne_transform_node-params.yaml",
+    )
+    with open(velodyne_transform_params_file, "r") as f:
+        velodyne_transform_params = yaml.safe_load(f)["velodyne_transform_node"][
+            "ros__parameters"
+        ]
+    velodyne_transform_params["calibration"] = os.path.join(
+        velodyne_pointcloud_share, "params", "VLP16db.yaml"
+    )
+    velodyne_transform_params["organize_cloud"] = False
 
     # Start the VLP16 driver with the upstream defaults, then override cart-specific connection settings.
     velodyne_driver_node = Node(
@@ -37,13 +52,12 @@ def generate_launch_description():
         ],
     )
 
-    velodyne_transform_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("velodyne_pointcloud"),
-                "/launch/velodyne_transform_node-VLP16-launch.py",
-            ]
-        )
+    velodyne_transform_node = Node(
+        package="velodyne_pointcloud",
+        executable="velodyne_transform_node",
+        name="velodyne_transform_node",
+        output="both",
+        parameters=[velodyne_transform_params],
     )
 
     lidar_localization_launch_path = os.path.join(
@@ -89,7 +103,7 @@ def generate_launch_description():
                 description="Frame id assigned to Velodyne packets and point clouds.",
             ),
             velodyne_driver_node,
-            velodyne_transform_launch,
+            velodyne_transform_node,
             lidar_localization_launch,
             cameras_launch,
         ]

@@ -19,14 +19,7 @@ def generate_launch_description():
         package="velodyne_driver",
         executable="velodyne_driver_node",
         name="velodyne_driver_node",
-        parameters=[{
-        "model": "VLP16",
-        "min_range": 1.0,
-        "max_range": 50.0,
-        "organize_cloud": False,
-        "fixed_frame": "",
-        "target_frame": "",
-    }],
+        parameters=[{"model": "VLP16"}],
     )
 
     # Include the velodyne_transform_node-VLP16-launch.py directly
@@ -36,7 +29,15 @@ def generate_launch_description():
                 FindPackageShare("velodyne_pointcloud"),
                 "/launch/velodyne_transform_node-VLP16-launch.py",
             ]
-        )
+        ),
+        launch_arguments={
+            "model": "VLP16",
+            "min_range": "1.0",
+            "max_range": "50.0",
+            "organize_cloud": "false",
+            "fixed_frame": "",
+            "target_frame": "",
+        }.items(),
     )
 
     # Specify the new path to lidar_localization.launch.py

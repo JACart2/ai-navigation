@@ -1,7 +1,7 @@
 /**:
     ros__parameters:
       registration_method: "NDT_OMP"
-      score_threshold: 2.0
+      score_threshold: 5.0
       ndt_resolution: 2.0
       ndt_step_size: 0.1
       ndt_num_threads: 0
@@ -9,9 +9,9 @@
       # Increase the leaf size to reduce the density of the point cloud data, 
       # which can help in processing larger outdoor environments more efficiently.
       # default 0.2
-      voxel_leaf_size: 2.0
+      voxel_leaf_size: 1.0
       # default 100.0  Bigger distance.  Middle of quad for example
-      scan_max_range: 100.0
+      scan_max_range: 75.0
       scan_min_range: 1.0
       scan_period: 0.1
       use_pcd_map: true

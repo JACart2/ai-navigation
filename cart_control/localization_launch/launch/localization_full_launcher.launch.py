@@ -3,6 +3,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch.substitutions import PathJoinSubstitution
 from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 import launch_ros
@@ -29,17 +30,17 @@ def generate_launch_description():
         name="velodyne_transform_node",
         output="screen",
         parameters=[{
-            "calibration": "/opt/ros/jazzy/share/velodyne_pointcloud/params/VLP16db.yaml",
+            "calibration": PathJoinSubstitution([
+                FindPackageShare("velodyne_pointcloud"),
+                "params",
+                "VLP16db.yaml"
+            ]),
             "model": "VLP16",
             "min_range": 1.0,
             "max_range": 50.0,
             "organize_cloud": False,
-            "fixed_frame": "",
-            "target_frame": "",
             "use_sim_time": False,
-            "view_direction": 0.0,
-            "view_width": 6.283185307179586,
-        }],
+        }]
     )
 
     # Specify the new path to lidar_localization.launch.py

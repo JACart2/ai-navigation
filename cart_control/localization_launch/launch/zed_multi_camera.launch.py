@@ -131,9 +131,9 @@ def launch_setup(context, *args, **kwargs):
 
         actions.append(LogInfo(msg=TextSubstitution(text=info)))
 
-        # Only the front tracking camera should own odom -> camera_link.
-        # Additional cameras are statically attached by robot_state_publisher.
-        publish_tf = 'true' if cam_idx == 0 else 'false'
+        # Localization publishes map -> base_link directly. Keep ZED odometry
+        # available as topics, but do not let it add an odom TF parent.
+        publish_tf = 'false'
         publish_map_tf = 'false'
 
         # A different node name is required by the Diagnostic Updated

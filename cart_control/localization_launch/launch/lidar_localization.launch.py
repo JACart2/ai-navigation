@@ -55,11 +55,13 @@ def generate_launch_description():
         parameters=[
             localization_param_dir,
             {
-                "enable_map_odom_tf": True,
+                "enable_map_odom_tf": False,
+                "score_threshold": 10.0,
                 "global_frame_id": "map",
                 "odom_frame_id": "odom",
                 "base_frame_id": "base_link",
                 "enable_timer_publishing": True,
+                "use_odom": False,
                 "pose_publish_frequency": 30.0,
                 "max_twist_prediction_dt": 0.35,
                 "cloud_queue_depth": 5,

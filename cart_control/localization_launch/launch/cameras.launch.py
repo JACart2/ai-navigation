@@ -62,27 +62,28 @@ def generate_launch_description():
                     "cam_names": cam_names,  # Names of the cameras
                     "cam_models": cam_models,  # Models of the cameras
                     "cam_serials": cam_serials,  # Serial numbers of the cameras
-                    "disable_tf": "False",  # Enable TF broadcasting
+                    # Kept for compatibility; zed_multi_camera disables dynamic ZED TF.
+                    "disable_tf": "False",
                 }.items(),
             )
         ]
 
     zed_multi_camera_launch = OpaqueFunction(function=_include_zed_multi_camera)
 
-    # Static transform from the front camera tracking frame back to the cart base.
+    # Static transform from the cart base to the front camera tracking frame.
     multi_link_tf = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
         name="multi_link_tf",
         arguments=[
-            "-1.0",  # X position (adjust as needed)
+            "1.0",  # X position (adjust as needed)
             "0.0",  # Y position (adjust as needed)
-            "-1.6",  # Z position (height of cameras above ground)
+            "1.6",  # Z position (height of cameras above ground)
             "0.0",  # Roll (rotation around X-axis)
             "0.0",  # Pitch (rotation around Y-axis)
             "0.0",  # Yaw (rotation around Z-axis)
-            "zed_front_camera_link",  # Parent frame (front camera tracking frame)
-            "base_link",  # Child frame (golf cart base)
+            "base_link",  # Parent frame (golf cart base)
+            "zed_front_camera_link",  # Child frame (front camera tracking frame)
         ],
         output="screen",
     )

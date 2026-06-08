@@ -22,7 +22,8 @@ def generate_launch_description():
         parameters=[{"model": "VLP16"}],
     )
 
-    # Include the velodyne_transform_node-VLP16-launch.py directly
+    # Convert raw Velodyne packets into the /velodyne_points PointCloud2 topic
+    # consumed by RViz, localization, and obstacle conversion.
     velodyne_transform_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [
@@ -30,6 +31,28 @@ def generate_launch_description():
                 "/launch/velodyne_transform_node-VLP16-launch.py",
             ]
         )
+    )
+
+    velodyne_pointcloud_tf_fallback = Node(
+        package="localization_launch",
+        executable="velodyne_pointcloud_tf_fallback",
+        name="velodyne_pointcloud_tf_fallback",
+        parameters=[
+            {
+                "input_topic": "/velodyne_points",
+                "output_topic": "/velodyne_points_stable",
+                "target_frame": "map",
+                "parent_frame": "base_link",
+                "child_frame": "velodyne",
+                "x": 1.0,
+                "y": 0.0,
+                "z": 1.9,
+                "roll": 0.0,
+                "pitch": 0.0,
+                "yaw": 0.0,
+            }
+        ],
+        output="screen",
     )
 
     # Specify the new path to lidar_localization.launch.py
@@ -48,6 +71,7 @@ def generate_launch_description():
         package="navigation",
         executable="publish_initial_map_viz",
         name="publish_initial_map_viz",
+        parameters=[{"map_path": "/maps/speedBoiMap.pcd"}],
         output="screen",
     )
 
@@ -75,6 +99,7 @@ def generate_launch_description():
             ),
             velodyne_driver_node,
             velodyne_transform_launch,
+            velodyne_pointcloud_tf_fallback,
             lidar_localization_launch,
             initial_map_viz,
             cameras_launch,

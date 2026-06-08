@@ -9,7 +9,8 @@ import launch_ros.actions
 import launch_ros.events
 
 from launch import LaunchDescription
-from launch.actions import TimerAction
+from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.conditions import IfCondition
 from launch_ros.actions import LifecycleNode
 from launch_ros.actions import Node
 
@@ -23,52 +24,59 @@ def generate_launch_description():
 
     ld = launch.LaunchDescription()
 
+    lidar_parent_frame = "base_link"
+    lidar_child_frame = "velodyne"
+    lidar_x = "1"
+    lidar_y = "0"
+    lidar_z = "1.9"
+    lidar_roll = "0"
+    lidar_pitch = "0"
+    lidar_yaw = "0"
+
     lidar_tf = launch_ros.actions.Node(
         name="lidar_tf",
         package="tf2_ros",
         executable="static_transform_publisher",
         arguments=[
             "--x",
-            "1",
+            lidar_x,
             "--y",
-            "0",
+            lidar_y,
             "--z",
-            "1.9",
+            lidar_z,
             "--roll",
-            "0",
+            lidar_roll,
             "--pitch",
-            "0",
+            lidar_pitch,
             "--yaw",
-            "0",
+            lidar_yaw,
             "--frame-id",
-            "base_link",
+            lidar_parent_frame,
             "--child-frame-id",
-            "velodyne",
+            lidar_child_frame,
         ],
     )
 
-    imu_tf = launch_ros.actions.Node(
-        name="imu_tf",
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments=[
-            "--x",
-            "0",
-            "--y",
-            "0",
-            "--z",
-            "0",
-            "--roll",
-            "0",
-            "--pitch",
-            "0",
-            "--yaw",
-            "0",
-            "--frame-id",
-            "base_link",
-            "--child-frame-id",
-            "imu_link",
+    lidar_tf_fallback = launch_ros.actions.Node(
+        name="lidar_tf_fallback",
+        package="localization_launch",
+        executable="tf_fallback_publisher",
+        condition=IfCondition(LaunchConfiguration("enable_lidar_tf_fallback")),
+        parameters=[
+            {
+                "parent_frame": lidar_parent_frame,
+                "child_frame": lidar_child_frame,
+                "x": float(lidar_x),
+                "y": float(lidar_y),
+                "z": float(lidar_z),
+                "roll": float(lidar_roll),
+                "pitch": float(lidar_pitch),
+                "yaw": float(lidar_yaw),
+                "check_period_s": 0.2,
+                "missing_checks_before_fallback": 10,
+            }
         ],
+        output="screen",
     )
 
     # Set the default path directly to the specific YAML file location
@@ -86,12 +94,8 @@ def generate_launch_description():
         namespace="",
         package="lidar_localization_ros2",
         executable="lidar_localization_node",
-        parameters=[localization_param_dir],
-        remappings=[
-            ("/cloud", "/velodyne_points"),
-            ("/odom", "/zed_front/zed_node_0/odom"),
-            ("/imu", "/zed/zed_node/imu/data"),
-        ],
+        parameters=[localization_param_dir, {"use_odom": False}],
+        remappings=[("/cloud", "/velodyne_points")],
         output="screen",
     )
 
@@ -110,12 +114,23 @@ def generate_launch_description():
     )
 
     ld.add_action(
+        DeclareLaunchArgument(
+            "enable_lidar_tf_fallback",
+            default_value="false",
+            description=(
+                "Enable the Velodyne TF fallback publisher. Requires rebuilding "
+                "localization_launch so tf_fallback_publisher is installed."
+            ),
+        )
+    )
+
+    ld.add_action(
         TimerAction(
             period=2.0,
             actions=[
                 lidar_localization,
                 lidar_tf,
-                imu_tf,
+                lidar_tf_fallback,
                 TimerAction(
                     period=2.0,
                     actions=[

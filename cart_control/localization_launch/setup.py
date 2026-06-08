@@ -29,6 +29,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'tf_fallback_publisher = localization_launch.tf_fallback_publisher:main',
+            'velodyne_pointcloud_tf_fallback = localization_launch.velodyne_pointcloud_tf_fallback:main',
         ],
     },
 )

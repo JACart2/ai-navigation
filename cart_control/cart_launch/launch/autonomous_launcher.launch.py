@@ -123,7 +123,7 @@ def generate_launch_description():
             declare_cart_config_path,
             declare_enable_aad,
             declare_rosbridge_port,
-            SetEnvironmentVariable(name="FASTDDS_BUILTIN_TRANSPORTS", value="UDPv4"),
+            # SetEnvironmentVariable(name="FASTDDS_BUILTIN_TRANSPORTS", value="UDPv4"),
             swri_console_node,
             rviz2_command,
             delayed_stack,

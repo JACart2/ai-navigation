@@ -15,7 +15,7 @@ class InitialMapVizPublisher(Node):
     def __init__(self):
         super().__init__("publish_initial_map_viz")
 
-        self.declare_parameter("map_path", "/maps/speedBoiMap_dense.pcd")
+        self.declare_parameter("map_path", "/maps/speedBoiMap.pcd")
         self.declare_parameter("topic", "/initial_map_viz")
         self.declare_parameter("frame_id", "map")
 

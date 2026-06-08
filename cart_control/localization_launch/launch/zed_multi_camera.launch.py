@@ -57,6 +57,12 @@ def launch_setup(context, *args, **kwargs):
     )
     # multi_zed_xacro_path = '/dev_ws/src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro'
 
+    local_config_path = os.path.join(
+        get_package_share_directory('localization_launch'),
+        'config',
+        'common.yaml'
+    )
+
     names = LaunchConfiguration('cam_names') # [zed_front, zed_rear]
     models = LaunchConfiguration('cam_models') # [zed2i, zed2i]
     serials = LaunchConfiguration('cam_serials') # [37963597, 31061594]
@@ -131,11 +137,8 @@ def launch_setup(context, *args, **kwargs):
 
         actions.append(LogInfo(msg=TextSubstitution(text=info)))
 
-        # Only the first camera send odom and map TF
+        # ZED cameras must not own the TF tree; localization is handled by lidar_localization
         publish_tf = 'false'
-        if (cam_idx == 0):
-            if (disable_tf_val == 'False' or disable_tf_val == 'false'):
-                publish_tf = 'true'
 
         # A different node name is required by the Diagnostic Updated
         node_name = 'zed_node_' + str(cam_idx)
@@ -153,6 +156,7 @@ def launch_setup(context, *args, **kwargs):
                 'camera_model': model,
                 'serial_number': serial,
                 'camera_id': id,
+                'config_path': local_config_path,
                 'publish_tf': publish_tf,
                 'publish_map_tf': publish_tf,
                 'namespace': namespace_val,

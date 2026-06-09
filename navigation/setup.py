@@ -38,8 +38,6 @@ setup(
             "global_tester = navigation.test_global:main",
             "motor_simulator = navigation.simulated_motor_endpoint:main",
             "visualize_graph = navigation.visualize_graph:main",
-            "wait_for_rviz_subscriber = navigation.wait_for_rviz_subscriber:main",
-            "publish_initial_map_viz = navigation.publish_initial_map_viz:main",
             "speed_node = navigation.speed_node:main",
             "obstacle_converter = navigation.zed_object_to_obstacle:main",
             "collision_detector = navigation.collision_detector:main",

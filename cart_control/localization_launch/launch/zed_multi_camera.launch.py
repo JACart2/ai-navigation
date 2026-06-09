@@ -57,18 +57,21 @@ def launch_setup(context, *args, **kwargs):
     )
     # multi_zed_xacro_path = '/dev_ws/src/ai-navigation/cart_control/localization_launch/param/zed_multi.urdf.xacro'
 
+    local_config_path = os.path.join(
+        get_package_share_directory('localization_launch'),
+        'config',
+        'common.yaml'
+    )
+
     names = LaunchConfiguration('cam_names') # [zed_front, zed_rear]
     models = LaunchConfiguration('cam_models') # [zed2i, zed2i]
     serials = LaunchConfiguration('cam_serials') # [37963597, 31061594]
     ids = LaunchConfiguration('cam_ids') # []
 
-    disable_tf = LaunchConfiguration('disable_tf')
-
     names_arr = parse_array_param(names.perform(context))
     models_arr = parse_array_param(models.perform(context))
     serials_arr = parse_array_param(serials.perform(context))
     ids_arr = parse_array_param(ids.perform(context))
-    disable_tf_val = disable_tf.perform(context)
 
     num_cams = len(names_arr)
 
@@ -106,6 +109,25 @@ def launch_setup(context, *args, **kwargs):
     )
     actions.append(zed_container)
 
+    camera_base_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='zed_camera_base_tf',
+        arguments=[
+            '1.0',
+            '0.0',
+            '1.6',
+            '0.0',
+            '0.0',
+            '0.0',
+            '1.0',
+            'base_link',
+            'zed_front_camera_link',
+        ],
+        output='screen',
+    )
+    actions.append(camera_base_tf)
+
     # Set the first camera idx
     cam_idx = 0
 
@@ -131,11 +153,10 @@ def launch_setup(context, *args, **kwargs):
 
         actions.append(LogInfo(msg=TextSubstitution(text=info)))
 
-        # Only the first camera send odom and map TF
+        # Do not let ZED positional tracking publish dynamic odom TF.
+        # Camera streams, odometry topics, and static base_link/URDF camera frames remain enabled.
         publish_tf = 'false'
-        if (cam_idx == 0):
-            if (disable_tf_val == 'False' or disable_tf_val == 'false'):
-                publish_tf = 'true'
+        publish_map_tf = 'false'
 
         # A different node name is required by the Diagnostic Updated
         node_name = 'zed_node_' + str(cam_idx)
@@ -153,8 +174,9 @@ def launch_setup(context, *args, **kwargs):
                 'camera_model': model,
                 'serial_number': serial,
                 'camera_id': id,
+                'config_path': local_config_path,
                 'publish_tf': publish_tf,
-                'publish_map_tf': publish_tf,
+                'publish_map_tf': publish_map_tf,
                 'namespace': namespace_val,
                 'node_name': node_name,
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.
@@ -221,7 +243,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 'disable_tf',
                 default_value='False',
-                description='If `True` disable TF broadcasting for all the cameras in order to fuse visual odometry information externally.'),
+                description='Deprecated compatibility option. ZED dynamic odom TF publishing is disabled in this launch file.'),
             OpaqueFunction(function=launch_setup)
         ]
     )

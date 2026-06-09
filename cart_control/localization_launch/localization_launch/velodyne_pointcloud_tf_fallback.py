@@ -32,6 +32,7 @@ class VelodynePointcloudTfFallback(Node):
         self.declare_parameter("cart_pose_refresh_period_s", 0.1)
         self.declare_parameter("prefer_fallback_lidar_tf", False)
         self.declare_parameter("republish_original_if_possible", True)
+        self.declare_parameter("downsample_stride", 1)
 
         self.target_frame = self.get_parameter("target_frame").value
         self.parent_frame = self.get_parameter("parent_frame").value
@@ -44,6 +45,9 @@ class VelodynePointcloudTfFallback(Node):
         )
         self.republish_original_if_possible = bool(
             self.get_parameter("republish_original_if_possible").value
+        )
+        self.downsample_stride = max(
+            1, int(self.get_parameter("downsample_stride").value)
         )
         self.fallback_transform = self._build_fallback_transform()
         self.last_base_to_target_transform = None
@@ -69,7 +73,7 @@ class VelodynePointcloudTfFallback(Node):
 
     def _pointcloud_callback(self, cloud: PointCloud2):
         if self._can_republish_original(cloud.header.frame_id):
-            self.publisher.publish(cloud)
+            self.publisher.publish(self._downsample_cloud(cloud))
             return
 
         lidar_to_base = self._lookup_lidar_to_base_transform(
@@ -88,12 +92,43 @@ class VelodynePointcloudTfFallback(Node):
             transformed_cloud.header.stamp = cloud.header.stamp
             transformed_cloud.header.frame_id = self.target_frame
 
-        self.publisher.publish(transformed_cloud)
+        self.publisher.publish(self._downsample_cloud(transformed_cloud))
 
     def _can_republish_original(self, source_frame: str):
         return self.republish_original_if_possible and self._normalize_frame(
             source_frame
         ) == self._normalize_frame(self.target_frame)
+
+    def _downsample_cloud(self, cloud: PointCloud2) -> PointCloud2:
+        if self.downsample_stride <= 1 or cloud.width == 0 or cloud.point_step == 0:
+            return cloud
+
+        row_width = cloud.width
+        new_width = (row_width + self.downsample_stride - 1) // self.downsample_stride
+        if new_width == row_width:
+            return cloud
+
+        point_step = cloud.point_step
+        row_step = cloud.row_step if cloud.row_step else row_width * point_step
+        downsampled = bytearray()
+
+        for row in range(max(1, cloud.height)):
+            row_start = row * row_step
+            for col in range(0, row_width, self.downsample_stride):
+                point_start = row_start + col * point_step
+                downsampled.extend(cloud.data[point_start : point_start + point_step])
+
+        downsampled_cloud = PointCloud2()
+        downsampled_cloud.header = cloud.header
+        downsampled_cloud.height = cloud.height
+        downsampled_cloud.width = new_width
+        downsampled_cloud.fields = cloud.fields
+        downsampled_cloud.is_bigendian = cloud.is_bigendian
+        downsampled_cloud.point_step = point_step
+        downsampled_cloud.row_step = new_width * point_step
+        downsampled_cloud.data = bytes(downsampled)
+        downsampled_cloud.is_dense = cloud.is_dense
+        return downsampled_cloud
 
     def _lookup_lidar_to_base_transform(self, source_frame: str, stamp):
         if self.prefer_fallback_lidar_tf and self._normalize_frame(

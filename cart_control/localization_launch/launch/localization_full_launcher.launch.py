@@ -19,7 +19,7 @@ def generate_launch_description():
         package="velodyne_driver",
         executable="velodyne_driver_node",
         name="velodyne_driver_node",
-        parameters=[{"model": "VLP16"}],
+        parameters=[{"model": "VLP16", "rpm": 600.0}],
     )
 
     # Convert raw Velodyne packets into the /velodyne_points PointCloud2 topic
@@ -52,6 +52,7 @@ def generate_launch_description():
                 "yaw": 0.0,
                 "prefer_fallback_lidar_tf": True,
                 "republish_original_if_possible": True,
+                "downsample_stride": 2,
             }
         ],
         output="screen",

@@ -1,1 +1,0 @@
-/root/dev_ws/src/ai-navigation/build/cart_launch/launch/autonomous_launcher.launch.py

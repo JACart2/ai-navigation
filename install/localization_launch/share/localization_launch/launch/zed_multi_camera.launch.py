@@ -1,1 +1,0 @@
-/root/dev_ws/src/ai-navigation/build/localization_launch/launch/zed_multi_camera.launch.py

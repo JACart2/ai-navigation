@@ -1,4 +1,0 @@
-std_msgs/Header header
-bool is_navigating
-bool reached_destination
-bool stopped

@@ -175,7 +175,7 @@ def launch_setup(context, *args, **kwargs):
                 'general.serial_number': serial_number_val,
                 'general.camera_id': camera_id_val,
                 'depth.depth_mode': 'PERFORMANCE',
-                'depth.point_cloud_freq': 10.0,
+                'depth.point_cloud_freq': 15.0,
                 'depth.point_cloud_res': 'REDUCED',
                 'pos_tracking.publish_tf': publish_tf_val,
                 'pos_tracking.publish_map_tf': publish_map_tf_val,

@@ -9,8 +9,7 @@ import launch_ros.actions
 import launch_ros.events
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, TimerAction
-from launch.conditions import IfCondition
+from launch.actions import TimerAction
 from launch_ros.actions import LifecycleNode
 from launch_ros.actions import Node
 
@@ -57,28 +56,6 @@ def generate_launch_description():
         ],
     )
 
-    lidar_tf_fallback = launch_ros.actions.Node(
-        name="lidar_tf_fallback",
-        package="localization_launch",
-        executable="tf_fallback_publisher",
-        condition=IfCondition(LaunchConfiguration("enable_lidar_tf_fallback")),
-        parameters=[
-            {
-                "parent_frame": lidar_parent_frame,
-                "child_frame": lidar_child_frame,
-                "x": float(lidar_x),
-                "y": float(lidar_y),
-                "z": float(lidar_z),
-                "roll": float(lidar_roll),
-                "pitch": float(lidar_pitch),
-                "yaw": float(lidar_yaw),
-                "check_period_s": 0.2,
-                "missing_checks_before_fallback": 10,
-            }
-        ],
-        output="screen",
-    )
-
     # Set the default path directly to the specific YAML file location
     localization_param_dir = LaunchConfiguration(
         "localization_param_dir",
@@ -114,23 +91,11 @@ def generate_launch_description():
     )
 
     ld.add_action(
-        DeclareLaunchArgument(
-            "enable_lidar_tf_fallback",
-            default_value="false",
-            description=(
-                "Enable the Velodyne TF fallback publisher. Requires rebuilding "
-                "localization_launch so tf_fallback_publisher is installed."
-            ),
-        )
-    )
-
-    ld.add_action(
         TimerAction(
             period=2.0,
             actions=[
                 lidar_localization,
                 lidar_tf,
-                lidar_tf_fallback,
                 TimerAction(
                     period=2.0,
                     actions=[

@@ -50,6 +50,8 @@ def generate_launch_description():
                 "roll": 0.0,
                 "pitch": 0.0,
                 "yaw": 0.0,
+                "prefer_fallback_lidar_tf": True,
+                "republish_original_if_possible": True,
             }
         ],
         output="screen",

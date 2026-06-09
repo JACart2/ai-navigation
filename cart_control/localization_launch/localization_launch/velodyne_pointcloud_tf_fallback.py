@@ -30,12 +30,20 @@ class VelodynePointcloudTfFallback(Node):
         self.declare_parameter("yaw", 0.0)
         self.declare_parameter("lookup_timeout_s", 0.05)
         self.declare_parameter("cart_pose_refresh_period_s", 0.1)
+        self.declare_parameter("prefer_fallback_lidar_tf", False)
+        self.declare_parameter("republish_original_if_possible", True)
 
         self.target_frame = self.get_parameter("target_frame").value
         self.parent_frame = self.get_parameter("parent_frame").value
         self.child_frame = self.get_parameter("child_frame").value
         self.lookup_timeout = Duration(
             seconds=float(self.get_parameter("lookup_timeout_s").value)
+        )
+        self.prefer_fallback_lidar_tf = bool(
+            self.get_parameter("prefer_fallback_lidar_tf").value
+        )
+        self.republish_original_if_possible = bool(
+            self.get_parameter("republish_original_if_possible").value
         )
         self.fallback_transform = self._build_fallback_transform()
         self.last_base_to_target_transform = None
@@ -60,6 +68,10 @@ class VelodynePointcloudTfFallback(Node):
         )
 
     def _pointcloud_callback(self, cloud: PointCloud2):
+        if self._can_republish_original(cloud.header.frame_id):
+            self.publisher.publish(cloud)
+            return
+
         lidar_to_base = self._lookup_lidar_to_base_transform(
             cloud.header.frame_id, cloud.header.stamp
         )
@@ -78,7 +90,24 @@ class VelodynePointcloudTfFallback(Node):
 
         self.publisher.publish(transformed_cloud)
 
+    def _can_republish_original(self, source_frame: str):
+        return self.republish_original_if_possible and self._normalize_frame(
+            source_frame
+        ) == self._normalize_frame(self.target_frame)
+
     def _lookup_lidar_to_base_transform(self, source_frame: str, stamp):
+        if self.prefer_fallback_lidar_tf and self._normalize_frame(
+            source_frame
+        ) == self._normalize_frame(self.child_frame):
+            if not self.using_fallback:
+                self.get_logger().info(
+                    f"PointCloudVelodyne using preferred hardcoded transform "
+                    f"for {source_frame} -> {self.parent_frame}"
+                )
+                self.using_fallback = True
+            self.fallback_transform.header.stamp = stamp
+            return self.fallback_transform
+
         try:
             transform = self.tf_buffer.lookup_transform(
                 self.parent_frame,

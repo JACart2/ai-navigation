@@ -11,7 +11,7 @@ import launch_ros.event_handlers
 import launch_ros.events
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
 import lifecycle_msgs.msg
@@ -149,6 +149,5 @@ def generate_launch_description():
     ld.add_action(pcl_pose_relay)
     ld.add_action(lidar_tf)
     ld.add_action(imu_tf)
-    ld.add_action(TimerAction(period=3.0, actions=[to_inactive]))
 
     return ld

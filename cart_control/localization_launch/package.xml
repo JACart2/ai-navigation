@@ -20,8 +20,15 @@
   <exec_depend>xacro</exec_depend>
   
   <depend>rviz2</depend>
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>velodyne_driver</depend>
+  <depend>velodyne_msgs</depend>
   <depend>velodyne_pointcloud</depend>
+  <depend>tf2_sensor_msgs</depend>
+  <depend>python3-numpy</depend>
+  <depend>python3-tf-transformations</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

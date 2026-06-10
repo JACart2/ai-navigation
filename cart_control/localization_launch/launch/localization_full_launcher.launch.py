@@ -34,6 +34,7 @@ def generate_launch_description():
     velodyne_transform_params["calibration"] = os.path.join(
         velodyne_pointcloud_share, "params", "VLP16db.yaml"
     )
+    velodyne_transform_params["max_range"] = 90.0
     velodyne_transform_params["organize_cloud"] = False
 
     # Start the VLP16 driver with the upstream defaults, then override cart-specific connection settings.
@@ -48,7 +49,23 @@ def generate_launch_description():
                 "device_ip": lidar_device_ip,
                 "port": ParameterValue(lidar_port, value_type=int),
                 "frame_id": lidar_frame_id,
+                "model": "VLP16",
+                "rpm": 600.0,
             },
+        ],
+    )
+
+    velodyne_packet_downsample_filter_node = Node(
+        package="localization_launch",
+        executable="velodyne_packet_downsample_filter",
+        name="velodyne_packet_downsample_filter",
+        output="screen",
+        parameters=[
+            {
+                "input_topic": "/velodyne_packets",
+                "output_topic": "/velodyne_packets_filtered",
+                "packet_downscale_factor": 2.0,
+            }
         ],
     )
 
@@ -58,6 +75,35 @@ def generate_launch_description():
         name="velodyne_transform_node",
         output="both",
         parameters=[velodyne_transform_params],
+        remappings=[
+            ("/velodyne_packets", "/velodyne_packets_filtered"),
+        ],
+    )
+
+    velodyne_pointcloud_tf_fallback_node = Node(
+        package="localization_launch",
+        executable="velodyne_pointcloud_tf_fallback",
+        name="velodyne_pointcloud_tf_fallback",
+        output="screen",
+        parameters=[
+            {
+                "input_topic": "/velodyne_points",
+                "output_topic": "/velodyne_points_stable",
+                "target_frame": "map",
+                "parent_frame": "base_link",
+                "child_frame": "velodyne",
+                "x": 1.0,
+                "y": 0.0,
+                "z": 1.9,
+                "roll": 0.0,
+                "pitch": 0.0,
+                "yaw": 0.0,
+                "lookup_timeout_s": 0.005,
+                "prefer_fallback_lidar_tf": True,
+                "republish_original_if_possible": True,
+                "downsample_stride": 1,
+            }
+        ],
     )
 
     lidar_localization_launch_path = os.path.join(
@@ -103,7 +149,9 @@ def generate_launch_description():
                 description="Frame id assigned to Velodyne packets and point clouds.",
             ),
             velodyne_driver_node,
+            velodyne_packet_downsample_filter_node,
             velodyne_transform_node,
+            velodyne_pointcloud_tf_fallback_node,
             lidar_localization_launch,
             cameras_launch,
         ]

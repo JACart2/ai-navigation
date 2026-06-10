@@ -420,7 +420,7 @@ class MotorEndpoint(rclpy.node.Node):
                 self.brake_time_used = 0
                 self.full_stop_count = 0
 
-        self.send_packet(target_speed / 2.2, int(self.brake), target_angle)
+        self.send_packet(target_speed / 1.7, int(self.brake), target_angle)
 
     def send_packet(self, throttle, brake, steer_angle):
         """This method is used to send instructions to the arduino that was connected in init."""

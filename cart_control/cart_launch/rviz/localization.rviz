@@ -71,7 +71,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /velodyne_points
+        Value: /velodyne_points_stable
       Use Fixed Frame: true
       Use rainbow: true
       Value: true

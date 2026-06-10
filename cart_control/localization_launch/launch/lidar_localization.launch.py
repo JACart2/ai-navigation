@@ -21,21 +21,12 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     cloud_topic = LaunchConfiguration("cloud_topic")
-    odom_topic = LaunchConfiguration("odom_topic")
-    imu_topic = LaunchConfiguration("imu_topic")
 
     lidar_tf = launch_ros.actions.Node(
         name="lidar_tf",
         package="tf2_ros",
         executable="static_transform_publisher",
         arguments=["1", "0", "1.9", "0", "0", "0", "1", "base_link", "velodyne"],
-    )
-
-    imu_tf = launch_ros.actions.Node(
-        name="imu_tf",
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments=["0", "0", "0", "0", "0", "0", "1", "base_link", "imu_link"],
     )
 
     localization_param_dir = LaunchConfiguration(
@@ -55,23 +46,18 @@ def generate_launch_description():
         parameters=[
             localization_param_dir,
             {
-                "enable_map_odom_tf": False,
                 "score_threshold": 10.0,
                 "global_frame_id": "map",
-                "odom_frame_id": "odom",
                 "base_frame_id": "base_link",
                 "enable_timer_publishing": True,
-                "use_odom": False,
                 "pose_publish_frequency": 30.0,
                 "max_twist_prediction_dt": 0.35,
                 "cloud_queue_depth": 5,
-                "cloud_qos_reliability": "reliable",
+                "cloud_qos_reliability": "best_effort",
             },
         ],
         remappings=[
             ("/cloud", cloud_topic),
-            ("/odom", odom_topic),
-            ("/imu", imu_topic),
         ],
         output="screen",
     )
@@ -123,22 +109,8 @@ def generate_launch_description():
     ld.add_action(
         DeclareLaunchArgument(
             "cloud_topic",
-            default_value="/velodyne_points",
-            description="PointCloud2 topic published by velodyne_pointcloud.",
-        )
-    )
-    ld.add_action(
-        DeclareLaunchArgument(
-            "odom_topic",
-            default_value="/zed_front/zed_node_0/odom",
-            description="Odometry topic used by lidar_localization_ros2.",
-        )
-    )
-    ld.add_action(
-        DeclareLaunchArgument(
-            "imu_topic",
-            default_value="/zed_front/zed_node_0/imu/data",
-            description="IMU topic used when localization.yaml enables use_imu.",
+            default_value="/velodyne_points_stable",
+            description="Stabilized PointCloud2 topic published by the Velodyne TF fallback node.",
         )
     )
     ld.add_action(from_unconfigured_to_inactive)
@@ -146,7 +118,6 @@ def generate_launch_description():
 
     ld.add_action(lidar_localization)
     ld.add_action(lidar_tf)
-    ld.add_action(imu_tf)
     ld.add_action(TimerAction(period=3.0, actions=[to_inactive]))
 
     return ld

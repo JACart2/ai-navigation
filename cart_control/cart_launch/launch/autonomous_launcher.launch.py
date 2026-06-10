@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -24,7 +24,7 @@ def generate_launch_description():
     declare_cart_config_path = DeclareLaunchArgument(
         "cart_config_path",
         default_value=os.path.join(
-            get_package_share_directory("cart_launch"), "config", "cart_james.yaml"
+            get_package_share_directory("cart_launch"), "config", "cart_madison.yaml"
         ),
         description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
     )
@@ -109,6 +109,7 @@ def generate_launch_description():
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
+            SetEnvironmentVariable("FASTDDS_BUILTIN_TRANSPORTS", "UDPv4"),
             declare_console_start_delay_s,
             declare_cart_config_path,
             declare_enable_aad,

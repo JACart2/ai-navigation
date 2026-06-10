@@ -10,15 +10,21 @@ import launch_ros.actions
 import launch_ros.event_handlers
 import launch_ros.events
 
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
+
+import lifecycle_msgs.msg
+
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    ld = LaunchDescription()
 
-    ld = launch.LaunchDescription()
+    cloud_topic = LaunchConfiguration("cloud_topic", default="/velodyne_points")
+    odom_topic = LaunchConfiguration("odom_topic")
+    imu_topic = LaunchConfiguration("imu_topic")
 
     lidar_tf = launch_ros.actions.Node(
         name="lidar_tf",
@@ -41,15 +47,41 @@ def generate_launch_description():
         output="screen",
     )
 
-    localization_param_dir = LaunchConfiguration("localization_param_dir")
+    localization_param_dir = LaunchConfiguration(
+        "localization_param_dir",
+        default=os.path.join(
+            get_package_share_directory("localization_launch"),
+            "param",
+            "localization.yaml",
+        ),
+    )
 
     lidar_localization = launch_ros.actions.LifecycleNode(
         name="lidar_localization",
         namespace="",
         package="lidar_localization_ros2",
         executable="lidar_localization_node",
-        parameters=[localization_param_dir],
-        remappings=[("/cloud", "/velodyne_points")],
+        parameters=[
+            localization_param_dir,
+            {
+                "enable_map_odom_tf": False,
+                "score_threshold": 10.0,
+                "global_frame_id": "map",
+                "odom_frame_id": "odom",
+                "base_frame_id": "base_link",
+                "enable_timer_publishing": True,
+                "use_odom": False,
+                "pose_publish_frequency": 30.0,
+                "max_twist_prediction_dt": 0.35,
+                "cloud_queue_depth": 5,
+                "cloud_qos_reliability": "reliable",
+            },
+        ],
+        remappings=[
+            ("/cloud", cloud_topic),
+            ("/odom", odom_topic),
+            ("/imu", imu_topic),
+        ],
         output="screen",
     )
 
@@ -81,6 +113,27 @@ def generate_launch_description():
 
     ld.add_action(
         DeclareLaunchArgument(
+            "cloud_topic",
+            default_value="/velodyne_points",
+            description="PointCloud2 topic published by velodyne_pointcloud.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            "odom_topic",
+            default_value="/zed_front/zed_node_0/odom",
+            description="Odometry topic used by lidar_localization_ros2.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            "imu_topic",
+            default_value="/zed_front/zed_node_0/imu/data",
+            description="IMU topic used when localization.yaml enables use_imu.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
             "localization_param_dir",
             default_value=os.path.join(
                 get_package_share_directory("localization_launch"),
@@ -96,5 +149,6 @@ def generate_launch_description():
     ld.add_action(pcl_pose_relay)
     ld.add_action(lidar_tf)
     ld.add_action(imu_tf)
+    ld.add_action(TimerAction(period=3.0, actions=[to_inactive]))
 
     return ld

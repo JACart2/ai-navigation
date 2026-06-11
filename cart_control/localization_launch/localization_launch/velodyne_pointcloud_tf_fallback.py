@@ -15,26 +15,45 @@ import tf_transformations
 
 
 class VelodynePointcloudTfFallback(Node):
+    """Republish Velodyne point clouds in a stable frame with TF fallbacks."""
+
     def __init__(self):
         super().__init__("velodyne_pointcloud_tf_fallback")
 
+        # PointCloud2 topic produced by the Velodyne pointcloud converter.
         self.declare_parameter("input_topic", "/velodyne_points")
+        # PointCloud2 topic this node publishes after optional downsampling/TF.
         self.declare_parameter("output_topic", "/velodyne_points_stable")
+        # Final frame the cloud should be published in, usually "map".
         self.declare_parameter("target_frame", "map")
+        # Vehicle/body frame that the lidar is mounted to.
         self.declare_parameter("parent_frame", "base_link")
+        # Lidar sensor frame expected on incoming Velodyne clouds.
         self.declare_parameter("child_frame", "velodyne")
+        # Hardcoded lidar X offset from parent_frame, in meters.
         self.declare_parameter("x", 1.0)
+        # Hardcoded lidar Y offset from parent_frame, in meters.
         self.declare_parameter("y", 0.0)
+        # Hardcoded lidar Z offset from parent_frame, in meters.
         self.declare_parameter("z", 1.9)
+        # Hardcoded lidar roll from parent_frame, in radians.
         self.declare_parameter("roll", 0.0)
+        # Hardcoded lidar pitch from parent_frame, in radians.
         self.declare_parameter("pitch", 0.0)
+        # Hardcoded lidar yaw from parent_frame, in radians.
         self.declare_parameter("yaw", 0.0)
+        # Max time to wait for each TF lookup before using fallback behavior.
         self.declare_parameter("lookup_timeout_s", 0.05)
+        # How often to refresh the latest base_link -> target_frame transform.
         self.declare_parameter("cart_pose_refresh_period_s", 0.1)
+        # Force the hardcoded lidar transform even if TF has a live lidar transform.
         self.declare_parameter("prefer_fallback_lidar_tf", False)
+        # If the incoming cloud is already in target_frame, publish it directly.
         self.declare_parameter("republish_original_if_possible", True)
+        # Keep one point every N columns in each cloud row. 1 disables downsampling.
         self.declare_parameter("downsample_stride", 1)
 
+        # Cache parameters that are used on every cloud callback.
         self.target_frame = self.get_parameter("target_frame").value
         self.parent_frame = self.get_parameter("parent_frame").value
         self.child_frame = self.get_parameter("child_frame").value
@@ -50,18 +69,24 @@ class VelodynePointcloudTfFallback(Node):
         self.downsample_stride = max(
             1, int(self.get_parameter("downsample_stride").value)
         )
+        # Static lidar mounting transform used when the live lidar TF is missing.
         self.fallback_transform = self._build_fallback_transform()
+        # Last good cart pose transform, reused during short TF dropouts.
         self.last_base_to_target_transform = None
+        # These flags keep fallback/restored log messages from repeating every scan.
         self.using_fallback = False
         self.using_cached_target_transform = False
 
+        # TF buffer/listener receive transforms published by the rest of the ROS graph.
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        # Periodically cache the latest cart pose so pointcloud callbacks stay fast.
         self.cart_pose_refresh_timer = self.create_timer(
             float(self.get_parameter("cart_pose_refresh_period_s").value),
             self._refresh_latest_base_to_target_transform,
         )
 
+        # Sensor-data QoS matches high-rate point cloud streams better than default QoS.
         self.publisher = self.create_publisher(
             PointCloud2, self.get_parameter("output_topic").value, qos_profile_sensor_data
         )
@@ -73,26 +98,32 @@ class VelodynePointcloudTfFallback(Node):
         )
 
     def _pointcloud_callback(self, cloud: PointCloud2):
+        """Downsample and transform one incoming PointCloud2 message."""
         cloud = self._downsample_cloud(cloud)
 
+        # Avoid unnecessary TF work when the incoming cloud is already stable.
         if self._can_republish_original(cloud.header.frame_id):
             self.publisher.publish(cloud)
             return
 
+        # First find lidar/source_frame -> base_link. This may use the hardcoded mount.
         lidar_to_base = self._lookup_lidar_to_base_transform(
             cloud.header.frame_id, cloud.header.stamp
         )
         if lidar_to_base is None:
             return
 
+        # Then find base_link -> target_frame. If target_frame is base_link, this is None.
         base_to_target = self._lookup_base_to_target_transform(cloud.header.stamp)
         if base_to_target is not None:
+            # Compose both transforms so the cloud can be transformed in one operation.
             output_transform = self._compose_transforms(
                 base_to_target, lidar_to_base, cloud.header.stamp
             )
         else:
             output_transform = lidar_to_base
 
+        # Apply the selected transform and publish the cloud in the output frame.
         transformed_cloud = do_transform_cloud(cloud, output_transform)
         transformed_cloud.header.stamp = cloud.header.stamp
         transformed_cloud.header.frame_id = output_transform.header.frame_id
@@ -100,14 +131,17 @@ class VelodynePointcloudTfFallback(Node):
         self.publisher.publish(transformed_cloud)
 
     def _can_republish_original(self, source_frame: str):
+        """Return True when the cloud is already in the requested output frame."""
         return self.republish_original_if_possible and self._normalize_frame(
             source_frame
         ) == self._normalize_frame(self.target_frame)
 
     def _downsample_cloud(self, cloud: PointCloud2) -> PointCloud2:
+        """Drop point columns by stride while preserving PointCloud2 metadata."""
         if self.downsample_stride <= 1 or cloud.width == 0 or cloud.point_step == 0:
             return cloud
 
+        # Width is the number of points per row; stride keeps columns 0, N, 2N, ...
         row_width = cloud.width
         new_width = (row_width + self.downsample_stride - 1) // self.downsample_stride
         if new_width == row_width:
@@ -117,12 +151,14 @@ class VelodynePointcloudTfFallback(Node):
         row_step = cloud.row_step if cloud.row_step else row_width * point_step
         downsampled = bytearray()
 
+        # Copy each selected point as raw bytes so field layout stays untouched.
         for row in range(max(1, cloud.height)):
             row_start = row * row_step
             for col in range(0, row_width, self.downsample_stride):
                 point_start = row_start + col * point_step
                 downsampled.extend(cloud.data[point_start : point_start + point_step])
 
+        # Rebuild the message around the smaller byte buffer.
         downsampled_cloud = PointCloud2()
         downsampled_cloud.header = cloud.header
         downsampled_cloud.height = cloud.height
@@ -136,9 +172,11 @@ class VelodynePointcloudTfFallback(Node):
         return downsampled_cloud
 
     def _lookup_lidar_to_base_transform(self, source_frame: str, stamp):
+        """Find source/lidar -> base_link, using the hardcoded mount if needed."""
         if self.prefer_fallback_lidar_tf and self._normalize_frame(
             source_frame
         ) == self._normalize_frame(self.child_frame):
+            # Configured override: always trust the launch-file lidar mount values.
             if not self.using_fallback:
                 self.get_logger().info(
                     f"PointCloudVelodyne using preferred hardcoded transform "
@@ -149,6 +187,7 @@ class VelodynePointcloudTfFallback(Node):
             return self.fallback_transform
 
         try:
+            # Normal path: use the live TF tree at the pointcloud timestamp.
             transform = self.tf_buffer.lookup_transform(
                 self.parent_frame,
                 source_frame,
@@ -162,6 +201,7 @@ class VelodynePointcloudTfFallback(Node):
                 self.using_fallback = False
             return transform
         except TransformException as exc:
+            # Only the configured lidar frame can safely use the hardcoded fallback.
             if self._normalize_frame(source_frame) != self._normalize_frame(
                 self.child_frame
             ):
@@ -178,16 +218,19 @@ class VelodynePointcloudTfFallback(Node):
             )
             self.using_fallback = True
 
+        # Live lidar TF is missing, so use the static mount configured by parameters.
         self.fallback_transform.header.stamp = stamp
         return self.fallback_transform
 
     def _lookup_base_to_target_transform(self, stamp):
+        """Find base_link -> target_frame, using the cached cart pose during dropouts."""
         if self._normalize_frame(self.target_frame) == self._normalize_frame(
             self.parent_frame
         ):
             return None
 
         if self.last_base_to_target_transform is not None:
+            # Use the cached cart pose immediately; the timer keeps it fresh.
             self.last_base_to_target_transform.header.stamp = stamp
             return self.last_base_to_target_transform
 
@@ -230,9 +273,11 @@ class VelodynePointcloudTfFallback(Node):
         return self.last_base_to_target_transform
 
     def _refresh_latest_base_to_target_transform(self):
+        """Timer callback that refreshes the cached cart pose transform."""
         self._lookup_latest_base_to_target_transform()
 
     def _lookup_latest_base_to_target_transform(self):
+        """Look up the newest available base_link -> target_frame transform."""
         if self._normalize_frame(self.target_frame) == self._normalize_frame(
             self.parent_frame
         ):
@@ -256,6 +301,7 @@ class VelodynePointcloudTfFallback(Node):
             return None
 
     def _build_fallback_transform(self):
+        """Build the hardcoded lidar mount transform from launch parameters."""
         transform = TransformStamped()
         transform.header.frame_id = self.parent_frame
         transform.child_frame_id = self.child_frame
@@ -263,6 +309,7 @@ class VelodynePointcloudTfFallback(Node):
         transform.transform.translation.y = float(self.get_parameter("y").value)
         transform.transform.translation.z = float(self.get_parameter("z").value)
 
+        # TF stores rotation as a quaternion, so convert launch-file roll/pitch/yaw.
         qx, qy, qz, qw = tf_transformations.quaternion_from_euler(
             float(self.get_parameter("roll").value),
             float(self.get_parameter("pitch").value),
@@ -280,10 +327,12 @@ class VelodynePointcloudTfFallback(Node):
         parent_to_source: TransformStamped,
         stamp,
     ) -> TransformStamped:
+        """Compose target->parent and parent->source into target->source."""
         target_to_parent_rotation = self._quaternion_from_transform(target_to_parent)
         parent_to_source_translation = self._translation_from_transform(
             parent_to_source
         )
+        # Rotate the source offset into the target frame before adding translations.
         rotated_translation = tf_transformations.quaternion_matrix(
             target_to_parent_rotation
         )[:3, :3].dot(parent_to_source_translation)
@@ -296,6 +345,7 @@ class VelodynePointcloudTfFallback(Node):
             self._quaternion_from_transform(parent_to_source),
         )
 
+        # Package the composed translation and rotation back into a ROS transform.
         transform = TransformStamped()
         transform.header.stamp = stamp
         transform.header.frame_id = target_to_parent.header.frame_id
@@ -311,20 +361,24 @@ class VelodynePointcloudTfFallback(Node):
 
     @staticmethod
     def _translation_from_transform(transform: TransformStamped):
+        """Return transform translation as a numpy vector."""
         translation = transform.transform.translation
         return np.array([translation.x, translation.y, translation.z])
 
     @staticmethod
     def _quaternion_from_transform(transform: TransformStamped):
+        """Return transform rotation as [x, y, z, w]."""
         rotation = transform.transform.rotation
         return [rotation.x, rotation.y, rotation.z, rotation.w]
 
     @staticmethod
     def _normalize_frame(frame_id):
+        """Treat '/frame' and 'frame' as the same ROS frame name."""
         return frame_id.lstrip("/") if frame_id else frame_id
 
 
 def main():
+    """Start the ROS node and spin until shutdown."""
     rclpy.init()
     node = VelodynePointcloudTfFallback()
     try:

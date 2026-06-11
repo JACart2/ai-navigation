@@ -10,15 +10,14 @@ class VelodynePacketDownsampleFilter(Node):
     def __init__(self):
         super().__init__("velodyne_packet_downsample_filter")
 
+        # ROS topic to subscribe to for raw Velodyne packet scans.
         self.declare_parameter("input_topic", "/velodyne_packets")
+        # ROS topic to publish the filtered Velodyne packet scans on.
         self.declare_parameter("output_topic", "/velodyne_packets_filtered")
-        self.declare_parameter("packet_stride", 2)
-        self.declare_parameter("packet_downscale_factor", 1.0)
+        # Keep one packet every N packets. A value of 1 disables downsampling.
+        self.declare_parameter("packet_stride", 1)
 
         self.packet_stride = max(1, int(self.get_parameter("packet_stride").value))
-        self.packet_downscale_factor = max(
-            1.0, float(self.get_parameter("packet_downscale_factor").value)
-        )
 
         qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         self.publisher = self.create_publisher(
@@ -32,12 +31,11 @@ class VelodynePacketDownsampleFilter(Node):
         )
 
         self.get_logger().info(
-            f"Filtering Velodyne packets with "
-            f"packet_downscale_factor={self.packet_downscale_factor}"
+            f"Filtering Velodyne packets with packet_stride={self.packet_stride}"
         )
 
     def _scan_callback(self, scan: VelodyneScan):
-        if self.packet_downscale_factor <= 1.0 and self.packet_stride <= 1:
+        if self.packet_stride <= 1:
             self.publisher.publish(scan)
             return
 
@@ -47,15 +45,6 @@ class VelodynePacketDownsampleFilter(Node):
         self.publisher.publish(filtered_scan)
 
     def _filter_packets(self, packets):
-        if self.packet_downscale_factor > 1.0:
-            kept_packets = []
-            next_keep_index = 0.0
-            for index, packet in enumerate(packets):
-                if index >= next_keep_index:
-                    kept_packets.append(packet)
-                    next_keep_index += self.packet_downscale_factor
-            return kept_packets
-
         return packets[:: self.packet_stride]
 
 

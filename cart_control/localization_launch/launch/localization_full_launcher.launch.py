@@ -50,7 +50,7 @@ def generate_launch_description():
                 "port": ParameterValue(lidar_port, value_type=int),
                 "frame_id": lidar_frame_id,
                 "model": "VLP16",
-                "rpm": 600.0,
+                "rpm": 650.0,
             },
         ],
     )
@@ -64,7 +64,7 @@ def generate_launch_description():
             {
                 "input_topic": "/velodyne_packets",
                 "output_topic": "/velodyne_packets_filtered",
-                "packet_downscale_factor": 2.0,
+                "packet_stride": 2,
             }
         ],
     )

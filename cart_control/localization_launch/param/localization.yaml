@@ -24,7 +24,7 @@
       initial_pose_qx: 0.0
       initial_pose_qy: 0.0
       initial_pose_qz: 0.0
-      initial_pose_qw: 0.0
+      initial_pose_qw: 1.0
       use_odom: True
       use_imu: false
       enable_debug: true

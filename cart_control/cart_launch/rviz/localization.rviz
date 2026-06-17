@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /PointCloudVelodyne1
         - /RouteGraph1
       Splitter Ratio: 0.5
     Tree Height: 266
@@ -71,7 +72,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /velodyne_points_stable
+        Value: /velodyne_points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -208,7 +209,7 @@ Visualization Manager:
       Enabled: true
       Name: ProjectedPath
       Namespaces:
-        "": true
+        {}
       Topic:
         Depth: 1
         Durability Policy: Volatile
@@ -255,7 +256,7 @@ Visualization Manager:
         Value: /collision_pub
       Value: true
     - Class: rviz_default_plugins/Image
-      Enabled: false
+      Enabled: true
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -267,9 +268,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /zed_front/zed_node_0/rgb/color/rect/image
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/Image
-      Enabled: false
+      Enabled: true
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -281,12 +282,12 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /zed_rear/zed_node_1/rgb/color/rect/image
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: CurrentNavPath
       Namespaces:
-        "": true
+        {}
       Topic:
         Depth: 1
         Durability Policy: Volatile

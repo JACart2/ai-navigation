@@ -24,7 +24,20 @@ def _load_cart_config(context, *args, **kwargs):
       base_link -> velodyne = 0.5, 0.0, 1.75, 0, 0, 0
     """
 
-    cart_config_path = LaunchConfiguration("cart_config_path").perform(context)
+    cart_name = LaunchConfiguration("cart_name").perform(context).strip().lower()
+    cart_config_path = LaunchConfiguration("cart_config_path").perform(context).strip()
+
+    if not cart_config_path:
+        if cart_name not in ("james", "madison"):
+            raise RuntimeError(
+                f"Invalid cart_name '{cart_name}'. Expected 'james' or 'madison'."
+            )
+
+        cart_config_path = os.path.join(
+            get_package_share_directory("cart_launch"),
+            "config",
+            f"cart_{cart_name}.yaml",
+        )
 
     lidar_topic_name = LaunchConfiguration("lidar_topic_name").perform(context)
     lidar_topic_type = LaunchConfiguration("lidar_topic_type").perform(context)
@@ -38,9 +51,6 @@ def _load_cart_config(context, *args, **kwargs):
     default_lidar_roll = LaunchConfiguration("lidar_roll").perform(context)
     default_base_frame = LaunchConfiguration("base_frame").perform(context)
     default_lidar_frame = LaunchConfiguration("lidar_frame").perform(context)
-
-    if not cart_config_path:
-        raise RuntimeError("Required launch argument 'cart_config_path' is empty")
 
     with open(cart_config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
@@ -137,13 +147,15 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument(
+                "cart_name",
+                default_value="james",
+                choices=["james", "madison"],
+                description="Cart name used to auto-select cart_james.yaml or cart_madison.yaml.",
+            ),
+            DeclareLaunchArgument(
                 "cart_config_path",
-                default_value=os.path.join(
-                    get_package_share_directory("cart_launch"),
-                    "config",
-                    "cart_james.yaml",
-                ),
-                description="Path to cart-specific YAML config.",
+                default_value="",
+                description="Optional explicit path to cart-specific YAML config. Overrides cart_name when set.",
             ),
             DeclareLaunchArgument(
                 "lidar_topic_name",

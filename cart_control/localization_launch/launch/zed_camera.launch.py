@@ -55,6 +55,24 @@ def parse_array_param(param):
     return arr
 
 
+def as_bool(value):
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def as_int(value, default=0):
+    value = str(value).strip()
+    if value == '':
+        return default
+    return int(value)
+
+
+def as_float(value, default=0.0):
+    value = str(value).strip()
+    if value == '':
+        return default
+    return float(value)
+
+
 def launch_setup(context, *args, **kwargs):
     # Launch configuration variables
     svo_path = LaunchConfiguration('svo_path')
@@ -78,6 +96,7 @@ def launch_setup(context, *args, **kwargs):
     publish_tf = LaunchConfiguration('publish_tf')
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     publish_imu_tf = LaunchConfiguration('publish_imu_tf')
+    transform_time_offset = LaunchConfiguration('transform_time_offset')
     xacro_path = LaunchConfiguration('xacro_path')
 
     ros_params_override_path = LaunchConfiguration('ros_params_override_path')
@@ -89,6 +108,16 @@ def launch_setup(context, *args, **kwargs):
 
     camera_name_val = camera_name.perform(context)
     camera_model_val = camera_model.perform(context)
+    use_sim_time_val = as_bool(use_sim_time.perform(context))
+    sim_mode_val = as_bool(sim_mode.perform(context))
+    sim_address_val = sim_address.perform(context)
+    sim_port_val = as_int(sim_port.perform(context), 30000)
+    serial_number_val = as_int(serial_number.perform(context), 0)
+    camera_id_val = as_int(camera_id.perform(context), -1)
+    publish_tf_val = as_bool(publish_tf.perform(context))
+    publish_map_tf_val = as_bool(publish_map_tf.perform(context))
+    publish_imu_tf_val = as_bool(publish_imu_tf.perform(context))
+    transform_time_offset_val = as_float(transform_time_offset.perform(context), 0.0)
 
     if (camera_name_val == ''):
         camera_name_val = 'zed'
@@ -134,19 +163,24 @@ def launch_setup(context, *args, **kwargs):
             config_common_path,
             config_camera_path,
             {
-                'use_sim_time': use_sim_time,
-                'simulation.sim_enabled': sim_mode,
-                'simulation.sim_address': sim_address,
-                'simulation.sim_port': sim_port,
+                'use_sim_time': use_sim_time_val,
+                'simulation.sim_enabled': sim_mode_val,
+                'simulation.sim_address': sim_address_val,
+                'simulation.sim_port': sim_port_val,
                 'general.camera_name': camera_name_val,
                 'general.camera_model': camera_model_val,
                 'general.camera_flip': True,
+                'general.pub_frame_rate': 15.0,
                 'general.svo_file': svo_path,
-                'general.serial_number': serial_number,
-                'general.camera_id': camera_id,
-                'pos_tracking.publish_tf': publish_tf,
-                'pos_tracking.publish_map_tf': publish_map_tf,
-                'sensors.publish_imu_tf': publish_imu_tf,
+                'general.serial_number': serial_number_val,
+                'general.camera_id': camera_id_val,
+                'depth.depth_mode': 'PERFORMANCE',
+                'depth.point_cloud_freq': 15.0,
+                'depth.point_cloud_res': 'REDUCED',
+                'pos_tracking.publish_tf': publish_tf_val,
+                'pos_tracking.publish_map_tf': publish_map_tf_val,
+                'pos_tracking.transform_time_offset': transform_time_offset_val,
+                'sensors.publish_imu_tf': publish_imu_tf_val,
             },
             *extra_param_files,
         ],
@@ -210,6 +244,10 @@ def generate_launch_description():
                 default_value='true',
                 description='Enable publication of the `map -> odom` TF. Note: Ignored if `publish_tf` is False.',
                 choices=['true', 'false']),
+            DeclareLaunchArgument(
+                'transform_time_offset',
+                default_value='0.15',
+                description='Time offset added to ZED TF timestamps.'),
             DeclareLaunchArgument(
                 'publish_imu_tf',
                 default_value='true',

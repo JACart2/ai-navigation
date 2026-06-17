@@ -9,6 +9,14 @@ import os
 import yaml
 
 
+def _as_bool(value, default=True):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in ("0", "false", "no", "off")
+
+
 def generate_launch_description():
     cart_config_path = LaunchConfiguration("cart_config_path")
 
@@ -29,11 +37,21 @@ def generate_launch_description():
 
         zed_front_serial = str(cfg.get("zed_front_serial", "")).strip()
         zed_rear_serial = str(cfg.get("zed_rear_serial", "")).strip()
+        zed_rear_enabled = _as_bool(cfg.get("zed_rear_enabled"), default=True)
 
-        if not zed_front_serial or not zed_rear_serial:
+        if not zed_front_serial or (zed_rear_enabled and not zed_rear_serial):
             raise RuntimeError(
-                "cart_config_path YAML must define non-empty 'zed_front_serial' and 'zed_rear_serial'"
+                "cart_config_path YAML must define non-empty 'zed_front_serial'"
+                " and, when zed_rear_enabled is true, 'zed_rear_serial'"
             )
+
+        cam_names = "[zed_front]"
+        cam_models = "[zed2i]"
+        cam_serials = f"[{zed_front_serial}]"
+        if zed_rear_enabled:
+            cam_names = "[zed_front, zed_rear]"
+            cam_models = "[zed2i, zed2i]"
+            cam_serials = f"[{zed_front_serial}, {zed_rear_serial}]"
 
         # Include the zed_multi_camera launch file
         return [
@@ -41,17 +59,18 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource([zed_multi_camera_launch_path]),
                 # Pass launch arguments for cameras, models, serials, and TF configuration
                 launch_arguments={
-                    "cam_names": "[zed_front, zed_rear]",  # Names of the cameras
-                    "cam_models": "[zed2i, zed2i]",  # Models of the cameras
-                    "cam_serials": f"[{zed_front_serial}, {zed_rear_serial}]",  # Serial numbers of the cameras
-                    "disable_tf": "False",  # Enable TF broadcasting
+                    "cam_names": cam_names,  # Names of the cameras
+                    "cam_models": cam_models,  # Models of the cameras
+                    "cam_serials": cam_serials,  # Serial numbers of the cameras
+                    # Kept for compatibility; zed_multi_camera disables dynamic ZED TF.
+                    "disable_tf": "False",
                 }.items(),
             )
         ]
 
     zed_multi_camera_launch = OpaqueFunction(function=_include_zed_multi_camera)
 
-    # Static transform for the reference link (zed_multi_link) to base_link
+    # Static transform from the cart base to the front camera tracking frame.
     multi_link_tf = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -64,7 +83,7 @@ def generate_launch_description():
             "0.0",  # Pitch (rotation around Y-axis)
             "0.0",  # Yaw (rotation around Z-axis)
             "base_link",  # Parent frame (golf cart base)
-            "zed_front_camera_link",  # Child frame (reference link for cameras)
+            "zed_front_camera_link",  # Child frame (front camera tracking frame)
         ],
         output="screen",
     )

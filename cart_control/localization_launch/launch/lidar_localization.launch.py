@@ -9,34 +9,28 @@ import launch_ros.actions
 import launch_ros.events
 
 from launch import LaunchDescription
-from launch_ros.actions import LifecycleNode
-from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.substitutions import LaunchConfiguration
 
 import lifecycle_msgs.msg
 
 from ament_index_python.packages import get_package_share_directory
-from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
+    ld = LaunchDescription()
 
-    ld = launch.LaunchDescription()
+    cloud_topic = LaunchConfiguration("cloud_topic")
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
     lidar_tf = launch_ros.actions.Node(
         name="lidar_tf",
         package="tf2_ros",
         executable="static_transform_publisher",
         arguments=["1", "0", "1.9", "0", "0", "0", "1", "base_link", "velodyne"],
+        parameters=[{"use_sim_time": use_sim_time}],
     )
 
-    imu_tf = launch_ros.actions.Node(
-        name="imu_tf",
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments=["0", "0", "0", "0", "0", "0", "1", "base_link", "imu_link"],
-    )
-
-    # Set the default path directly to the specific YAML file location
     localization_param_dir = LaunchConfiguration(
         "localization_param_dir",
         default=os.path.join(
@@ -51,11 +45,22 @@ def generate_launch_description():
         namespace="",
         package="lidar_localization_ros2",
         executable="lidar_localization_node",
-        parameters=[localization_param_dir],
+        parameters=[
+            localization_param_dir,
+            {
+                "score_threshold": 10.0,
+                "global_frame_id": "map",
+                "base_frame_id": "base_link",
+                "enable_timer_publishing": True,
+                "pose_publish_frequency": 30.0,
+                "max_twist_prediction_dt": 0.35,
+                "cloud_queue_depth": 5,
+                "cloud_qos_reliability": "best_effort",
+                "use_sim_time": use_sim_time,
+            },
+        ],
         remappings=[
-            ("/cloud", "/velodyne_points"),
-            ("/odom", "/zed_front/zed_node_0/odom"),
-            ("/imu", "/zed/zed_node/imu/data"),
+            ("/cloud", cloud_topic),
         ],
         output="screen",
     )
@@ -104,11 +109,25 @@ def generate_launch_description():
         )
     )
 
+    ld.add_action(
+        DeclareLaunchArgument(
+            "cloud_topic",
+            default_value="/velodyne_points_stable",
+            description="Stabilized PointCloud2 topic published by the Velodyne TF fallback node.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            "use_sim_time",
+            default_value="false",
+            description="Use simulated clock (set true when replaying a bag with --clock).",
+        )
+    )
     ld.add_action(from_unconfigured_to_inactive)
     ld.add_action(from_inactive_to_active)
 
     ld.add_action(lidar_localization)
     ld.add_action(lidar_tf)
-    ld.add_action(to_inactive)
+    ld.add_action(TimerAction(period=3.0, actions=[to_inactive]))
 
     return ld

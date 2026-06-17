@@ -1,3 +1,16 @@
+"""
+Localization pipeline that feeds /velodyne_points directly into NDT localization,
+bypassing the packet downsample filter and the TF fallback node.
+
+Usage (real sensors):
+  ros2 launch localization_launch localization_direct_launcher.launch.py \
+    cart_config_path:=/path/to/cart.yaml
+
+Usage (bag file):
+  ros2 launch localization_launch localization_direct_launcher.launch.py \
+    bag_file:=/path/to/bag.mcap
+"""
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.conditions import IfCondition, UnlessCondition
@@ -17,7 +30,7 @@ def generate_launch_description():
     lidar_frame_id = LaunchConfiguration("lidar_frame_id")
     bag_file = LaunchConfiguration("bag_file")
 
-    bag_mode = PythonExpression(["'", bag_file, "' != ''"])
+    bag_mode = PythonExpression(["'true' if '", bag_file, "' != '' else 'false'"])
 
     velodyne_driver_params = os.path.join(
         get_package_share_directory("velodyne_driver"),
@@ -40,7 +53,6 @@ def generate_launch_description():
     velodyne_transform_params["max_range"] = 90.0
     velodyne_transform_params["organize_cloud"] = False
 
-    # Start the VLP16 driver with the upstream defaults, then override cart-specific connection settings.
     velodyne_driver_node = Node(
         package="velodyne_driver",
         executable="velodyne_driver_node",
@@ -54,7 +66,7 @@ def generate_launch_description():
                 "port": ParameterValue(lidar_port, value_type=int),
                 "frame_id": lidar_frame_id,
                 "model": "VLP16",
-                "rpm": 650.0,
+                "rpm": 600.0,
             },
         ],
     )
@@ -69,57 +81,13 @@ def generate_launch_description():
         output="screen",
     )
 
-    velodyne_packet_downsample_filter_node = Node(
-        package="localization_launch",
-        executable="velodyne_packet_downsample_filter",
-        name="velodyne_packet_downsample_filter",
-        output="screen",
-        parameters=[
-            {
-                "input_topic": "/velodyne_packets",
-                "output_topic": "/velodyne_packets_filtered",
-                "packet_stride": 2,
-                "use_sim_time": bag_mode,
-            }
-        ],
-    )
-
+    # Convert packets directly to PointCloud2 with no downsampling.
     velodyne_transform_node = Node(
         package="velodyne_pointcloud",
         executable="velodyne_transform_node",
         name="velodyne_transform_node",
         output="both",
         parameters=[velodyne_transform_params, {"use_sim_time": bag_mode}],
-        remappings=[
-            ("/velodyne_packets", "/velodyne_packets_filtered"),
-        ],
-    )
-
-    velodyne_pointcloud_tf_fallback_node = Node(
-        package="localization_launch",
-        executable="velodyne_pointcloud_tf_fallback",
-        name="velodyne_pointcloud_tf_fallback",
-        output="screen",
-        parameters=[
-            {
-                "input_topic": "/velodyne_points",
-                "output_topic": "/velodyne_points_stable",
-                "target_frame": "map",
-                "parent_frame": "base_link",
-                "child_frame": "velodyne",
-                "x": 1.0,
-                "y": 0.0,
-                "z": 1.9,
-                "roll": 0.0,
-                "pitch": 0.0,
-                "yaw": 0.0,
-                "lookup_timeout_s": 0.005,
-                "prefer_fallback_lidar_tf": True,
-                "republish_original_if_possible": True,
-                "downsample_stride": 1,
-                "use_sim_time": bag_mode,
-            }
-        ],
     )
 
     lidar_localization_launch_path = os.path.join(
@@ -127,9 +95,14 @@ def generate_launch_description():
         "launch",
         "lidar_localization.launch.py",
     )
+    # Feed /velodyne_points directly; lidar_localization's default cloud_topic is
+    # /velodyne_points_stable, so we override it here.
     lidar_localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([lidar_localization_launch_path]),
-        launch_arguments={"use_sim_time": bag_mode}.items(),
+        launch_arguments={
+            "cloud_topic": "/velodyne_points",
+            "use_sim_time": bag_mode,
+        }.items(),
     )
 
     cameras_launch_path = os.path.join(
@@ -180,9 +153,7 @@ def generate_launch_description():
             ),
             bag_play,
             velodyne_driver_node,
-            velodyne_packet_downsample_filter_node,
             velodyne_transform_node,
-            velodyne_pointcloud_tf_fallback_node,
             lidar_localization_launch,
             cameras_launch,
         ]

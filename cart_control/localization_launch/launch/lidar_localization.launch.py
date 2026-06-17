@@ -21,12 +21,14 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     cloud_topic = LaunchConfiguration("cloud_topic")
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
     lidar_tf = launch_ros.actions.Node(
         name="lidar_tf",
         package="tf2_ros",
         executable="static_transform_publisher",
         arguments=["1", "0", "1.9", "0", "0", "0", "1", "base_link", "velodyne"],
+        parameters=[{"use_sim_time": use_sim_time}],
     )
 
     localization_param_dir = LaunchConfiguration(
@@ -54,6 +56,7 @@ def generate_launch_description():
                 "max_twist_prediction_dt": 0.35,
                 "cloud_queue_depth": 5,
                 "cloud_qos_reliability": "best_effort",
+                "use_sim_time": use_sim_time,
             },
         ],
         remappings=[
@@ -111,6 +114,13 @@ def generate_launch_description():
             "cloud_topic",
             default_value="/velodyne_points_stable",
             description="Stabilized PointCloud2 topic published by the Velodyne TF fallback node.",
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            "use_sim_time",
+            default_value="false",
+            description="Use simulated clock (set true when replaying a bag with --clock).",
         )
     )
     ld.add_action(from_unconfigured_to_inactive)

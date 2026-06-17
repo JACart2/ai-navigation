@@ -1,2 +1,16 @@
 zed_front_serial: 37963597
 zed_rear_serial: 31061594
+
+# Velodyne network/settings for James.
+# To test a different spin rate, change rpm here, for example 650.0.
+velodyne:
+  model: "VLP16"
+  rpm: 600.0
+  device_ip: "192.168.1.201"
+  port: 2368
+  frame_id: "velodyne"
+
+# lidar_tf is intentionally not set here yet.
+# Reason: James and Madison may have different physical LiDAR mounting.
+# Until verified per-cart, mola_sensor_bringup.launch.py will use the existing
+# MOLA/default transform: x=0.5, y=0.0, z=1.75.

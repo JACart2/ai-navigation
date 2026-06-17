@@ -1,31 +1,67 @@
 import os
+import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
-def generate_launch_description():
+def _as_str(value):
+    return str(value)
+
+
+def _load_cart_config(context, *args, **kwargs):
     """
-    Safe bringup for Velodyne LiDAR + MOLA odometry/visualization only.
+    Cart-aware MOLA sensor bringup.
 
-    This launch file starts the existing Velodyne point cloud pipeline and then
-    starts the existing MOLA odometry wrapper. It does not enable mapping,
-    simplemap generation, cameras, old lidar_localization, navigation, or any
-    TF ownership changes.
+    Reads Velodyne network/settings from cart_config_path.
+
+    If the YAML later contains a verified lidar_tf block, this launch file will
+    use it. Otherwise it preserves the existing MOLA/default static transform:
+      base_link -> velodyne = 0.5, 0.0, 1.75, 0, 0, 0
     """
 
-    lidar_topic_name = LaunchConfiguration("lidar_topic_name")
-    lidar_topic_type = LaunchConfiguration("lidar_topic_type")
-    start_active = LaunchConfiguration("start_active")
+    cart_config_path = LaunchConfiguration("cart_config_path").perform(context)
 
-    model = LaunchConfiguration("model")
-    rpm = LaunchConfiguration("rpm")
-    device_ip = LaunchConfiguration("device_ip")
-    port = LaunchConfiguration("port")
-    frame_id = LaunchConfiguration("frame_id")
+    lidar_topic_name = LaunchConfiguration("lidar_topic_name").perform(context)
+    lidar_topic_type = LaunchConfiguration("lidar_topic_type").perform(context)
+    start_active = LaunchConfiguration("start_active").perform(context)
+
+    default_lidar_x = LaunchConfiguration("lidar_x").perform(context)
+    default_lidar_y = LaunchConfiguration("lidar_y").perform(context)
+    default_lidar_z = LaunchConfiguration("lidar_z").perform(context)
+    default_lidar_yaw = LaunchConfiguration("lidar_yaw").perform(context)
+    default_lidar_pitch = LaunchConfiguration("lidar_pitch").perform(context)
+    default_lidar_roll = LaunchConfiguration("lidar_roll").perform(context)
+    default_base_frame = LaunchConfiguration("base_frame").perform(context)
+    default_lidar_frame = LaunchConfiguration("lidar_frame").perform(context)
+
+    if not cart_config_path:
+        raise RuntimeError("Required launch argument 'cart_config_path' is empty")
+
+    with open(cart_config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
+
+    velodyne = cfg.get("velodyne", {})
+    lidar_tf = cfg.get("lidar_tf", {})
+
+    model = _as_str(velodyne.get("model", "VLP16"))
+    rpm = _as_str(velodyne.get("rpm", 600.0))
+    device_ip = _as_str(velodyne.get("device_ip", "192.168.1.201"))
+    port = _as_str(velodyne.get("port", 2368))
+    frame_id = _as_str(velodyne.get("frame_id", default_lidar_frame))
+
+    parent_frame = _as_str(lidar_tf.get("parent_frame", default_base_frame))
+    child_frame = _as_str(lidar_tf.get("child_frame", frame_id))
+    x = _as_str(lidar_tf.get("x", default_lidar_x))
+    y = _as_str(lidar_tf.get("y", default_lidar_y))
+    z = _as_str(lidar_tf.get("z", default_lidar_z))
+    yaw = _as_str(lidar_tf.get("yaw", default_lidar_yaw))
+    pitch = _as_str(lidar_tf.get("pitch", default_lidar_pitch))
+    roll = _as_str(lidar_tf.get("roll", default_lidar_roll))
 
     localization_launch_share = get_package_share_directory("localization_launch")
 
@@ -34,10 +70,28 @@ def generate_launch_description():
         "launch",
         "velodyne_only.launch.py",
     )
+
     mola_lidar_odometry_launch_path = os.path.join(
         localization_launch_share,
         "launch",
         "mola_lidar_odometry.launch.py",
+    )
+
+    base_link_to_velodyne_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_link_to_velodyne_tf",
+        arguments=[
+            x,
+            y,
+            z,
+            yaw,
+            pitch,
+            roll,
+            parent_frame,
+            child_frame,
+        ],
+        output="screen",
     )
 
     velodyne_only_launch = IncludeLaunchDescription(
@@ -60,8 +114,37 @@ def generate_launch_description():
         }.items(),
     )
 
+    return [
+        base_link_to_velodyne_tf,
+        velodyne_only_launch,
+        mola_lidar_odometry_launch,
+    ]
+
+
+def generate_launch_description():
+    """
+    Safe MOLA bringup for Velodyne LiDAR + MOLA odometry.
+
+    This launch file does not start:
+    - old lidar_localization
+    - pcl_pose_relay
+    - cameras
+    - navigation
+    - motor control
+    - mapping/simplemap saving
+    """
+
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "cart_config_path",
+                default_value=os.path.join(
+                    get_package_share_directory("cart_launch"),
+                    "config",
+                    "cart_james.yaml",
+                ),
+                description="Path to cart-specific YAML config.",
+            ),
             DeclareLaunchArgument(
                 "lidar_topic_name",
                 default_value="/velodyne_points",
@@ -77,32 +160,18 @@ def generate_launch_description():
                 default_value="True",
                 description="Start MOLA odometry active by default.",
             ),
-            DeclareLaunchArgument(
-                "model",
-                default_value="VLP16",
-                description="Velodyne model forwarded to velodyne_only.launch.py.",
-            ),
-            DeclareLaunchArgument(
-                "rpm",
-                default_value="600.0",
-                description="Velodyne spin rate in RPM.",
-            ),
-            DeclareLaunchArgument(
-                "device_ip",
-                default_value="192.168.1.201",
-                description="Velodyne sensor IP address.",
-            ),
-            DeclareLaunchArgument(
-                "port",
-                default_value="2368",
-                description="Velodyne UDP data port.",
-            ),
-            DeclareLaunchArgument(
-                "frame_id",
-                default_value="velodyne",
-                description="TF frame for outgoing Velodyne packets.",
-            ),
-            velodyne_only_launch,
-            mola_lidar_odometry_launch,
+
+            # Existing safe/default base_link -> velodyne transform.
+            # Do not treat as final per-cart measurement.
+            DeclareLaunchArgument("lidar_x", default_value="0.5"),
+            DeclareLaunchArgument("lidar_y", default_value="0.0"),
+            DeclareLaunchArgument("lidar_z", default_value="1.75"),
+            DeclareLaunchArgument("lidar_yaw", default_value="0.0"),
+            DeclareLaunchArgument("lidar_pitch", default_value="0.0"),
+            DeclareLaunchArgument("lidar_roll", default_value="0.0"),
+            DeclareLaunchArgument("base_frame", default_value="base_link"),
+            DeclareLaunchArgument("lidar_frame", default_value="velodyne"),
+
+            OpaqueFunction(function=_load_cart_config),
         ]
     )

@@ -10,7 +10,12 @@ velodyne:
   port: 2368
   frame_id: "velodyne"
 
-# lidar_tf is intentionally not set here yet.
-# Reason: James and Madison may have different physical LiDAR mounting.
-# Until verified per-cart, mola_sensor_bringup.launch.py will use the existing
-# MOLA/default transform: x=0.5, y=0.0, z=1.75.
+lidar_tf:
+  parent_frame: "base_link"
+  child_frame: "velodyne"
+  x: 1.524
+  y: 0.0254
+  z: 1.778
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0

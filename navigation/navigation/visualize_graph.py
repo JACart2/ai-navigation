@@ -6,6 +6,9 @@ Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
 # Python based imports
 import networkx as nx
+import os
+import navigation.simple_gps_util as simple_gps_util
+from ament_index_python.packages import get_package_share_directory
 
 import rclpy
 import rclpy.qos
@@ -21,7 +24,18 @@ class GraphVisual(rclpy.node.Node):
         super().__init__("visualize_graph")
 
         self.declare_parameter(
-            "graph_file", "./src/ai-navigation/navigation/maps/main_shift3.gml"
+            "graph_dir",
+            "/root/dev_ws/src/ai-navigation/navigation/maps",
+        )
+        self.declare_parameter("graph_file", "main_shift3.gml")
+        self.declare_parameter("graph_coordinate_format", "ros")
+        self.declare_parameter(
+            "calibration_config_dir",
+            "/maps",
+        )
+        self.declare_parameter(
+            "calibration_config_file",
+            "SpeedBoiMap.yaml",
         )
 
         latching_qos = rclpy.qos.QoSProfile(
@@ -29,8 +43,33 @@ class GraphVisual(rclpy.node.Node):
         )
         self.global_graph = nx.DiGraph()
 
-        file_name = self.get_parameter("graph_file").get_parameter_value().string_value
-        self.load_file(file_name)
+        graph_path = simple_gps_util.resolve_graph_path(
+            self.get_parameter("graph_dir").get_parameter_value().string_value,
+            self.get_parameter("graph_file").get_parameter_value().string_value,
+        )
+        graph_coordinate_format = self.get_parameter(
+            "graph_coordinate_format"
+        ).get_parameter_value().string_value
+        calibration_config_path = simple_gps_util.resolve_config_path(
+            self.get_parameter("calibration_config_dir").get_parameter_value().string_value,
+            self.get_parameter("calibration_config_file").get_parameter_value().string_value,
+        )
+        calibration_local, calibration_gps = simple_gps_util.load_landmark_calibration(
+            calibration_config_path
+        )
+        (
+            self.ref_lat,
+            self.ref_lon,
+            self.cx_local,
+            self.cy_local,
+            self.cx_gps,
+            self.cy_gps,
+            self.calibration_theta,
+        ) = simple_gps_util.calibrate_with_landmarks(
+            calibration_local,
+            calibration_gps,
+        )
+        self.load_file(graph_path, graph_coordinate_format)
 
         self.visual_pub = self.create_publisher(
             MarkerArray, "/graph_visual", qos_profile=latching_qos
@@ -110,7 +149,7 @@ class GraphVisual(rclpy.node.Node):
         self.visual_pub.publish(marker_array)
         self.destroy_timer(self.timer)
 
-    def load_file(self, file_name):
+    def load_file(self, file_name, graph_coordinate_format="ros"):
         """Loads a file and sets all nodes to active(allowed to take part in pathfinding).
 
         Args:
@@ -120,6 +159,17 @@ class GraphVisual(rclpy.node.Node):
 
         try:
             self.global_graph = nx.read_gml(file_name)
+            self.global_graph = simple_gps_util.convert_graph_to_local(
+                self.global_graph,
+                graph_coordinate_format,
+                self.ref_lat,
+                self.ref_lon,
+                self.cx_local,
+                self.cy_local,
+                self.cx_gps,
+                self.cy_gps,
+                self.calibration_theta,
+            )
 
             for node in self.global_graph:
                 self.global_graph.nodes[node]["active"] = True

@@ -1,11 +1,110 @@
 #!/usr/bin/env python
 import math
-import numpy
-from geometry_msgs.msg import Point
+import os
+import numpy as np
+import yaml
 
 """
 This file is a modified version of the AlvinXY method produced by WHOI
+Modified by Joshua Sun in Spring 2026.
 """
+
+
+def resolve_config_path(config_dir, config_file):
+    """Build an absolute config path from a directory and file name."""
+    if not config_dir:
+        raise ValueError("Calibration config directory must not be empty")
+    if not config_file:
+        raise ValueError("Calibration config file name must not be empty")
+    return os.path.abspath(os.path.join(config_dir, config_file))
+
+
+def resolve_graph_path(graph_dir, graph_file):
+    """Build an absolute graph path from a directory and file name."""
+    if not graph_file:
+        raise ValueError("Graph file name must not be empty")
+    if os.path.isabs(graph_file):
+        return graph_file
+    if not graph_dir:
+        raise ValueError("Graph directory must not be empty")
+    return os.path.abspath(os.path.join(graph_dir, graph_file))
+
+
+def load_landmark_calibration(config_path):
+    """Load landmark calibration pairs from a YAML config file."""
+    with open(config_path, "r", encoding="utf-8") as config_stream:
+        config = yaml.safe_load(config_stream) or {}
+
+    landmarks = config.get("landmarks")
+    if not isinstance(landmarks, list) or len(landmarks) < 2:
+        raise ValueError(
+            f"Calibration config '{config_path}' must define at least 2 landmarks"
+        )
+
+    local_points = []
+    gps_points = []
+
+    for index, landmark in enumerate(landmarks):
+        try:
+            local = landmark["local"]
+            gps = landmark["gps"]
+            local_points.append((float(local["x"]), float(local["y"])))
+            gps_points.append((float(gps["latitude"]), float(gps["longitude"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid landmark entry at index {index} in '{config_path}'"
+            ) from exc
+
+    return local_points, gps_points
+
+
+def convert_graph_to_local(
+    graph,
+    graph_coordinate_format,
+    ref_lat,
+    ref_lon,
+    cx_local,
+    cy_local,
+    cx_gps,
+    cy_gps,
+    theta_degrees,
+):
+    """Ensure graph nodes expose local ROS coordinates in the ``pos`` attribute."""
+    fmt = graph_coordinate_format.lower()
+    if fmt == "ros":
+        for node in graph.nodes:
+            if "pos" not in graph.nodes[node]:
+                raise ValueError(
+                    f"ROS graph node '{node}' is missing required 'pos' coordinates"
+                )
+        return graph
+
+    if fmt != "gps":
+        raise ValueError(
+            f"Unsupported graph coordinate format '{graph_coordinate_format}'"
+        )
+
+    for node in graph.nodes:
+        node_data = graph.nodes[node]
+        if "lat" not in node_data or "lon" not in node_data:
+            raise ValueError(
+                f"GPS graph node '{node}' is missing 'lat'/'lon' coordinates"
+            )
+
+        local_x, local_y = gps_to_local(
+            node_data["lat"],
+            node_data["lon"],
+            ref_lat,
+            ref_lon,
+            cx_local,
+            cy_local,
+            cx_gps,
+            cy_gps,
+            theta_degrees,
+        )
+        node_data["pos"] = [local_x, local_y]
+
+    return graph
 
 
 def latlon2xy(lat, lon, lat0, lon0):
@@ -39,75 +138,154 @@ def mdeglat(lat0):
     )
 
 
-def heading_correction(origin_x, origin_y, angle, point):
-    """The map is not always oriented the same, this is to correct the map
-    heading by a certain number of degrees
+def calibrate_with_landmarks(test_points_local, test_points_gps):
+    """Calibrate GPS transformation using a cloud of landmark points without a fixed anchor.
+
+    Uses Procrustes analysis to find the optimal rotation and translation that maps
+    the local ROS coordinates to GPS coordinates.
 
     Args:
-        origin_x: Origin pos x of the map typically 0
-        origin_y: Origin pos y of the map typically 0
-        angle (degrees): Adjust the heading of the point
-        point (Point message): The point to correct by the angle around the origin
+        test_points_local: List of (x, y) tuples in local ROS frame
+        test_points_gps: List of (lat, lon) tuples for the same points in GPS frame
+
+    Returns:
+        Tuple: (ref_lat, ref_lon, cx_local, cy_local, cx_gps, cy_gps, theta_degrees)
+        - ref_lat, ref_lon: Reference point for lat/lon to meter conversions
+        - cx_local, cy_local: Centroid of local points
+        - cx_gps, cy_gps: Centroid of GPS points in meters
+        - theta_degrees: Rotation angle in degrees
     """
-    sin_ang = math.sin(math.radians(angle))
-    cos_ang = math.cos(math.radians(angle))
+    if len(test_points_local) != len(test_points_gps):
+        raise ValueError("test_points_local and test_points_gps must have the same length")
+    if len(test_points_local) < 2:
+        raise ValueError("At least 2 landmark points are required for calibration")
 
-    # Translate point to origin before rotation
-    point.x -= origin_x
-    point.y -= origin_y
+    # Use centroid of GPS points as reference for lat/lon conversions
+    ref_lat = sum(lat for lat, lon in test_points_gps) / len(test_points_gps)
+    ref_lon = sum(lon for lat, lon in test_points_gps) / len(test_points_gps)
 
-    # Rotate the point
-    new_x = point.x * cos_ang - point.y * sin_ang
-    new_y = point.x * sin_ang + point.y * cos_ang
+    # Convert all GPS points to meters relative to reference
+    gps_meters = []
+    for lat, lon in test_points_gps:
+        x, y = latlon2xy(lat, lon, ref_lat, ref_lon)
+        gps_meters.append((x, y))
 
-    # Reproject point back out
-    point.x = new_x + origin_x
-    point.y = new_y + origin_y
+    # Compute centroids
+    cx_local = sum(x for x, y in test_points_local) / len(test_points_local)
+    cy_local = sum(y for x, y in test_points_local) / len(test_points_local)
+    cx_gps = sum(x for x, y in gps_meters) / len(gps_meters)
+    cy_gps = sum(y for x, y in gps_meters) / len(gps_meters)
 
-    return point
+    # Center the points
+    local_centered = np.array([(x - cx_local, y - cy_local) for x, y in test_points_local])
+    gps_centered = np.array([(x - cx_gps, y - cy_gps) for x, y in gps_meters])
+
+    # Procrustes analysis: find rotation R such that local_centered ≈ gps_centered @ R
+    # Actually, we want local = R @ gps + T, so R such that local_centered ≈ R @ gps_centered
+    H = gps_centered.T @ local_centered  # Note: gps first for the orientation
+    U, s, Vt = np.linalg.svd(H)
+    R = Vt.T @ U.T
+
+    # Ensure it's a rotation (det >= 0)
+    if np.linalg.det(R) < 0:
+        Vt[-1] *= -1
+        R = Vt.T @ U.T
+
+    # Extract rotation angle
+    theta_degrees = math.degrees(math.atan2(R[1, 0], R[0, 0]))
+
+    return ref_lat, ref_lon, cx_local, cy_local, cx_gps, cy_gps, theta_degrees
 
 
-def calibrate_util(test_point_local, map_origin_local, test_point_gps, map_origin_gps):
-    """A calibration utility for finding the optimal heading angle for use.
+def gps_to_local(lat, lon, ref_lat, ref_lon, cx_local, cy_local, cx_gps, cy_gps, theta_degrees):
+    """Convert GPS coordinates to local ROS coordinates using landmark-based calibration.
 
     Args:
-        test_point_local: Selected test point tuple in X, Y
-        map_origin_local: The PCD map's origin tuple in X, Y
-        test_point_gps: The same selected test point tuple but in Latitude, Longitude tuple
-        map_origin_gps: The same map origin but a Latitude, Longitude tuple
+        lat, lon: GPS coordinates
+        ref_lat, ref_lon: Reference point for conversions
+        cx_local, cy_local: Centroid of local points
+        cx_gps, cy_gps: Centroid of GPS points in meters
+        theta_degrees: Rotation angle
+
+    Returns:
+        (x, y): Local coordinates
     """
-    min_err_angle = 360
-    min_err = 999999
+    # Convert GPS to meters relative to reference
+    x_m, y_m = latlon2xy(lat, lon, ref_lat, ref_lon)
+    
+    # Subtract GPS centroid
+    dx = x_m - cx_gps
+    dy = y_m - cy_gps
+    
+    # Rotate by theta
+    theta_rad = math.radians(theta_degrees)
+    cos_t = math.cos(theta_rad)
+    sin_t = math.sin(theta_rad)
+    rot_dx = dx * cos_t - dy * sin_t
+    rot_dy = dx * sin_t + dy * cos_t
+    
+    # Add local centroid
+    local_x = rot_dx + cx_local
+    local_y = rot_dy + cy_local
+    
+    return local_x, local_y
 
-    # Test point in X, Y
-    point_x, point_y = test_point_local[0], test_point_local[1]
 
-    # Same test point but in GPS coordinates
-    lat_x, lat_y = test_point_gps[0], test_point_gps[1]
+def local_to_gps(x, y, ref_lat, ref_lon, cx_local, cy_local, cx_gps, cy_gps, theta_degrees):
+    """Convert local ROS coordinates to GPS coordinates using landmark-based calibration.
 
-    # Map Origin in X, Y
-    map_x, map_y = map_origin_local[0], map_origin_local[1]
+    Args:
+        x, y: Local coordinates
+        ref_lat, ref_lon: Reference point for conversions
+        cx_local, cy_local: Centroid of local points
+        cx_gps, cy_gps: Centroid of GPS points in meters
+        theta_degrees: Rotation angle
 
-    # Same origin but in Latitude Longitude
-    map_lat, map_lon = map_origin_gps[0], map_origin_gps[1]
+    Returns:
+        (lat, lon): GPS coordinates
+    """
+    # Subtract local centroid
+    dx = x - cx_local
+    dy = y - cy_local
+    
+    # Rotate by -theta
+    theta_rad = math.radians(-theta_degrees)
+    cos_t = math.cos(theta_rad)
+    sin_t = math.sin(theta_rad)
+    rot_dx = dx * cos_t - dy * sin_t
+    rot_dy = dx * sin_t + dy * cos_t
+    
+    # Add GPS centroid
+    x_m = rot_dx + cx_gps
+    y_m = rot_dy + cy_gps
+    
+    # Convert to lat/lon
+    lat, lon = xy2latlon(x_m, y_m, ref_lat, ref_lon)
+    
+    return lat, lon
 
-    # Step degree of 0.1 is arbitrary and is indeed a magic number
-    for angle in numpy.arange(0, 360, 0.1):
-        # Get a fresh point for each heading adjustment
-        local_point = Point()
-        local_x, local_y = latlon2xy(lat_x, lat_y, map_lat, map_lon)
-        local_point.x = local_x
-        local_point.y = local_y
 
-        # Calculate the heading using the step angle and point
-        corrected_point = heading_correction(map_x, map_y, angle, local_point)
+def convert_gml_to_gps_landmarks(input_path, output_path, ref_lat, ref_lon, cx_local, cy_local, cx_gps, cy_gps, theta_degrees):
+    """Convert a GML map file from local ROS coordinates to GPS using landmark-based calibration.
 
-        # Calculate the error this heading gives
-        dist_err = math.sqrt(
-            (corrected_point.x - point_x) ** 2 + (corrected_point.y - point_y) ** 2
-        )
-        if dist_err < min_err:
-            min_err = dist_err
-            min_err_angle = angle
+    Args:
+        input_path: Path to input GML file
+        output_path: Path to output GML file
+        ref_lat, ref_lon, cx_local, cy_local, cx_gps, cy_gps, theta_degrees: Calibration parameters
+    """
+    import networkx as nx
 
-    return min_err_angle
+    graph = nx.read_gml(input_path)
+
+    for node in graph.nodes:
+        pos = graph.nodes[node]["pos"]
+        local_x, local_y = pos[0], pos[1]
+
+        lat, lon = local_to_gps(local_x, local_y, ref_lat, ref_lon, cx_local, cy_local, cx_gps, cy_gps, theta_degrees)
+
+        graph.nodes[node]["lat"] = lat
+        graph.nodes[node]["lon"] = lon
+        del graph.nodes[node]["pos"]
+
+    nx.write_gml(graph, output_path)
+    return graph

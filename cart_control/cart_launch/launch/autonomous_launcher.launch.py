@@ -28,6 +28,11 @@ def generate_launch_description():
         ),
         description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
     )
+    declare_enable_aad = DeclareLaunchArgument(
+        "enable_aad",
+        default_value="true",
+        description="Enable anomaly logging",
+    )
 
     swri_console_node = Node(
         package="swri_console",
@@ -53,14 +58,20 @@ def generate_launch_description():
     navigation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [FindPackageShare("navigation"), "/launch/navigation.launch.py"]
-        )
+        ),
+        launch_arguments={
+            "enable_aad": LaunchConfiguration("enable_aad"),
+        }.items(),
     )
 
     # Launch the motor control launcher
     motor_control_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [FindPackageShare("motor_control"), "/launch/motor.launch.py"]
-        )
+        ),
+        launch_arguments={
+            "enable_aad": LaunchConfiguration("enable_aad"),
+        }.items(),
     )
 
     # Execute the RViz2 command with the specified configuration file
@@ -100,6 +111,7 @@ def generate_launch_description():
         [
             declare_console_start_delay_s,
             declare_cart_config_path,
+            declare_enable_aad,
             swri_console_node,
             delayed_stack,
         ]

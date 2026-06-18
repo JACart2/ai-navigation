@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
 from launch.actions import IncludeLaunchDescription
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory 
@@ -37,6 +38,11 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "calibration_config_file",
                 default_value="SpeedBoiMap.yaml",
+            ),
+            DeclareLaunchArgument(
+                "enable_aad",
+                default_value="true",
+                description="Enable collision avoidance anomaly logging node"
             ),
             Node(
                 package="navigation",
@@ -82,11 +88,6 @@ def generate_launch_description():
                     }
                 ],
             ),
-            Node(
-                package="navigation",
-                executable="pose_bridge",
-                output="screen",
-            ),
             # call other launchfiles from this package:
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -97,6 +98,13 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(
                     [FindPackageShare("navigation"), "/launch/pointcloud-to-laserscan.launch.py"]
                 )
+            ),
+            Node(
+                package="navigation",
+                executable="collision_avoidance_aad_log",
+                name="collision_avoidance_aad_log",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_aad")),
             ),
         ]
     )

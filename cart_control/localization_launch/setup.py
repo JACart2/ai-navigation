@@ -31,6 +31,7 @@ setup(
         'console_scripts': [
             'velodyne_pointcloud_tf_fallback = localization_launch.velodyne_pointcloud_tf_fallback:main',
             'velodyne_packet_downsample_filter = localization_launch.velodyne_packet_downsample_filter:main',
+            'zed_odom_to_base_link = localization_launch.zed_odom_to_base_link:main',
         ],
     },
 )

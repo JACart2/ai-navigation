@@ -88,6 +88,22 @@ def generate_launch_description():
         output="screen",
     )
 
+    # Transform ZED front-camera odometry from camera frame to base_link frame
+    # and publish on /odom so the lidar localization can consume it.
+    # ZED TF publishing is disabled (handled in zed_multi_camera.launch.py), so
+    # this node provides the odometry topic without touching the TF tree.
+    zed_odom_to_base_link = Node(
+        package='localization_launch',
+        executable='zed_odom_to_base_link',
+        name='zed_odom_to_base_link',
+        parameters=[{
+            'zed_odom_topic': '/zed_front/zed_node_0/odom',
+            'output_odom_topic': '/odom',
+            'base_frame': 'base_link',
+        }],
+        output='screen',
+    )
+
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
@@ -97,5 +113,6 @@ def generate_launch_description():
             ),
             zed_multi_camera_launch,
             multi_link_tf,
+            zed_odom_to_base_link,
         ]
     )

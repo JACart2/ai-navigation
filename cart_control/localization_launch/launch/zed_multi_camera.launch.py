@@ -157,6 +157,13 @@ def launch_setup(context, *args, **kwargs):
                 'publish_imu_tf': 'false',
                 'namespace': namespace_val,
                 'node_name': node_name,
+                # Use the project-local common.yaml instead of the zed_wrapper default.
+                # This ensures pos_tracking_enabled: true (and other local overrides) take effect.
+                'config_path': os.path.join(
+                    get_package_share_directory('localization_launch'),
+                    'config',
+                    'common.yaml'
+                ),
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.
                 'ros_params_override_path': ''
             }.items()

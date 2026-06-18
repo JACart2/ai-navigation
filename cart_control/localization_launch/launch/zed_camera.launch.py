@@ -89,6 +89,12 @@ def launch_setup(context, *args, **kwargs):
 
     config_common_path = LaunchConfiguration('config_path')
 
+    config_od_path = os.path.join(
+        get_package_share_directory('localization_launch'),
+        'config',
+        'object_detection.yaml'
+    )
+
     serial_number = LaunchConfiguration('serial_number')
     camera_id = LaunchConfiguration('camera_id')
 
@@ -162,6 +168,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             config_common_path,
             config_camera_path,
+            config_od_path,
             {
                 'use_sim_time': use_sim_time_val,
                 'simulation.sim_enabled': sim_mode_val,

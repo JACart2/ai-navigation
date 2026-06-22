@@ -27,7 +27,7 @@ class WaypointCreation(Node):
         
         # Declare parameters
         self.declare_parameter('new_map_mode', True)
-        self.declare_parameter('input_gml_file', '/root/dev_ws/src/ai-navigation/navigation/maps/main_shift3.gml')
+        self.declare_parameter('input_gml_file', '/root/dev_ws/src/ai-navigation/navigation/maps/main_shift6.gml')
         self.declare_parameter('output_gml_file', '/root/dev_ws/src/ai-navigation/navigation/maps/main_shift6.gml')
         
         self.rviz_config_file = '/root/dev_ws/src/ai-navigation/navigation/test/waypoint_creation.rviz'
@@ -72,7 +72,7 @@ class WaypointCreation(Node):
         if not self.new_map_mode and self.input_gml_file:
             self.load_waypoints_from_gml()
 
-        if not self.new_map_mode and not self.existing_waypoints:
+        if not self.new_map_mode and self.global_graph.number_of_nodes() == 0:
             error_message = f'Cannot edit route because input GML file was not found or contained no waypoints: {self.input_gml_file}'
             self.get_logger().error(error_message)
             raise FileNotFoundError(error_message)

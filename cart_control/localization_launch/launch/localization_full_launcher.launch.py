@@ -18,6 +18,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from autonomous_launch.cart_config_resolver import default_cart_config_path
 from ament_index_python.packages import get_package_share_directory
 import os
 import yaml
@@ -130,10 +131,10 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "cart_config_path",
-                default_value="",
+                default_value=default_cart_config_path(),
                 description=(
-                    "Path to cart-specific YAML config (must contain zed_front_serial "
-                    "and zed_rear_serial). Required when not using a bag file."
+                    "Path to cart-specific YAML config. Defaults to the config mapped "
+                    "from ROS_DOMAIN_ID (0 -> James, 1 -> Madison)."
                 ),
             ),
             DeclareLaunchArgument(

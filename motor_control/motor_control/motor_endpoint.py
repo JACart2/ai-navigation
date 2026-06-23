@@ -21,7 +21,17 @@ from std_msgs.msg import Header
 
 # Annolmaly Logging based imports
 from std_msgs.msg import Float32 
-from anomaly_msg.msg import AnomalyMsg 
+try:
+    from anomaly_msg.msg import AnomalyMsg
+    LEGACY_ANOMALY_MSG = True
+except ImportError:
+    from anomaly_msg.msg import AnomalyLog as AnomalyMsg
+    LEGACY_ANOMALY_MSG = False
+    AnomalyMsg.INFO = "INFO"
+    AnomalyMsg.WARNING = "WARNING"
+    AnomalyMsg.ERROR = "ERROR"
+    AnomalyMsg.TEXT = "TEXT"
+ 
 import struct
 
 # State constants
@@ -453,24 +463,28 @@ class MotorEndpoint(rclpy.node.Node):
 
     # This is for publishing to anomaly logging
     def log_aad(self, importance: int, motor_endpoint_msg: str):
+        """Publish motor endpoint info to anomaly logging."""
+        anomaly = AnomalyMsg()
 
+        if LEGACY_ANOMALY_MSG:
+            anomaly.header = Header()
+            anomaly.header.stamp = self.get_clock().now().to_msg()
+            anomaly.header.frame_id = "motor_endpoint_frame"
+            anomaly.node_name = self.get_name()
+            anomaly.importance = importance
+            anomaly.type = AnomalyMsg.TEXT
+            anomaly.msg = f"Received Motor Endpoint Info: {motor_endpoint_msg}"
+        else:
+            anomaly.stamp = self.get_clock().now().to_msg()
+            anomaly.node_name = self.get_name()
+            anomaly.source = "motor_control"
+            anomaly.description = f"{importance}: Received Motor Endpoint Info: {motor_endpoint_msg}"
+            anomaly.topic_name = "/motor_endpoint"
+            anomaly.data_type = "text"
+            anomaly.data = motor_endpoint_msg.encode("utf-8")
 
-        anomaly = AnomalyMsg() 
-        
-        # Header 
-        anomaly.header = Header()
-        anomaly.header.stamp = self.get_clock().now().to_msg() 
-        anomaly.header.frame_id = "motor_endpoint_frame" 
-        
-        # Required fields 
-        anomaly.node_name = self.get_name() 
-        anomaly.importance = importance
-        anomaly.type = AnomalyMsg.TEXT 
-        
-        # Human-readable message 
-        anomaly.msg = f"Received Motor Endpoint Info: {motor_endpoint_msg}" 
-        #Publish 
-        self.aad_pub.publish(anomaly) 
+        self.aad_pub.publish(anomaly)
+
 
 def main():
     """The main method that actually handles spinning up the node."""

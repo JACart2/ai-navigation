@@ -29,7 +29,17 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-from anomaly_msg.msg import AnomalyMsg
+try:
+    from anomaly_msg.msg import AnomalyMsg
+    LEGACY_ANOMALY_MSG = True
+except ImportError:
+    from anomaly_msg.msg import AnomalyLog as AnomalyMsg
+    LEGACY_ANOMALY_MSG = False
+    AnomalyMsg.INFO = "INFO"
+    AnomalyMsg.WARNING = "WARNING"
+    AnomalyMsg.ERROR = "ERROR"
+    AnomalyMsg.TEXT = "TEXT"
+
 
 
 
@@ -624,12 +634,21 @@ class LocalPlanner(rclpy.node.Node):
             return
         anomaly_msg = AnomalyMsg()
 
-        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
-        anomaly_msg.header.frame_id = "local_planner"
-        anomaly_msg.node_name = self.get_name()
-        anomaly_msg.importance = severity
-        anomaly_msg.type = AnomalyMsg.TEXT
-        anomaly_msg.msg = message
+        if LEGACY_ANOMALY_MSG:
+            anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+            anomaly_msg.header.frame_id = "local_planner"
+            anomaly_msg.node_name = self.get_name()
+            anomaly_msg.importance = severity
+            anomaly_msg.type = AnomalyMsg.TEXT
+            anomaly_msg.msg = message
+        else:
+            anomaly_msg.stamp = self.get_clock().now().to_msg()
+            anomaly_msg.node_name = self.get_name()
+            anomaly_msg.source = "navigation"
+            anomaly_msg.description = f"{severity}: {message}"
+            anomaly_msg.topic_name = "/local_planner"
+            anomaly_msg.data_type = "text"
+            anomaly_msg.data = message.encode("utf-8")
 
         self.anomaly_pub.publish(anomaly_msg)
 

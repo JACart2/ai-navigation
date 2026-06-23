@@ -1,3 +1,15 @@
+"""Create and edit ROS 2 navigation waypoint graphs using RViz.
+
+Run this node and choose whether to create a new route or edit an existing GML
+route when prompted. In create mode, waypoints are generated from robot poses on
+``/pcl_pose`` whenever the robot travels farther than ``AUTO_POINT_GAP``. In edit
+mode, use RViz's Publish Point tool and the terminal controls shown at startup to
+add, remove, connect, select, and move waypoints. Press ``s`` to save the edited
+graph; saved nodes are then treated as existing waypoints. Configure the input
+and output files with the ``input_gml_file`` and ``output_gml_file`` ROS
+parameters.
+"""
+
 import math
 import ctypes
 import os
@@ -23,6 +35,7 @@ PR_SET_PDEATHSIG = 1
 
 class WaypointCreation(Node):
     def __init__(self, selected_mode=None):
+        """Initialize waypoint graph state, ROS interfaces, and edit controls."""
         super().__init__('waypoint_creation')
         
         # Declare parameters
@@ -125,6 +138,7 @@ class WaypointCreation(Node):
             self.start_edit_controls()
 
     def pose_callback(self, msg):
+            """Create a waypoint when the robot moves beyond the automatic point gap."""
             current_pos = PointStamped()
             
             current_pos.point.x = msg.pose.pose.position.x
@@ -139,9 +153,11 @@ class WaypointCreation(Node):
                 self.new_point_pub.publish(current_pos)
 
     def dis(self, x1, y1, x2, y2):
+        """Return the Euclidean distance between two 2D coordinates."""
         return math.sqrt((x2-x1)**2 + (y2-y1)**2)
 
     def load_waypoints_from_gml(self):
+        """Load the configured GML graph and synchronize local waypoint state."""
         if not os.path.exists(self.input_gml_file):
             self.get_logger().warn(f'Input GML file does not exist: {self.input_gml_file}')
             return
@@ -156,25 +172,44 @@ class WaypointCreation(Node):
         except Exception as e:
             self.get_logger().error(f'Failed to load waypoints from GML file: {e}')
 
-    def save_waypoints_to_gml(self):
+    def save_waypoints_to_gml(self, mark_new_as_existing=False):
+        """Write the graph to GML and optionally mark all new nodes as existing."""
         if not self.output_gml_file:
             return
         
         if self.global_graph.number_of_nodes() == 0:
             return
         
+        new_nodes = []
+        if mark_new_as_existing:
+            new_nodes = [
+                node_name
+                for node_name, data in self.global_graph.nodes(data=True)
+                if data.get("is_new", False)
+            ]
+            for node_name in new_nodes:
+                self.global_graph.nodes[node_name]["is_new"] = False
+
         try:
             nx.write_gml(self.global_graph, self.output_gml_file)
-            self.has_unsaved_changes = False
-            self.get_logger().info(f'Saved {self.global_graph.number_of_nodes()} waypoints to {self.output_gml_file}')
-            
         except Exception as e:
+            for node_name in new_nodes:
+                self.global_graph.nodes[node_name]["is_new"] = True
             self.get_logger().error(f'Failed to save waypoints to GML file: {e}')
+            return
+
+        self.has_unsaved_changes = False
+        if new_nodes:
+            self.refresh_waypoint_lists()
+            self.publish_markers()
+        self.get_logger().info(f'Saved {self.global_graph.number_of_nodes()} waypoints to {self.output_gml_file}')
 
     def new_point_callback(self, msg):
+        """Add a waypoint received from the new-point ROS topic."""
         self.add_point(msg.point.x, msg.point.y)
 
     def clicked_point_callback(self, msg):
+        """Apply the active edit operation to an RViz-clicked position."""
         if self.new_map_mode:
             return
 
@@ -188,6 +223,7 @@ class WaypointCreation(Node):
             self.select_point(msg.point.x, msg.point.y)
 
     def refresh_waypoint_lists(self):
+        """Rebuild existing and newly added waypoint lists from the graph."""
         self.existing_waypoints = []
         self.new_waypoints = []
 
@@ -204,6 +240,7 @@ class WaypointCreation(Node):
                 self.existing_waypoints.append(point)
 
     def get_max_node_index(self):
+        """Return the largest numeric suffix used by a waypoint node name."""
         max_index = 0
         for node_name in self.global_graph.nodes:
             match = re.search(r'(\d+)$', str(node_name))
@@ -212,6 +249,7 @@ class WaypointCreation(Node):
         return max_index
 
     def get_last_node_name(self):
+        """Return the waypoint node with the largest numeric suffix."""
         best_name = None
         best_index = -1
         for node_name in self.global_graph.nodes:
@@ -222,6 +260,7 @@ class WaypointCreation(Node):
         return best_name
 
     def add_point(self, x, y):
+        """Add a waypoint and optionally connect it to the previous waypoint."""
         self.node_count += 1
         node_name = f'Waypoint:{self.node_count}'
         self.global_graph.add_node(node_name, pos=[x, y], active=False, is_new=True)
@@ -239,6 +278,7 @@ class WaypointCreation(Node):
         self.get_logger().info(f'Added waypoint: ({x}, {y})')
 
     def remove_point(self, x, y):
+        """Remove the graph node nearest to the supplied coordinates."""
         closest_node = self.get_closest_node(x, y)
         if closest_node is None:
             return
@@ -254,6 +294,7 @@ class WaypointCreation(Node):
         self.get_logger().info(f'Removed waypoint: {closest_node}')
 
     def connect_point(self, x, y):
+        """Select two clicked waypoints in sequence and connect them."""
         if self.first_selection is None:
             self.first_selection = self.get_closest_node(x, y)
             if self.first_selection is not None:
@@ -272,22 +313,26 @@ class WaypointCreation(Node):
         self.second_selection = None
 
     def select_point(self, x, y):
+        """Select the waypoint nearest to the supplied coordinates for movement."""
         self.selected_node = self.get_closest_node(x, y)
         if self.selected_node is not None:
             self.get_logger().info(f'Selected waypoint: {self.selected_node}')
             self.publish_markers()
 
     def add_weighted_edge(self, first_node, second_node):
+        """Add or update a directed edge weighted by waypoint distance."""
         x1, y1, x2, y2 = self.get_node_coordinates(first_node, second_node)
         cost = self.dis(x1, y1, x2, y2)
         self.global_graph.add_edge(first_node, second_node, weight=cost)
 
     def get_node_coordinates(self, first_node, second_node):
+        """Return flattened 2D coordinates for two graph nodes."""
         first_pos = self.global_graph.nodes[first_node]['pos']
         second_pos = self.global_graph.nodes[second_node]['pos']
         return first_pos[0], first_pos[1], second_pos[0], second_pos[1]
 
     def get_closest_node(self, x, y):
+        """Return the graph node nearest to the supplied coordinates."""
         min_dist = None
         min_node = None
         for node_name, data in self.global_graph.nodes(data=True):
@@ -300,9 +345,11 @@ class WaypointCreation(Node):
         return min_node
 
     def get_all_waypoints(self):
+        """Return all existing and newly created waypoint points."""
         return self.existing_waypoints + self.new_waypoints
 
     def move_selected_node(self, dx, dy):
+        """Move the selected waypoint and recalculate its incident edge weights."""
         if self.selected_node is None or self.selected_node not in self.global_graph:
             self.get_logger().info('No waypoint selected. Use select mode and click a waypoint in RViz first.')
             return
@@ -324,6 +371,7 @@ class WaypointCreation(Node):
         )
 
     def publish_markers(self):
+        """Publish graph edges, waypoints, and selection highlighting to RViz."""
         marker_array = MarkerArray()
         marker_id = 0
         
@@ -420,11 +468,13 @@ class WaypointCreation(Node):
         self.get_logger().info(f'Published {total_waypoints} waypoints to RViz ({len(self.existing_waypoints)} existing, {len(self.new_waypoints)} new)')
 
     def start_edit_controls(self):
+        """Display edit help and start the keyboard-control thread."""
         self.print_edit_controls()
         self.input_thread = threading.Thread(target=self.edit_controls_loop, daemon=True)
         self.input_thread.start()
 
     def print_edit_controls(self):
+        """Print the available route-editing keyboard commands."""
         print("\nEdit route controls:")
         print("  a = add waypoint using RViz Publish Point")
         print("  r = remove nearest clicked waypoint")
@@ -437,6 +487,7 @@ class WaypointCreation(Node):
         print("  q = quit without saving unsaved changes\n")
 
     def read_select_command(self):
+        """Read one raw keyboard command, including terminal arrow-key sequences."""
         prompt = "select-move> "
         print(prompt, end="", flush=True)
 
@@ -471,6 +522,7 @@ class WaypointCreation(Node):
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     def edit_controls_loop(self):
+        """Process route-editing commands until ROS shuts down or the user quits."""
         while rclpy.ok():
             try:
                 if self.point_mode == "Select":
@@ -510,7 +562,7 @@ class WaypointCreation(Node):
                 self.auto_connect = not self.auto_connect
                 print(f"Auto-connect set to {self.auto_connect}")
             elif command == 's':
-                self.save_waypoints_to_gml()
+                self.save_waypoints_to_gml(mark_new_as_existing=True)
                 print(f"Saved {self.output_gml_file}")
             elif command == 'h':
                 self.print_edit_controls()
@@ -521,12 +573,14 @@ class WaypointCreation(Node):
                 return
 
     def launch_rviz(self):
+        """Launch RViz with the configured waypoint-creation layout."""
         if not os.path.exists(self.rviz_config_file):
             self.get_logger().warn(f'RViz config file does not exist: {self.rviz_config_file}')
             return
 
         try:
             def set_parent_death_signal():
+                """Ask Linux to terminate RViz when this parent process exits."""
                 libc = ctypes.CDLL("libc.so.6")
                 libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
 
@@ -542,6 +596,7 @@ class WaypointCreation(Node):
 
 
 def prompt_for_route_mode():
+    """Prompt until the user chooses whether to create or edit a route."""
     prompt = (
         "\nSelect waypoint mode:\n"
         "1. Create new route\n"
@@ -561,6 +616,7 @@ def prompt_for_route_mode():
 
 
 def main(args=None):
+    """Initialize ROS, run the waypoint creation node, and cleanly shut down."""
     selected_mode = prompt_for_route_mode()
     rclpy.init(args=args)
     try:

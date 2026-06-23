@@ -6,7 +6,7 @@ graph [
     pos 5.479992389678955
     pos 1.1415412425994873
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 1
@@ -14,7 +14,7 @@ graph [
     pos 7.324944972991943
     pos 2.049180746078491
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 2
@@ -22,7 +22,7 @@ graph [
     pos 8.75442886352539
     pos 3.4764914512634277
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 3
@@ -30,7 +30,7 @@ graph [
     pos 9.94551944732666
     pos 5.083534240722656
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 4
@@ -38,7 +38,7 @@ graph [
     pos 11.26813793182373
     pos 6.675802707672119
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 5
@@ -46,7 +46,7 @@ graph [
     pos 13.055769920349121
     pos 7.776629447937012
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 6
@@ -54,7 +54,7 @@ graph [
     pos 15.065375328063965
     pos 8.36996078491211
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 7
@@ -62,7 +62,7 @@ graph [
     pos 17.16448974609375
     pos 8.534333229064941
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 8
@@ -70,7 +70,7 @@ graph [
     pos 19.184389114379883
     pos 8.637836456298828
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 9
@@ -78,7 +78,7 @@ graph [
     pos 21.268457412719727
     pos 9.062675476074219
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 10
@@ -86,7 +86,7 @@ graph [
     pos 23.370952606201172
     pos 9.643546104431152
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 11
@@ -94,7 +94,7 @@ graph [
     pos 25.237213134765625
     pos 10.4077787399292
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 12
@@ -102,7 +102,7 @@ graph [
     pos 27.173749923706055
     pos 11.310273170471191
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 13
@@ -110,7 +110,7 @@ graph [
     pos 28.97368621826172
     pos 12.306819915771484
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 14
@@ -118,7 +118,7 @@ graph [
     pos 30.7354793548584
     pos 13.416654586791992
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 15
@@ -126,7 +126,7 @@ graph [
     pos 32.431766510009766
     pos 14.50280475616455
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 16
@@ -134,7 +134,7 @@ graph [
     pos 34.264949798583984
     pos 15.708075523376465
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 17
@@ -142,7 +142,7 @@ graph [
     pos 36.052452087402344
     pos 16.811941146850586
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 18
@@ -150,7 +150,7 @@ graph [
     pos 37.884037017822266
     pos 17.983535766601562
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 19
@@ -158,7 +158,7 @@ graph [
     pos 39.658512115478516
     pos 19.001760482788086
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 20
@@ -166,15 +166,15 @@ graph [
     pos 41.54800796508789
     pos 20.112279891967773
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 21
     label "Waypoint:22"
-    pos 44.33557891845703
-    pos 19.498321533203125
+    pos 55.33557891845703
+    pos 34.498321533203125
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 22
@@ -182,7 +182,7 @@ graph [
     pos 45.96068572998047
     pos 18.15150260925293
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 23
@@ -190,7 +190,7 @@ graph [
     pos 46.8445930480957
     pos 16.35200309753418
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 24
@@ -198,7 +198,7 @@ graph [
     pos 46.96027374267578
     pos 14.141775131225586
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 25
@@ -206,7 +206,7 @@ graph [
     pos 46.81492614746094
     pos 12.132810592651367
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 26
@@ -214,7 +214,7 @@ graph [
     pos 46.79804992675781
     pos 9.98523998260498
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 27
@@ -222,7 +222,7 @@ graph [
     pos 46.90142822265625
     pos 7.983226299285889
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 28
@@ -230,7 +230,7 @@ graph [
     pos 47.22389221191406
     pos 5.8369855880737305
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 29
@@ -238,7 +238,7 @@ graph [
     pos 47.52729034423828
     pos 3.80784273147583
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 30
@@ -246,7 +246,7 @@ graph [
     pos 47.815589904785156
     pos 1.6874886751174927
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 31
@@ -254,7 +254,7 @@ graph [
     pos 48.135257720947266
     pos -0.382201611995697
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 32
@@ -262,7 +262,7 @@ graph [
     pos 48.50407409667969
     pos -2.4406838417053223
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 33
@@ -270,7 +270,7 @@ graph [
     pos 48.857444763183594
     pos -4.493287563323975
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 34
@@ -278,7 +278,7 @@ graph [
     pos 49.248985290527344
     pos -6.558204650878906
     active 0
-    is_new 1
+    is_new 0
   ]
   node [
     id 35
@@ -286,7 +286,31 @@ graph [
     pos 49.66033172607422
     pos -8.955464363098145
     active 0
-    is_new 1
+    is_new 0
+  ]
+  node [
+    id 36
+    label "Waypoint:38"
+    pos 82.78242492675781
+    pos 28.496612548828125
+    active 0
+    is_new 0
+  ]
+  node [
+    id 37
+    label "Waypoint:39"
+    pos 80.34281921386719
+    pos 6.142333984375
+    active 0
+    is_new 0
+  ]
+  node [
+    id 38
+    label "Waypoint:40"
+    pos 80.00546264648438
+    pos -8.63330078125
+    active 0
+    is_new 0
   ]
   edge [
     source 0
@@ -391,12 +415,12 @@ graph [
   edge [
     source 20
     target 21
-    weight 2.854382014791349
+    weight 19.926246683646823
   ]
   edge [
     source 21
     target 22
-    weight 2.1106618305096236
+    weight 18.844285903895656
   ]
   edge [
     source 22
@@ -462,5 +486,20 @@ graph [
     source 34
     target 35
     weight 2.432295216018521
+  ]
+  edge [
+    source 35
+    target 36
+    weight 49.997311157817386
+  ]
+  edge [
+    source 36
+    target 37
+    weight 22.487006162927447
+  ]
+  edge [
+    source 37
+    target 38
+    weight 14.77948551813298
   ]
 ]

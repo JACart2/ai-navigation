@@ -33,6 +33,8 @@ setup(
             'localization_launch.garmin_gps18x_driver:main',
             'mola_odom_to_tf = localization_launch.mola_odom_to_tf:main',
             'pcl_pose_relay = localization_launch.pcl_pose_relay:main',
+            'mola_auto_localization_supervisor = '
+            'localization_launch.mola_auto_localization_supervisor:main',
         ],
     },
 )

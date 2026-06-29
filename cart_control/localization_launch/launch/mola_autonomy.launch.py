@@ -43,6 +43,9 @@ def generate_launch_description():
         "start_velodyne": LaunchConfiguration("start_velodyne"),
         "navigation_start_delay": LaunchConfiguration("navigation_start_delay"),
         "enable_motor": LaunchConfiguration("enable_motor"),
+        "enable_mola_auto_localization": LaunchConfiguration(
+            "enable_mola_auto_localization"
+        ),
         "motor_port": LaunchConfiguration("motor_port"),
         "motor_baudrate": LaunchConfiguration("motor_baudrate"),
         "enable_aad": LaunchConfiguration("enable_aad"),
@@ -105,6 +108,14 @@ def generate_launch_description():
                 "enable_motor",
                 default_value="true",
                 description="Start motor_control unless set to false.",
+            ),
+            DeclareLaunchArgument(
+                "enable_mola_auto_localization",
+                default_value="false",
+                description=(
+                    "Start the conservative LiDAR-only MOLA auto-localization "
+                    "supervisor."
+                ),
             ),
             DeclareLaunchArgument(
                 "motor_port",

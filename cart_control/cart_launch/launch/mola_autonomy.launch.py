@@ -13,7 +13,7 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -45,6 +45,17 @@ def generate_launch_description():
     launch_rviz = LaunchConfiguration("launch_rviz")
     enable_motor = LaunchConfiguration("enable_motor")
     enable_aad = LaunchConfiguration("enable_aad")
+    enable_mola_auto_localization = LaunchConfiguration(
+        "enable_mola_auto_localization"
+    )
+
+    mola_auto_localization_params = PathJoinSubstitution(
+        [
+            FindPackageShare("localization_launch"),
+            "param",
+            "mola_auto_localization_supervisor.yaml",
+        ]
+    )
 
     velodyne_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -92,6 +103,21 @@ def generate_launch_description():
         executable="pcl_pose_relay",
         name="pcl_pose_relay",
         output="screen",
+    )
+
+    mola_auto_localization_supervisor = Node(
+        package="localization_launch",
+        executable="mola_auto_localization_supervisor",
+        name="mola_auto_localization_supervisor",
+        output="screen",
+        parameters=[
+            mola_auto_localization_params,
+            {
+                "cloud_topic": LaunchConfiguration("lidar_topic"),
+                "mola_pose_topic": "/lidar_odometry/pose",
+            },
+        ],
+        condition=IfCondition(enable_mola_auto_localization),
     )
 
     navigation_launch = IncludeLaunchDescription(
@@ -162,7 +188,7 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "port": LaunchConfiguration("motor_port"),
+                "arduino_port": LaunchConfiguration("motor_port"),
                 "baudrate": ParameterValue(
                     LaunchConfiguration("motor_baudrate"),
                     value_type=int,
@@ -275,6 +301,14 @@ def generate_launch_description():
                 description="Enable anomaly logging nodes.",
             ),
             DeclareLaunchArgument(
+                "enable_mola_auto_localization",
+                default_value="false",
+                description=(
+                    "Start the conservative LiDAR-only MOLA auto-localization "
+                    "supervisor."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "graph_dir",
                 default_value=navigation_maps_dir,
                 description="Directory containing navigation graph files.",
@@ -357,6 +391,7 @@ def generate_launch_description():
             velodyne_launch,
             mola_localization_launch,
             pcl_pose_relay,
+            mola_auto_localization_supervisor,
             rviz_node,
             rosbridge_cleanup,
             rosbridge_launch,

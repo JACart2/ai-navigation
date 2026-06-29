@@ -259,11 +259,13 @@ class MotorEndpoint(rclpy.node.Node):
             if not self.serial_connected:
                 return
         cur_time = time.time()
-        if self.heartbeat != "":
-            self.heart_pub.publish(self.heartbeat)
+        if self.heartbeat:
+            heartbeat_msg = String()
+            heartbeat_msg.data = self.heartbeat.decode("utf-8", errors="replace").strip()
+            self.heart_pub.publish(heartbeat_msg)
             heartbeat_delta_t = time.time() - self.prev_time
             self.log_header(
-                f"Heartbeat message:\n{self.heartbeat} | Time since last message: {heartbeat_delta_t}"
+                f"Heartbeat message:\n{heartbeat_msg.data} | Time since last message: {heartbeat_delta_t}"
             )
 
             # This check is here because the time between the first and 2nd heartbeat is always ~2.4s

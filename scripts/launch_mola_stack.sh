@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+
 open_ui_page() {
     local url="http://localhost:5173/"
     if command -v xdg-open >/dev/null 2>&1; then
@@ -16,9 +19,11 @@ usage() {
 Usage: launch_mola_stack.sh [--cart NAME] [--no-motor] [--build-image] [--no-cleanup-old-stack] [--no-docker] [--no-ui] [ros2 launch args...]
 
 Examples:
+  scripts/launch_mola_stack.sh --cart james
   scripts/launch_mola_stack.sh --cart madison
   scripts/launch_mola_stack.sh cart:=madison
   scripts/launch_mola_stack.sh --cart madison --no-motor
+  scripts/launch_mola_stack.sh --cart james enable_mola_auto_localization:=true
 
 Motor control is enabled by default. Use --no-motor or enable_motor:=false for
 safe no-motor testing.
@@ -37,7 +42,47 @@ motor_enabled=true
 build_image=false
 cart_forwarded=false
 motor_forwarded=false
+motor_port_forwarded=false
+motor_baudrate_forwarded=false
+cart_config_path=""
 launch_args=()
+
+cart_config_value() {
+  local config_path="$1"
+  local key="$2"
+
+  python3 - "$config_path" "$key" <<'PY'
+import sys
+
+path, wanted_key = sys.argv[1:3]
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+try:
+    if yaml is not None:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        value = data.get(wanted_key)
+        if value is not None:
+            print(value)
+        sys.exit(0)
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or ":" not in stripped:
+                continue
+            key, value = stripped.split(":", 1)
+            if key.strip() == wanted_key:
+                print(value.strip().strip("'\""))
+                break
+except Exception:
+    pass
+PY
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -89,6 +134,11 @@ while [[ $# -gt 0 ]]; do
       cart_forwarded=true
       shift
       ;;
+    cart_config_path:=*)
+      cart_config_path="${1#cart_config_path:=}"
+      launch_args+=("$1")
+      shift
+      ;;
     enable_motor:=true)
       motor_enabled=true
       launch_args+=("$1")
@@ -99,6 +149,16 @@ while [[ $# -gt 0 ]]; do
       motor_enabled=false
       launch_args+=("$1")
       motor_forwarded=true
+      shift
+      ;;
+    motor_port:=*)
+      launch_args+=("$1")
+      motor_port_forwarded=true
+      shift
+      ;;
+    motor_baudrate:=*)
+      launch_args+=("$1")
+      motor_baudrate_forwarded=true
       shift
       ;;
     *)
@@ -117,6 +177,30 @@ fi
 
 if [[ "$cart_forwarded" != true ]]; then
   launch_args=("cart:=$cart" "${launch_args[@]}")
+fi
+
+if [[ -z "$cart_config_path" ]]; then
+  cart_config_path="$repo_root/cart_control/cart_launch/config/cart_${cart}.yaml"
+fi
+
+if [[ -f "$cart_config_path" ]]; then
+  if [[ "$motor_port_forwarded" != true ]]; then
+    config_motor_port="$(
+      cart_config_value "$cart_config_path" motor_port
+    )"
+    if [[ -n "$config_motor_port" ]]; then
+      launch_args=("motor_port:=$config_motor_port" "${launch_args[@]}")
+    fi
+  fi
+
+  if [[ "$motor_baudrate_forwarded" != true ]]; then
+    config_motor_baudrate="$(
+      cart_config_value "$cart_config_path" motor_baudrate
+    )"
+    if [[ -n "$config_motor_baudrate" ]]; then
+      launch_args=("motor_baudrate:=$config_motor_baudrate" "${launch_args[@]}")
+    fi
+  fi
 fi
 
 if [[ "$motor_enabled" == true ]]; then
@@ -209,6 +293,7 @@ cleanup_old_autolaunch_children() {
         else if (cmd ~ /swri_console/) print pid
         else if (cmd ~ /base_link_to_velodyne_tf|lidar_tf/) print pid
         else if (cmd ~ /pcl_pose_relay/) print pid
+        else if (cmd ~ /mola_auto_localization_supervisor/) print pid
         else if (cmd ~ /robot_state_publisher/) print pid
         else if (cmd ~ /global_planner|local_planner|display_global_path|visualize_graph|speed_node/) print pid
         else if (cmd ~ /zed_object_to_obstacle|collision_detector|collision_avoidance_aad_log/) print pid

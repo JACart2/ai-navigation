@@ -38,6 +38,7 @@ import struct
 MOVING = 0
 BRAKING = 1
 STOPPED = 2
+DEFAULT_AUTONOMOUS_THROTTLE_DIVIDER = 1.6
 
 
 
@@ -81,6 +82,10 @@ class MotorEndpoint(rclpy.node.Node):
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
         self.declare_parameter("manual_control", False)
+        self.declare_parameter(
+            "autonomous_throttle_divider",
+            DEFAULT_AUTONOMOUS_THROTTLE_DIVIDER,
+        )
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -91,6 +96,11 @@ class MotorEndpoint(rclpy.node.Node):
         self.manual_control = (
             self.get_parameter("manual_control").get_parameter_value().bool_value
         )  # Sets the cart to use teleop control logic instead of autonomous control
+        self.autonomous_throttle_divider = (
+            self.get_parameter("autonomous_throttle_divider")
+            .get_parameter_value()
+            .double_value
+        )
 
 
         # Sets up publishing to /ai_anomaly_logging
@@ -430,7 +440,11 @@ class MotorEndpoint(rclpy.node.Node):
                 self.brake_time_used = 0
                 self.full_stop_count = 0
 
-        self.send_packet(target_speed / 2.2, int(self.brake), target_angle)
+        self.send_packet(
+            target_speed / self.autonomous_throttle_divider,
+            int(self.brake),
+            target_angle,
+        )
 
     def send_packet(self, throttle, brake, steer_angle):
         """This method is used to send instructions to the arduino that was connected in init."""

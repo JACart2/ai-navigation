@@ -13,6 +13,22 @@ def _as_str(value):
     return str(value)
 
 
+VALID_CARTS = ("james", "madison")
+
+
+def _selected_cart(context):
+    cart = LaunchConfiguration("cart").perform(context).strip().lower()
+    cart_name = LaunchConfiguration("cart_name").perform(context).strip().lower()
+    selected = cart_name or cart or "james"
+
+    if selected not in VALID_CARTS:
+        raise RuntimeError(
+            f"Invalid cart '{selected}'. Expected one of: {', '.join(VALID_CARTS)}."
+        )
+
+    return selected
+
+
 def _load_cart_config(context, *args, **kwargs):
     """
     Cart-aware MOLA sensor bringup.
@@ -24,19 +40,14 @@ def _load_cart_config(context, *args, **kwargs):
       base_link -> velodyne = 0.5, 0.0, 1.75, 0, 0, 0
     """
 
-    cart_name = LaunchConfiguration("cart_name").perform(context).strip().lower()
+    cart = _selected_cart(context)
     cart_config_path = LaunchConfiguration("cart_config_path").perform(context).strip()
 
     if not cart_config_path:
-        if cart_name not in ("james", "madison"):
-            raise RuntimeError(
-                f"Invalid cart_name '{cart_name}'. Expected 'james' or 'madison'."
-            )
-
         cart_config_path = os.path.join(
             get_package_share_directory("cart_launch"),
             "config",
-            f"cart_{cart_name}.yaml",
+            f"cart_{cart}.yaml",
         )
 
     lidar_topic_name = LaunchConfiguration("lidar_topic_name").perform(context)
@@ -147,10 +158,15 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument(
-                "cart_name",
+                "cart",
                 default_value="james",
                 choices=["james", "madison"],
-                description="Cart name used to auto-select cart_james.yaml or cart_madison.yaml.",
+                description="Cart used to auto-select cart_james.yaml or cart_madison.yaml.",
+            ),
+            DeclareLaunchArgument(
+                "cart_name",
+                default_value="",
+                description="Legacy alias for cart.",
             ),
             DeclareLaunchArgument(
                 "cart_config_path",

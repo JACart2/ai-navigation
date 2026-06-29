@@ -10,6 +10,7 @@ from navigation import pure_pursuit, cubic_spline_planner
 
 # ROS based imports
 import rclpy
+import rclpy.qos
 from nav_msgs.msg import Path
 from navigation_interface.msg import (
     LocalPointsArray,
@@ -110,6 +111,11 @@ class LocalPlanner(rclpy.node.Node):
         )
 
         ## Publishers
+        latching_qos = rclpy.qos.QoSProfile(
+            depth=1,
+            durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
         # Share the current status of the vehicle's state
         self.vehicle_state_pub = self.create_publisher(
             VehicleState, "/vehicle_state", 10
@@ -124,16 +130,24 @@ class LocalPlanner(rclpy.node.Node):
         self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
 
         # Publish points on the map in rviz
-        self.points_pub = self.create_publisher(Path, "/points", 10)
+        self.points_pub = self.create_publisher(
+            Path, "/points", qos_profile=latching_qos
+        )
 
         # Publish the cubic spline path in rviz
-        self.path_pub = self.create_publisher(Path, "/path", 10)
+        self.path_pub = self.create_publisher(
+            Path, "/path", qos_profile=latching_qos
+        )
 
         # Publish the next navigating point in the path
-        self.target_pub = self.create_publisher(Marker, "/target_point", 10)
+        self.target_pub = self.create_publisher(
+            Marker, "/target_point", qos_profile=latching_qos
+        )
 
         # Publish the current requested steering angle
-        self.target_twist_pub = self.create_publisher(Marker, "/target_twist", 10)
+        self.target_twist_pub = self.create_publisher(
+            Marker, "/target_twist", qos_profile=latching_qos
+        )
 
         # Publish status update for the server
         self.arrived_pub = self.create_publisher(String, "/arrived", 10)
@@ -148,7 +162,9 @@ class LocalPlanner(rclpy.node.Node):
         self.eta_percentage_pub = self.create_publisher(UInt64, "/eta_percentage", 10)
 
         # Publish the projected turning angle and path
-        self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
+        self.projection_pub = self.create_publisher(
+            Marker, "/projected_path", qos_profile=latching_qos
+        )
 
         ## Timers
         # Calculate ETA

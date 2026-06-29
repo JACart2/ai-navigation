@@ -20,67 +20,85 @@ def _as_str(value):
     return str(value)
 
 
-def _cart_config_path(cart_name, cart_config_path):
+VALID_CARTS = ("james", "madison")
+
+
+def _selected_cart(context):
+    cart = LaunchConfiguration("cart").perform(context).strip().lower()
+    cart_name = LaunchConfiguration("cart_name").perform(context).strip().lower()
+    selected = cart_name or cart or "james"
+
+    if selected not in VALID_CARTS:
+        raise RuntimeError(
+            f"Invalid cart '{selected}'. Expected one of: {', '.join(VALID_CARTS)}."
+        )
+
+    return selected
+
+
+def _cart_config_path(cart, cart_config_path):
     if cart_config_path:
         return cart_config_path
-    if cart_name in ("james", "madison"):
-        return os.path.join(
-            get_package_share_directory("cart_launch"),
-            "config",
-            f"cart_{cart_name}.yaml",
-        )
-    return ""
+    return os.path.join(
+        get_package_share_directory("cart_launch"),
+        "config",
+        f"cart_{cart}.yaml",
+    )
 
 
 def _make_lidar_static_tf(context, *args, **kwargs):
-    cart_name = (
-        LaunchConfiguration("cart_name").perform(context).strip().lower()
-    )
+    cart = _selected_cart(context)
     cart_config_path = (
         LaunchConfiguration("cart_config_path").perform(context).strip()
     )
     base_frame = LaunchConfiguration("base_frame").perform(context)
     lidar_frame = LaunchConfiguration("lidar_frame").perform(context)
+    default_lidar_x = LaunchConfiguration("lidar_x").perform(context)
+    default_lidar_y = LaunchConfiguration("lidar_y").perform(context)
+    default_lidar_z = LaunchConfiguration("lidar_z").perform(context)
+    default_lidar_yaw = LaunchConfiguration("lidar_yaw").perform(context)
+    default_lidar_pitch = LaunchConfiguration("lidar_pitch").perform(context)
+    default_lidar_roll = LaunchConfiguration("lidar_roll").perform(context)
 
     cfg = {}
-    resolved_config_path = _cart_config_path(cart_name, cart_config_path)
+    resolved_config_path = _cart_config_path(cart, cart_config_path)
     if resolved_config_path and os.path.exists(resolved_config_path):
         with open(resolved_config_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
 
     lidar_tf = cfg.get("lidar_tf", {})
-    if cart_name == "james":
+    info_actions = []
+    if not lidar_tf:
+        info_actions.append(
+            LogInfo(
+                msg=(
+                    "No lidar_tf configured for cart:="
+                    f"{cart}; using shared MOLA/default base_link->velodyne "
+                    "static TF."
+                )
+            )
+        )
         lidar_tf = {
             "parent_frame": base_frame,
             "child_frame": lidar_frame,
-            "x": 1.524,
-            "y": 0.0254,
-            "z": 1.778,
-            "roll": 0.0,
-            "pitch": 0.0,
-            "yaw": 0.0,
-            **lidar_tf,
+            "x": default_lidar_x,
+            "y": default_lidar_y,
+            "z": default_lidar_z,
+            "roll": default_lidar_roll,
+            "pitch": default_lidar_pitch,
+            "yaw": default_lidar_yaw,
         }
-    elif not lidar_tf:
-        return [
-            LogInfo(
-                msg=(
-                    "No lidar_tf configured for cart_name:="
-                    f"{cart_name}; skipping base_link->velodyne static TF."
-                )
-            )
-        ]
 
     parent_frame = _as_str(lidar_tf.get("parent_frame", base_frame))
     child_frame = _as_str(lidar_tf.get("child_frame", lidar_frame))
-    x = _as_str(lidar_tf.get("x", 1.524))
-    y = _as_str(lidar_tf.get("y", 0.0254))
-    z = _as_str(lidar_tf.get("z", 1.778))
-    roll = _as_str(lidar_tf.get("roll", 0.0))
-    pitch = _as_str(lidar_tf.get("pitch", 0.0))
-    yaw = _as_str(lidar_tf.get("yaw", 0.0))
+    x = _as_str(lidar_tf.get("x", default_lidar_x))
+    y = _as_str(lidar_tf.get("y", default_lidar_y))
+    z = _as_str(lidar_tf.get("z", default_lidar_z))
+    roll = _as_str(lidar_tf.get("roll", default_lidar_roll))
+    pitch = _as_str(lidar_tf.get("pitch", default_lidar_pitch))
+    yaw = _as_str(lidar_tf.get("yaw", default_lidar_yaw))
 
-    return [
+    return info_actions + [
         Node(
             package="tf2_ros",
             executable="static_transform_publisher",
@@ -183,12 +201,23 @@ def generate_launch_description():
                 default_value="velodyne",
                 description="LiDAR frame for the static sensor transform.",
             ),
+            DeclareLaunchArgument("lidar_x", default_value="0.5"),
+            DeclareLaunchArgument("lidar_y", default_value="0.0"),
+            DeclareLaunchArgument("lidar_z", default_value="1.75"),
+            DeclareLaunchArgument("lidar_yaw", default_value="0.0"),
+            DeclareLaunchArgument("lidar_pitch", default_value="0.0"),
+            DeclareLaunchArgument("lidar_roll", default_value="0.0"),
             DeclareLaunchArgument(
-                "cart_name",
+                "cart",
                 default_value="james",
                 description=(
                     "Cart name used to auto-select cart-specific config."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "cart_name",
+                default_value="",
+                description="Legacy alias for cart.",
             ),
             DeclareLaunchArgument(
                 "use_rviz",

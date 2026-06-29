@@ -17,6 +17,7 @@ from ament_index_python.packages import get_package_share_directory
 
 # ROS based import
 import rclpy.node
+import rclpy.qos
 import tf_transformations
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 
@@ -164,13 +165,29 @@ class GlobalPlanner(rclpy.node.Node):
 
         # ROS 2 PUBLISHERS
         # ------------------------------------------
+        latching_qos = rclpy.qos.QoSProfile(
+            depth=1,
+            durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
+        )
 
         # Publish the path for local planner to begin navigating
-        self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
+        self.path_pub = self.create_publisher(
+            LocalPointsArray,
+            "/global_path",
+            qos_profile=latching_qos,
+        )
 
         # GPS publishers and position update timer
-        self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
-        self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
+        self.gps_path_pub = self.create_publisher(
+            LatLongArray,
+            "/gps_global_path",
+            qos_profile=latching_qos,
+        )
+        self.display_pub = self.create_publisher(
+            Marker,
+            "/display_gps",
+            qos_profile=latching_qos,
+        )
         # Publishes current cart position in GPS coordinates
         self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
         # Publish cart GPS position at 10 Hz while navigating

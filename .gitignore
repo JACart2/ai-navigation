@@ -164,3 +164,12 @@ cython_debug/
 # Local Codex work notes
 CODEX_NOTES.md
 WORKLOG_*.md
+
+# ROS/colcon generated artifacts
+build/
+install/
+log/
+
+# Python generated files
+__pycache__/
+*.pyc

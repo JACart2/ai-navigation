@@ -10,6 +10,7 @@ from navigation import pure_pursuit, cubic_spline_planner
 
 # ROS based imports
 import rclpy
+import rclpy.qos
 from nav_msgs.msg import Path
 from navigation_interface.msg import (
     LocalPointsArray,
@@ -29,7 +30,17 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-from anomaly_msg.msg import AnomalyMsg
+try:
+    from anomaly_msg.msg import AnomalyMsg
+    LEGACY_ANOMALY_MSG = True
+except ImportError:
+    from anomaly_msg.msg import AnomalyLog as AnomalyMsg
+    LEGACY_ANOMALY_MSG = False
+    AnomalyMsg.INFO = "INFO"
+    AnomalyMsg.WARNING = "WARNING"
+    AnomalyMsg.ERROR = "ERROR"
+    AnomalyMsg.TEXT = "TEXT"
+
 
 
 
@@ -100,6 +111,11 @@ class LocalPlanner(rclpy.node.Node):
         )
 
         ## Publishers
+        latching_qos = rclpy.qos.QoSProfile(
+            depth=1,
+            durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
         # Share the current status of the vehicle's state
         self.vehicle_state_pub = self.create_publisher(
             VehicleState, "/vehicle_state", 10
@@ -114,16 +130,24 @@ class LocalPlanner(rclpy.node.Node):
         self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
 
         # Publish points on the map in rviz
-        self.points_pub = self.create_publisher(Path, "/points", 10)
+        self.points_pub = self.create_publisher(
+            Path, "/points", qos_profile=latching_qos
+        )
 
         # Publish the cubic spline path in rviz
-        self.path_pub = self.create_publisher(Path, "/path", 10)
+        self.path_pub = self.create_publisher(
+            Path, "/path", qos_profile=latching_qos
+        )
 
         # Publish the next navigating point in the path
-        self.target_pub = self.create_publisher(Marker, "/target_point", 10)
+        self.target_pub = self.create_publisher(
+            Marker, "/target_point", qos_profile=latching_qos
+        )
 
         # Publish the current requested steering angle
-        self.target_twist_pub = self.create_publisher(Marker, "/target_twist", 10)
+        self.target_twist_pub = self.create_publisher(
+            Marker, "/target_twist", qos_profile=latching_qos
+        )
 
         # Publish status update for the server
         self.arrived_pub = self.create_publisher(String, "/arrived", 10)
@@ -138,7 +162,9 @@ class LocalPlanner(rclpy.node.Node):
         self.eta_percentage_pub = self.create_publisher(UInt64, "/eta_percentage", 10)
 
         # Publish the projected turning angle and path
-        self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
+        self.projection_pub = self.create_publisher(
+            Marker, "/projected_path", qos_profile=latching_qos
+        )
 
         ## Timers
         # Calculate ETA
@@ -624,12 +650,21 @@ class LocalPlanner(rclpy.node.Node):
             return
         anomaly_msg = AnomalyMsg()
 
-        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
-        anomaly_msg.header.frame_id = "local_planner"
-        anomaly_msg.node_name = self.get_name()
-        anomaly_msg.importance = severity
-        anomaly_msg.type = AnomalyMsg.TEXT
-        anomaly_msg.msg = message
+        if LEGACY_ANOMALY_MSG:
+            anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+            anomaly_msg.header.frame_id = "local_planner"
+            anomaly_msg.node_name = self.get_name()
+            anomaly_msg.importance = severity
+            anomaly_msg.type = AnomalyMsg.TEXT
+            anomaly_msg.msg = message
+        else:
+            anomaly_msg.stamp = self.get_clock().now().to_msg()
+            anomaly_msg.node_name = self.get_name()
+            anomaly_msg.source = "navigation"
+            anomaly_msg.description = f"{severity}: {message}"
+            anomaly_msg.topic_name = "/local_planner"
+            anomaly_msg.data_type = "text"
+            anomaly_msg.data = message.encode("utf-8")
 
         self.anomaly_pub.publish(anomaly_msg)
 

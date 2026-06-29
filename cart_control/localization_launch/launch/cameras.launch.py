@@ -88,6 +88,27 @@ def generate_launch_description():
         output="screen",
     )
 
+    # The ZED driver can publish zed_front_imu_link without attaching it to the
+    # camera URDF tree when odom TF publication is disabled. Publish the fixed
+    # camera-to-IMU extrinsics explicitly so MOLA can resolve base_link -> IMU.
+    front_imu_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="front_imu_tf",
+        arguments=[
+            "-0.002",
+            "-0.023061",
+            "0.000217",
+            "0.0023777612943929726",
+            "-0.0009785046479081163",
+            "-0.0017020080845576025",
+            "0.9999952499887187",
+            "zed_front_camera_center",
+            "zed_front_imu_link",
+        ],
+        output="screen",
+    )
+
     # Combine all the above components into a single launch description
     return LaunchDescription(
         [
@@ -97,5 +118,6 @@ def generate_launch_description():
             ),
             zed_multi_camera_launch,
             multi_link_tf,
+            front_imu_tf,
         ]
     )

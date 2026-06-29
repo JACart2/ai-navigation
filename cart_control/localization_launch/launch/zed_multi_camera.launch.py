@@ -154,7 +154,9 @@ def launch_setup(context, *args, **kwargs):
                 'camera_id': id,
                 'publish_tf': publish_tf,
                 'publish_map_tf': publish_map_tf,
-                'publish_imu_tf': 'false',
+                # MOLA needs the camera IMU frame in TF, even though we still
+                # suppress ZED odom/map TF publication.
+                'publish_imu_tf': 'true',
                 'namespace': namespace_val,
                 'node_name': node_name,
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.

@@ -285,18 +285,21 @@ cleanup_old_autolaunch_children() {
         if (pid == 1 || pid == shell_pid || ppid == shell_pid) next
 
         if (cmd ~ /ros2 launch cart_launch mola_autonomy\.launch\.py/) print pid
+        else if (cmd ~ /ros2 launch rosbridge_server/) print pid
+        else if (cmd ~ /mola-cli/) print pid
         else if (cmd ~ /mola_bridge_ros2/) print pid
-        else if (cmd ~ /rosbridge_websocket/) print pid
+        else if (cmd ~ /mola_odom_to_tf/) print pid
+        else if (cmd ~ /rosbridge_websocket|rosapi_node/) print pid
         else if (cmd ~ /velodyne_driver_node|velodyne_transform_node/) print pid
         else if (cmd ~ /(^|\/)localization\.rviz/) print pid
         else if (cmd ~ /rviz2/) print pid
         else if (cmd ~ /swri_console/) print pid
-        else if (cmd ~ /base_link_to_velodyne_tf|lidar_tf/) print pid
+        else if (cmd ~ /base_link_to_velodyne_tf|lidar_tf|static_transform_publisher/) print pid
         else if (cmd ~ /pcl_pose_relay/) print pid
         else if (cmd ~ /mola_auto_localization_supervisor/) print pid
         else if (cmd ~ /robot_state_publisher/) print pid
         else if (cmd ~ /global_planner|local_planner|display_global_path|visualize_graph|speed_node/) print pid
-        else if (cmd ~ /zed_object_to_obstacle|collision_detector|collision_avoidance_aad_log/) print pid
+        else if (cmd ~ /zed_object_to_obstacle|lidar_object_to_obstacle|collision_detector|collision_avoidance_aad_log/) print pid
         else if (cmd ~ /dummy_pointcloud_publisher|pointcloud_to_laserscan_node/) print pid
         else if (cmd ~ /motor_endpoint/) print pid
       }
@@ -343,7 +346,44 @@ else
   cleanup_invocation='echo "Skipping old-stack cleanup."'
 fi
 
-launch_command='exec ros2 launch cart_launch mola_autonomy.launch.py "$@"'
+read -r -d '' launch_command <<'EOS' || true
+run_mola_launch_with_cleanup() {
+  local launch_pid status
+  launch_pid=""
+
+  cleanup_after_launch() {
+    status=$?
+    trap - EXIT INT TERM
+
+    echo "Cleaning up ROS stack opened by launch_mola_stack.sh..."
+
+    if [[ -n "${launch_pid:-}" ]] && kill -0 "$launch_pid" 2>/dev/null; then
+      kill -INT "$launch_pid" 2>/dev/null || true
+      sleep 2
+      if kill -0 "$launch_pid" 2>/dev/null; then
+        kill -TERM "$launch_pid" 2>/dev/null || true
+        sleep 2
+      fi
+      if kill -0 "$launch_pid" 2>/dev/null; then
+        kill -KILL "$launch_pid" 2>/dev/null || true
+      fi
+    fi
+
+    cleanup_old_autolaunch_children || true
+    exit "$status"
+  }
+
+  trap cleanup_after_launch EXIT INT TERM
+
+  ros2 launch cart_launch mola_autonomy.launch.py "$@" &
+  launch_pid=$!
+  wait "$launch_pid"
+  status=$?
+  return "$status"
+}
+
+run_mola_launch_with_cleanup "$@"
+EOS
 
 start_host_ui
 
@@ -359,7 +399,39 @@ if [[ "$use_docker" == true ]]; then
     cleanup_container_script() {
       rm -f "$container_script"
     }
-    trap 'cleanup_ui; cleanup_container_script' EXIT
+
+    container_stack_cleanup_ran=false
+    cleanup_container_stack() {
+      if [[ "$container_stack_cleanup_ran" == true ]]; then
+        return
+      fi
+      container_stack_cleanup_ran=true
+
+      if [[ "$cleanup_old_stack" != true ]]; then
+        return
+      fi
+
+      echo "Host cleanup: stopping ROS/MOLA stack inside backend container..."
+      (
+        cd "$docker_dir"
+        {
+          printf '%s\n' "$ros_setup_command"
+          printf '%s\n' "$cleanup_command"
+          printf '%s\n' 'cleanup_old_autolaunch_children'
+        } | docker compose exec -T backend bash -s
+      ) || true
+    }
+
+    cleanup_everything_on_exit() {
+      local status=$?
+      trap - EXIT INT TERM
+      cleanup_container_stack
+      cleanup_ui
+      cleanup_container_script
+      exit "$status"
+    }
+
+    trap cleanup_everything_on_exit EXIT INT TERM
     {
       printf '%s\n' "$ros_setup_command"
       printf '%s\n' "$cleanup_command"
@@ -406,4 +478,5 @@ else
   echo "Skipping old-stack cleanup."
 fi
 
-exec ros2 launch cart_launch mola_autonomy.launch.py "${launch_args[@]}"
+set -- "${launch_args[@]}"
+eval "$launch_command"

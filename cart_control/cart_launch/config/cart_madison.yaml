@@ -1,5 +1,8 @@
 zed_front_serial: 38667373
 zed_rear_serial: 34733362
+motor_port: "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_AB0L9S7Q-if00-port0"
+motor_baudrate: 57600
+
 
 # Velodyne network/settings for Madison.
 # To test a different spin rate, change rpm here, for example 650.0.

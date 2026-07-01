@@ -29,6 +29,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from navigation_interface.msg import Obstacle, ObstacleArray
 from visualization_msgs.msg import Marker
 from tf2_ros import Buffer
+from std_msgs.msg import Header
+from anomaly_msg.msg import AnomalyMsg
 
 class Point(object):
 
@@ -92,6 +94,9 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
         # Publish created markers to be displayed on RVIZ2.
         self.display_pub = self.create_publisher (Marker, "lidar_obstacle_display", 10)
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, "/ai_anomaly_logging", 10)
+        self.last_obstacle_count = None
+        self.transform_unhealthy = False
 
     def cluster_points(self):
         # LaserScan msg being processed.
@@ -183,6 +188,15 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
         # Publish all detected Obstacles, then clear the buffer.
         self.obstacle_pub.publish (self.obstacles)
+        obstacle_count = len(self.obstacles.obstacles)
+        if obstacle_count != self.last_obstacle_count:
+            severity = AnomalyMsg.INFO
+            message = f"LiDAR obstacle converter published obstacles: count={obstacle_count}"
+            if obstacle_count >= 5:
+                severity = AnomalyMsg.WARNING
+                message = f"LiDAR obstacle converter sees dense obstacle field: count={obstacle_count}"
+            self.anomaly_logging(message, severity)
+            self.last_obstacle_count = obstacle_count
 
         # TODO! - untested function
         self.local_display("base_link")
@@ -224,6 +238,12 @@ class LidarObjectToObstacle(rclpy.node.Node):
                     transform = self.tf_buffer.lookup_transform('base_link', 'velodyne', self.last_scanned)
                 except (tf2_ros.TransformException) as e:
                     self.get_logger().warn(f'LO2O: Could not transform: {e}')
+                    if not self.transform_unhealthy:
+                        self.anomaly_logging(
+                            f"LiDAR obstacle transform unavailable: {e}",
+                            AnomalyMsg.WARNING,
+                        )
+                    self.transform_unhealthy = True
                     continue
 
                 # Transforming the center point to 'base_link'
@@ -240,7 +260,20 @@ class LidarObjectToObstacle(rclpy.node.Node):
                     transformed_point = do_transform_point(global_point, transform)
                 except (tf2_ros.TransformException) as e:
                     self.get_logger().warn(f'Could not transform point: {e}')
+                    if not self.transform_unhealthy:
+                        self.anomaly_logging(
+                            f"LiDAR obstacle point transform failed: {e}",
+                            AnomalyMsg.WARNING,
+                        )
+                    self.transform_unhealthy = True
                     continue
+
+                if self.transform_unhealthy:
+                    self.anomaly_logging(
+                        "LiDAR obstacle transform recovered",
+                        AnomalyMsg.INFO,
+                    )
+                    self.transform_unhealthy = False
 
                 # self.get_logger().info("Transformed point to :: " + str(transformed_point)) # DEBUGGING!
                 # Create a new circle around the obstacle
@@ -287,6 +320,17 @@ class LidarObjectToObstacle(rclpy.node.Node):
 
             # Publish marker
             self.display_pub.publish(marker)
+
+    def anomaly_logging(self, message, severity):
+        anomaly_msg = AnomalyMsg()
+        anomaly_msg.header = Header()
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "lidar_object_to_obstacle"
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
+        self.anomaly_pub.publish(anomaly_msg)
 
 def main():
     # node startup.

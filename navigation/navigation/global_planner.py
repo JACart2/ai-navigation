@@ -32,6 +32,7 @@ from navigation_interface.msg import (
     LocalPointsArray,
     LatLongArray,
 )
+from anomaly_msg.msg import AnomalyMsg
 
 
 class GlobalPlanner(rclpy.node.Node):
@@ -53,10 +54,12 @@ class GlobalPlanner(rclpy.node.Node):
         self.cur_speed = 0.0
 
         self.vel_polls = 0
+        self.last_reported_navigating = None
 
         self.gps_calibrated = False
 
         self.minimize_travel = True  # TODO - Consider removing or setting another way
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, "/ai_anomaly_logging", 10)
 
         # TODO MAKE THIS A LAUNCH PARAM
         self.ANCHOR_GPS = [38.433939, -78.862157]
@@ -134,9 +137,17 @@ class GlobalPlanner(rclpy.node.Node):
 
             for node in self.global_graph:
                 self.global_graph.nodes[node]["active"] = True
+            self.anomaly_logging(
+                f"Loaded route graph: file={file_name}, nodes={self.global_graph.number_of_nodes()}, edges={self.global_graph.number_of_edges()}",
+                AnomalyMsg.INFO,
+            )
         except Exception as e:
             self.log_header(
                 f"Unable to launch graph file pointed to in the constants file in {file_name} because {e}"
+            )
+            self.anomaly_logging(
+                f"Unable to load route graph: file={file_name}, error={e}",
+                AnomalyMsg.ERROR,
             )
 
     def calc_nav(self, destination):
@@ -151,12 +162,20 @@ class GlobalPlanner(rclpy.node.Node):
         # Allows other functions to not make critical decisions or modify data while calculating navigation
         self.calculating_nav = True
         self.total_distance = 0
+        self.anomaly_logging(
+            f"Navigation request received: destination=({destination.x:.2f}, {destination.y:.2f})",
+            AnomalyMsg.INFO,
+        )
 
         # Make a destination request when we don't know where the cart is at yet
         if self.current_pos is None:
             self.current_pos = PoseStamped()
             self.current_pos.pose.position.x = 0.0
             self.current_pos.pose.position.y = 0.0
+            self.anomaly_logging(
+                "Planning before localization pose is available; using origin as temporary cart position",
+                AnomalyMsg.WARNING,
+            )
 
         current_cart_pos = self.current_pos.pose.position
 
@@ -191,10 +210,19 @@ class GlobalPlanner(rclpy.node.Node):
                 self.log_header(
                     "Make sure you are within reliable distance of the road network supported by the graph(~10 meters)"
                 )
+                self.calculating_nav = False
+                self.anomaly_logging(
+                    "Unable to match cart pose to a drivable graph lane; route request aborted",
+                    AnomalyMsg.ERROR,
+                )
                 return None
             else:
                 self.log_header(
                     "A suitable node was found, please check RViz to make sure the pathing is safe"
+                )
+                self.anomaly_logging(
+                    f"Recovered cart graph lane using fallback search: node={self.current_cart_node}",
+                    AnomalyMsg.WARNING,
                 )
 
         # Attempt to find a route to the destination
@@ -233,6 +261,10 @@ class GlobalPlanner(rclpy.node.Node):
             self.get_logger().info(
                 f"Publishing Path: {str(self.current_cart_node)} to {str(destination_point)}"
             )
+            self.anomaly_logging(
+                f"Published route: start_node={self.current_cart_node}, destination_node={destination_point}, waypoints={len(points_arr.localpoints)}",
+                AnomalyMsg.INFO,
+            )
 
         except nx.NetworkXNoPath:
             self.log_header("Unable to find a path to the desired destination")
@@ -248,6 +280,11 @@ class GlobalPlanner(rclpy.node.Node):
                 self.log_header("NetworkX can't find a connection")
             else:
                 self.log_header("NetworkX can find a connection")
+            self.calculating_nav = False
+            self.anomaly_logging(
+                f"No route found: start_node={self.current_cart_node}, destination_node={destination_point}",
+                AnomalyMsg.ERROR,
+            )
 
     def determine_lane(self, cart_node):
         """A function for determining which lane the cart is in, or should be in. (Note lanes being directions in the directed graph)
@@ -508,6 +545,14 @@ class GlobalPlanner(rclpy.node.Node):
             msg (VehicleState): A VehicleState message containing navigation status
         """
         self.navigating = msg.is_navigating
+        if msg.reached_destination:
+            self.anomaly_logging("Vehicle state reports destination reached", AnomalyMsg.INFO)
+        elif msg.is_navigating and self.last_reported_navigating is not True:
+            self.anomaly_logging(
+                "Vehicle state changed to navigating",
+                AnomalyMsg.INFO,
+            )
+        self.last_reported_navigating = msg.is_navigating
 
     def vel_callback(self, msg):
         """Keeps the global planner updated on current speed of the cart
@@ -659,6 +704,21 @@ class GlobalPlanner(rclpy.node.Node):
         self.get_logger().info("=" * 50)
         self.get_logger().info(f"{msg}")
         self.get_logger().info("=" * 50)
+
+    def anomaly_logging(
+        self,
+        message: str,
+        severity: int,
+    ):
+        anomaly_msg = AnomalyMsg()
+        anomaly_msg.header = Header()
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "global_planner"
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
+        self.anomaly_pub.publish(anomaly_msg)
 
 
 def main():

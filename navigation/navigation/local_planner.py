@@ -197,7 +197,7 @@ class LocalPlanner(rclpy.node.Node):
         self.eta_next_report_percent = 20
         self.log(f"Path received: {str(msg)}")
 
-        # self.anomaly_logging("New path received", AnomalyMsg.INFO)
+        self.anomaly_logging("New path received", AnomalyMsg.INFO)
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points

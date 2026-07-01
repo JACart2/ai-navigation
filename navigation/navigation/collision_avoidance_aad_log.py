@@ -115,16 +115,14 @@ class CollisionAvoidanceAADLog(Node):
                 
                 # Only process if enough time has passed
                 if (now - self.last_pub_time).nanoseconds > self.IMG_PUBLISH_PERIOD * 1e9:
-                    # Create and publish anomaly with full image data
-                    anomaly = AnomalyMsg()
-                    anomaly.header = img_msg.header
-                    anomaly.node_name = self.get_name()
-                    anomaly.importance = AnomalyMsg.INFO
-                    anomaly.type = AnomalyMsg.IMAGE
-                    anomaly.msg = "Camera frame received."
-                    anomaly.image = img_msg  # Full image is safe here - no blocking
-
-                    self.anomaly_camera_pub.publish(anomaly)
+                    self.anomaly_logging(
+                        "Camera frame received.",
+                        AnomalyMsg.INFO,
+                        header=img_msg.header,
+                        msg_type=AnomalyMsg.IMAGE,
+                        image=img_msg,
+                        publisher=self.anomaly_camera_pub,
+                    )
                     self.last_pub_time = now
                     
             except:
@@ -143,33 +141,28 @@ class CollisionAvoidanceAADLog(Node):
             pass
 
     def stop_callback(self, stop_msg: Stop):
-        anomaly = AnomalyMsg()
-        anomaly.header = stop_msg.header
-        anomaly.node_name = self.get_name()
-        anomaly.type = AnomalyMsg.TEXT
-
         if stop_msg.stop:
-            anomaly.importance = AnomalyMsg.WARNING
-            anomaly.msg = "Stop signal received."
-
-            self.anomaly_log_pub.publish(anomaly)
+            self.anomaly_logging(
+                f"Stop signal received from {stop_msg.sender_id.data}; distance={stop_msg.distance:.2f}",
+                AnomalyMsg.WARNING,
+                header=stop_msg.header,
+            )
+        else:
+            self.anomaly_logging(
+                f"Stop signal cleared by {stop_msg.sender_id.data}",
+                AnomalyMsg.INFO,
+                header=stop_msg.header,
+            )
 
     def speed_callback(self, msg: Float32):
         if abs(self.last_speed - msg.data) > 0.1:
             self.last_speed = msg.data
 
-            anomaly = AnomalyMsg()
-
-            anomaly.header = Header()
-            anomaly.header.stamp = self.get_clock().now().to_msg()
-            anomaly.header.frame_id = "collision_avoidance_frame"
-
-            anomaly.node_name = self.get_name()
-            anomaly.importance = AnomalyMsg.INFO
-            anomaly.type = AnomalyMsg.TEXT
-            anomaly.msg = f"The speed of the cart is {msg.data}"
-
-            self.anomaly_log_pub.publish(anomaly)
+            self.anomaly_logging(
+                f"Planner target speed changed to {msg.data:.2f} km/h",
+                AnomalyMsg.INFO,
+                frame_id="collision_avoidance_frame",
+            )
 
     def estimated_speed_callback(self, msg: Float32):
         if abs(msg.data) < self.MOVING_SPEED_THRESHOLD_MPS:
@@ -181,18 +174,11 @@ class CollisionAvoidanceAADLog(Node):
         ).nanoseconds <= self.MOVING_LOG_PERIOD * 1e9:
             return
 
-        anomaly = AnomalyMsg()
-
-        anomaly.header = Header()
-        anomaly.header.stamp = now.to_msg()
-        anomaly.header.frame_id = "collision_avoidance_frame"
-
-        anomaly.node_name = self.get_name()
-        anomaly.importance = AnomalyMsg.INFO
-        anomaly.type = AnomalyMsg.TEXT
-        anomaly.msg = f"The cart is moving at {msg.data:.2f} m/s"
-
-        self.anomaly_log_pub.publish(anomaly)
+        self.anomaly_logging(
+            f"The cart is moving at {msg.data:.2f} m/s",
+            AnomalyMsg.INFO,
+            frame_id="collision_avoidance_frame",
+        )
         self.last_moving_pub_time = now
 
     def localization_health_callback(self, msg: DiagnosticArray):
@@ -216,16 +202,12 @@ class CollisionAvoidanceAADLog(Node):
         if not should_publish_periodic and not should_publish_change:
             return
 
-        anomaly = AnomalyMsg()
-        anomaly.header = msg.header
-        if not anomaly.header.frame_id:
-            anomaly.header.frame_id = "localization_health_frame"
-        anomaly.node_name = self.get_name()
-        anomaly.importance = self._diagnostic_level_to_anomaly_importance(status.level)
-        anomaly.type = AnomalyMsg.TEXT
-        anomaly.msg = self._format_localization_health(status, values)
-
-        self.anomaly_log_pub.publish(anomaly)
+        self.anomaly_logging(
+            self._format_localization_health(status, values),
+            self._diagnostic_level_to_anomaly_importance(status.level),
+            header=msg.header,
+            frame_id="localization_health_frame",
+        )
         self.last_localization_health_pub_time = now
         self.last_localization_health_signature = signature
 
@@ -249,6 +231,35 @@ class CollisionAvoidanceAADLog(Node):
             f"consecutive_rejected={values.get('consecutive_rejected_updates', 'unknown')}",
         ]
         return "Localization health: " + ", ".join(fields)
+
+    def anomaly_logging(
+        self,
+        message,
+        severity,
+        header=None,
+        frame_id="collision_avoidance_frame",
+        msg_type=AnomalyMsg.TEXT,
+        image=None,
+        publisher=None,
+    ):
+        anomaly = AnomalyMsg()
+        if header is not None:
+            anomaly.header = header
+        else:
+            anomaly.header = Header()
+            anomaly.header.stamp = self.get_clock().now().to_msg()
+
+        if not anomaly.header.frame_id:
+            anomaly.header.frame_id = frame_id
+
+        anomaly.node_name = self.get_name()
+        anomaly.importance = severity
+        anomaly.type = msg_type
+        anomaly.msg = message
+        if image is not None:
+            anomaly.image = image
+
+        (publisher or self.anomaly_log_pub).publish(anomaly)
     
 
 def main(args=None):

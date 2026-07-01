@@ -285,13 +285,10 @@ class MotorEndpoint(rclpy.node.Node):
 
         target_speed = int(self.vel_cart_units)  # float64
 
-        # Adjusts the target_angle range from (-45 <-> 45) to (0 <-> 100)
-        if self.angle_planned < -40:
-            self.angle_planned = self.STEERING_TOLERANCE * -1
-        if self.angle_planned > 40:
-            self.angle_planned = self.STEERING_TOLERANCE
+        # Adjusts the target_angle range from (-40 <-> 40) to (0 <-> 100)
+        angle_planned = max(-40, min(40, self.angle_planned))
         target_angle = 100 - int(
-            ((self.angle_planned + self.STEERING_TOLERANCE) / 90) * 100
+            ((angle_planned + self.STEERING_TOLERANCE) / 90) * 100
         )
 
         if self.state == STOPPED:
@@ -361,14 +358,11 @@ class MotorEndpoint(rclpy.node.Node):
                     
         target_speed = int(self.vel_cart_units)  # float64
 
-        # Adjust the target_angle range from (-45 <-> 45) to (0 <-> 100)
-        if self.angle_planned < -40:
-            self.angle_planned = self.STEERING_TOLERANCE * -1
-        if self.angle_planned > 40:
-            self.angle_planned = self.STEERING_TOLERANCE
+        # Adjust the target_angle range from (-40 <-> 40) to (0 <-> 100)
+        angle_planned = max(-40, min(40, self.angle_planned))
 
         target_angle = 100 - int(
-            ((self.angle_planned + self.STEERING_TOLERANCE) / 90) * 100
+            ((angle_planned + self.STEERING_TOLERANCE) / 90) * 100
         )
 
         if self.state == STOPPED:

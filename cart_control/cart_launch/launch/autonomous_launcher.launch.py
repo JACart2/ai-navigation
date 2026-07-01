@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, SetEnvironmentVariable
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -32,6 +33,11 @@ def generate_launch_description():
         "enable_aad",
         default_value="true",
         description="Enable anomaly logging",
+    )
+    declare_launch_aad_node = DeclareLaunchArgument(
+        "launch_aad_node",
+        default_value="true",
+        description="Launch the anomaly_detection LLM/alert node",
     )
 
     swri_console_node = Node(
@@ -95,12 +101,21 @@ def generate_launch_description():
         parameters=[],
     )
 
+    anomaly_detection_node = Node(
+        package="anomaly_detection",
+        executable="anomaly_detection_node",
+        name="anomaly_detection",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("launch_aad_node")),
+    )
+
     delayed_stack = TimerAction(
         period=console_start_delay_s,
         actions=[
             localization_launch,
             navigation_launch,
             motor_control_launch,
+            anomaly_detection_node,
             rviz2_command,
             rosbridge_node,
         ],
@@ -113,6 +128,7 @@ def generate_launch_description():
             declare_console_start_delay_s,
             declare_cart_config_path,
             declare_enable_aad,
+            declare_launch_aad_node,
             swri_console_node,
             delayed_stack,
         ]

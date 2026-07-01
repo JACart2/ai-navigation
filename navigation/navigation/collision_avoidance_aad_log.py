@@ -9,6 +9,7 @@ from std_msgs.msg import Float32
 from navigation_interface.msg import Stop
 from std_msgs.msg import Header
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, qos_profile_sensor_data
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 
 from anomaly_msg.msg import AnomalyMsg
 
@@ -19,6 +20,9 @@ class CollisionAvoidanceAADLog(Node):
         super().__init__('collision_avoidance_aad_log')
 
         self.IMG_PUBLISH_PERIOD = 5
+        self.MOVING_LOG_PERIOD = 5
+        self.MOVING_SPEED_THRESHOLD_MPS = 0.1
+        self.LOCALIZATION_HEALTH_LOG_PERIOD = 5
 
         self.get_logger().info("Creating subscribers")
         # --- Subscribers ---
@@ -51,10 +55,24 @@ class CollisionAvoidanceAADLog(Node):
             10
         )
 
+        self.estimated_speed_sub = self.create_subscription(
+            Float32,
+            '/estimated_vel_mps',
+            self.estimated_speed_callback,
+            10
+        )
+
         self.stop_sub = self.create_subscription(
             Stop,
             '/stop',
             self.stop_callback,
+            10
+        )
+
+        self.localization_health_sub = self.create_subscription(
+            DiagnosticArray,
+            '/alignment_status',
+            self.localization_health_callback,
             10
         )
         self.get_logger().info("Finished creating subscribers")
@@ -76,6 +94,9 @@ class CollisionAvoidanceAADLog(Node):
         self.get_logger().info("Finished creating publishers")
 
         self.last_pub_time = self.get_clock().now()
+        self.last_moving_pub_time = self.get_clock().now()
+        self.last_localization_health_pub_time = self.get_clock().now()
+        self.last_localization_health_signature = ""
         self.last_speed = 0.0
 
         # --- Async processing setup ---
@@ -149,6 +170,85 @@ class CollisionAvoidanceAADLog(Node):
             anomaly.msg = f"The speed of the cart is {msg.data}"
 
             self.anomaly_log_pub.publish(anomaly)
+
+    def estimated_speed_callback(self, msg: Float32):
+        if abs(msg.data) < self.MOVING_SPEED_THRESHOLD_MPS:
+            return
+
+        now = self.get_clock().now()
+        if (
+            now - self.last_moving_pub_time
+        ).nanoseconds <= self.MOVING_LOG_PERIOD * 1e9:
+            return
+
+        anomaly = AnomalyMsg()
+
+        anomaly.header = Header()
+        anomaly.header.stamp = now.to_msg()
+        anomaly.header.frame_id = "collision_avoidance_frame"
+
+        anomaly.node_name = self.get_name()
+        anomaly.importance = AnomalyMsg.INFO
+        anomaly.type = AnomalyMsg.TEXT
+        anomaly.msg = f"The cart is moving at {msg.data:.2f} m/s"
+
+        self.anomaly_log_pub.publish(anomaly)
+        self.last_moving_pub_time = now
+
+    def localization_health_callback(self, msg: DiagnosticArray):
+        if not msg.status:
+            return
+
+        status = msg.status[0]
+        values = {value.key: value.value for value in status.values}
+        signature = (
+            f"{status.level}|{status.message}|"
+            f"{values.get('failure_category', '')}|"
+            f"{values.get('recovery_state', '')}|"
+            f"{values.get('reinitialization_requested', '')}"
+        )
+
+        now = self.get_clock().now()
+        should_publish_periodic = (
+            now - self.last_localization_health_pub_time
+        ).nanoseconds > self.LOCALIZATION_HEALTH_LOG_PERIOD * 1e9
+        should_publish_change = signature != self.last_localization_health_signature
+        if not should_publish_periodic and not should_publish_change:
+            return
+
+        anomaly = AnomalyMsg()
+        anomaly.header = msg.header
+        if not anomaly.header.frame_id:
+            anomaly.header.frame_id = "localization_health_frame"
+        anomaly.node_name = self.get_name()
+        anomaly.importance = self._diagnostic_level_to_anomaly_importance(status.level)
+        anomaly.type = AnomalyMsg.TEXT
+        anomaly.msg = self._format_localization_health(status, values)
+
+        self.anomaly_log_pub.publish(anomaly)
+        self.last_localization_health_pub_time = now
+        self.last_localization_health_signature = signature
+
+    def _diagnostic_level_to_anomaly_importance(self, level):
+        if level >= DiagnosticStatus.ERROR:
+            return AnomalyMsg.ERROR
+        if level >= DiagnosticStatus.WARN:
+            return AnomalyMsg.WARNING
+        return AnomalyMsg.INFO
+
+    def _format_localization_health(self, status, values):
+        fields = [
+            f"status={status.message}",
+            f"level={status.level}",
+            f"fitness={values.get('fitness_score', 'unknown')}",
+            f"threshold={values.get('effective_score_threshold', values.get('score_threshold', 'unknown'))}",
+            f"failure_category={values.get('failure_category', 'unknown')}",
+            f"recovery_state={values.get('recovery_state', 'unknown')}",
+            f"reinit_requested={values.get('reinitialization_requested', 'unknown')}",
+            f"reinit_reason={values.get('reinitialization_request_reason', 'unknown')}",
+            f"consecutive_rejected={values.get('consecutive_rejected_updates', 'unknown')}",
+        ]
+        return "Localization health: " + ", ".join(fields)
     
 
 def main(args=None):

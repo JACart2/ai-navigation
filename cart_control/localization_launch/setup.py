@@ -32,6 +32,7 @@ setup(
             'garmin_gps18x_driver = '
             'localization_launch.garmin_gps18x_driver:main',
             'valid_fix_filter = localization_launch.valid_fix_filter:main',
+            'velodyne_gps_udp_driver = localization_launch.velodyne_gps_udp_driver:main',
             'mola_odom_to_tf = localization_launch.mola_odom_to_tf:main',
             'pcl_pose_relay = localization_launch.pcl_pose_relay:main',
             'mola_auto_localization_supervisor = '

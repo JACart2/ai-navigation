@@ -10,6 +10,7 @@ from navigation import pure_pursuit, cubic_spline_planner
 
 # ROS based imports
 import rclpy
+import rclpy.qos
 from nav_msgs.msg import Path
 from navigation_interface.msg import (
     LocalPointsArray,
@@ -29,7 +30,17 @@ from geometry_msgs.msg import (
 from visualization_msgs.msg import Marker
 import tf_transformations as tf
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
-from anomaly_msg.msg import AnomalyMsg
+try:
+    from anomaly_msg.msg import AnomalyMsg
+    LEGACY_ANOMALY_MSG = True
+except ImportError:
+    from anomaly_msg.msg import AnomalyLog as AnomalyMsg
+    LEGACY_ANOMALY_MSG = False
+    AnomalyMsg.INFO = "INFO"
+    AnomalyMsg.WARNING = "WARNING"
+    AnomalyMsg.ERROR = "ERROR"
+    AnomalyMsg.TEXT = "TEXT"
+
 
 
 
@@ -100,6 +111,11 @@ class LocalPlanner(rclpy.node.Node):
         )
 
         ## Publishers
+        latching_qos = rclpy.qos.QoSProfile(
+            depth=1,
+            durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
         # Share the current status of the vehicle's state
         self.vehicle_state_pub = self.create_publisher(
             VehicleState, "/vehicle_state", 10
@@ -114,16 +130,24 @@ class LocalPlanner(rclpy.node.Node):
         self.motion_pub = self.create_publisher(VelAngle, "/nav_cmd", 10)
 
         # Publish points on the map in rviz
-        self.points_pub = self.create_publisher(Path, "/points", 10)
+        self.points_pub = self.create_publisher(
+            Path, "/points", qos_profile=latching_qos
+        )
 
         # Publish the cubic spline path in rviz
-        self.path_pub = self.create_publisher(Path, "/path", 10)
+        self.path_pub = self.create_publisher(
+            Path, "/path", qos_profile=latching_qos
+        )
 
         # Publish the next navigating point in the path
-        self.target_pub = self.create_publisher(Marker, "/target_point", 10)
+        self.target_pub = self.create_publisher(
+            Marker, "/target_point", qos_profile=latching_qos
+        )
 
         # Publish the current requested steering angle
-        self.target_twist_pub = self.create_publisher(Marker, "/target_twist", 10)
+        self.target_twist_pub = self.create_publisher(
+            Marker, "/target_twist", qos_profile=latching_qos
+        )
 
         # Publish status update for the server
         self.arrived_pub = self.create_publisher(String, "/arrived", 10)
@@ -138,7 +162,9 @@ class LocalPlanner(rclpy.node.Node):
         self.eta_percentage_pub = self.create_publisher(UInt64, "/eta_percentage", 10)
 
         # Publish the projected turning angle and path
-        self.projection_pub = self.create_publisher(Marker, "/projected_path", 10)
+        self.projection_pub = self.create_publisher(
+            Marker, "/projected_path", qos_profile=latching_qos
+        )
 
         ## Timers
         # Calculate ETA
@@ -195,7 +221,11 @@ class LocalPlanner(rclpy.node.Node):
         self.path_total_distance = 0.0
         self.eta_initial_report_sent = False
         self.eta_next_report_percent = 20
-        self.log(f"Path received: {str(msg)}")
+        #self.log(f"Path received: {str(msg)}")
+        if self.local_points:
+            self.log(f"Path received. Navigating to {str(self.local_points[-1])}.")
+        else:
+            self.log("Empty path received.")
 
         self.anomaly_logging("New path received", AnomalyMsg.INFO)
 
@@ -499,10 +529,7 @@ class LocalPlanner(rclpy.node.Node):
             if current_node is None:
                 return
 
-            # self.log("x: " + str(self.cur_pose.position.x) + "y: " + str(self.cur_pose.position.y))
-
             distance_remaining = self.calc_trip_dist(self.local_points, current_node)
-
             # Avoid division by zero when speed is zero or not yet initialized
             if self.cur_speed <= 0:
                 return
@@ -515,8 +542,8 @@ class LocalPlanner(rclpy.node.Node):
             # arrival_time = time.time() + remaining_time
 
             # # Convert the time to milliseconds
-            eta_msg.data = int(remaining_time) # changed from arrival_time
-            # eta_msg.data = 0
+            # eta_msg.data = int(arrival_time * (1000))
+            eta_msg.data = 0
             self.eta_pub.publish(eta_msg)
 
             if not self.eta_initial_report_sent:
@@ -554,27 +581,33 @@ class LocalPlanner(rclpy.node.Node):
                 self.eta_next_report_percent += 20
 
     def calc_trip_dist(self, points_list, start):
-        """Calculates the trip distance from the "start" Point to the end of the "points_list"
+        """Calculates the trip distance from the "start" index to the end of the "points_list"
 
         Args:
             points_list(List): The list of path points to calculate the distance of
-            start(Point): The Point of which to start calculating the trip distance
+            start(int): The index of which to start calculating the trip distance
         """
+        if not points_list:
+            return 0
+
         total_distance = 0
 
-        start_index = self.local_points.index(start)
+        try:
+            start_index = points_list.index(start)
+        except ValueError:
+            return 0
+
         if start_index >= len(points_list) - 1:
             return 0
 
-        for i in range(start_index + 1, len(points_list)):
+        for i in range(start_index, len(points_list) - 1):
             total_distance += self.calc_dist(
                 points_list[i].x,
                 points_list[i].y,
-                points_list[i - 1].x,
-                points_list[i - 1].y,
+                points_list[i + 1].x,
+                points_list[i + 1].y,
             )
-            # prev_node = i
-        # self.log(f"Distance remaining: {total_distance}")
+
         return total_distance
 
     def get_closest_point(self, pos_x, pos_y):
@@ -584,16 +617,17 @@ class LocalPlanner(rclpy.node.Node):
             pos_x(float): The x position of search center
             pos_y(float): The y position of search center
         """
-        min_node = None
+        min_node = 0
         min_dist = float("inf")
-        for point in self.local_points:
-            dist = self.calc_dist(pos_x, pos_y, point.x, point.y)
+        for i in range(len(self.local_points)):
+            dist = self.calc_dist(
+                pos_x, pos_y, self.local_points[i].x, self.local_points[i].y
+            )
             if dist < min_dist:
                 min_dist = dist
-                min_node = point
-        
-        # self.log(f"Closest point to x: {pos_x}, y: {pos_y} is x: {min_node.x}, y: {min_node.y}")
-        return min_node
+                min_node = i
+
+        return self.local_points[min_node]
 
     def calc_dist(self, x1, y1, x2, y2):
         return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
@@ -616,12 +650,21 @@ class LocalPlanner(rclpy.node.Node):
             return
         anomaly_msg = AnomalyMsg()
 
-        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
-        anomaly_msg.header.frame_id = "local_planner"
-        anomaly_msg.node_name = self.get_name()
-        anomaly_msg.importance = severity
-        anomaly_msg.type = AnomalyMsg.TEXT
-        anomaly_msg.msg = message
+        if LEGACY_ANOMALY_MSG:
+            anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+            anomaly_msg.header.frame_id = "local_planner"
+            anomaly_msg.node_name = self.get_name()
+            anomaly_msg.importance = severity
+            anomaly_msg.type = AnomalyMsg.TEXT
+            anomaly_msg.msg = message
+        else:
+            anomaly_msg.stamp = self.get_clock().now().to_msg()
+            anomaly_msg.node_name = self.get_name()
+            anomaly_msg.source = "navigation"
+            anomaly_msg.description = f"{severity}: {message}"
+            anomaly_msg.topic_name = "/local_planner"
+            anomaly_msg.data_type = "text"
+            anomaly_msg.data = message.encode("utf-8")
 
         self.anomaly_pub.publish(anomaly_msg)
 

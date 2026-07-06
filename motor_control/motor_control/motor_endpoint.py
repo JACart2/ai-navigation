@@ -21,13 +21,24 @@ from std_msgs.msg import Header
 
 # Annolmaly Logging based imports
 from std_msgs.msg import Float32 
-from anomaly_msg.msg import AnomalyMsg 
+try:
+    from anomaly_msg.msg import AnomalyMsg
+    LEGACY_ANOMALY_MSG = True
+except ImportError:
+    from anomaly_msg.msg import AnomalyLog as AnomalyMsg
+    LEGACY_ANOMALY_MSG = False
+    AnomalyMsg.INFO = "INFO"
+    AnomalyMsg.WARNING = "WARNING"
+    AnomalyMsg.ERROR = "ERROR"
+    AnomalyMsg.TEXT = "TEXT"
+ 
 import struct
 
 # State constants
 MOVING = 0
 BRAKING = 1
 STOPPED = 2
+DEFAULT_AUTONOMOUS_THROTTLE_DIVIDER = 1.6
 
 
 
@@ -76,6 +87,10 @@ class MotorEndpoint(rclpy.node.Node):
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
         self.declare_parameter("manual_control", False)
+        self.declare_parameter(
+            "autonomous_throttle_divider",
+            DEFAULT_AUTONOMOUS_THROTTLE_DIVIDER,
+        )
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -86,6 +101,11 @@ class MotorEndpoint(rclpy.node.Node):
         self.manual_control = (
             self.get_parameter("manual_control").get_parameter_value().bool_value
         )  # Sets the cart to use teleop control logic instead of autonomous control
+        self.autonomous_throttle_divider = (
+            self.get_parameter("autonomous_throttle_divider")
+            .get_parameter_value()
+            .double_value
+        )
 
 
         # Sets up publishing to /ai_anomaly_logging
@@ -196,6 +216,27 @@ class MotorEndpoint(rclpy.node.Node):
             self.log_aad(AnomalyMsg.INFO, f"Motor endpoint control mode changed to {mode}")
             self.last_reported_manual_control = self.manual_control
 
+    def report_state_change(self):
+        """Publish an anomaly log when the motor endpoint state changes."""
+        if self.last_reported_state == self.state:
+            return
+
+        state_names = {
+            MOVING: "moving",
+            BRAKING: "braking",
+            STOPPED: "stopped",
+        }
+        previous_state = state_names.get(
+            self.last_reported_state,
+            str(self.last_reported_state),
+        )
+        current_state = state_names.get(self.state, str(self.state))
+        self.log_aad(
+            AnomalyMsg.INFO,
+            f"Motor endpoint state changed from {previous_state} to {current_state}",
+        )
+        self.last_reported_state = self.state
+
     def connect_arduino(self):
         """Simple method for retrying/trying serial connection."""
         was_connected = self.serial_connected
@@ -262,12 +303,14 @@ class MotorEndpoint(rclpy.node.Node):
             if not self.serial_connected:
                 return
         cur_time = time.time()
-        if self.heartbeat != "":
-            self.heart_pub.publish(self.heartbeat)
+        if self.heartbeat:
+            heartbeat_msg = String()
+            heartbeat_msg.data = self.heartbeat.decode("utf-8", errors="replace").strip()
+            self.heart_pub.publish(heartbeat_msg)
             heartbeat_delta_t = time.time() - self.prev_time
             self.last_heartbeat_time = cur_time
             self.log_header(
-                f"Heartbeat message:\n{self.heartbeat} | Time since last message: {heartbeat_delta_t}"
+                f"Heartbeat message:\n{heartbeat_msg.data} | Time since last message: {heartbeat_delta_t}"
             )
             if self.heartbeat_was_unhealthy:
                 self.log_aad(
@@ -455,7 +498,11 @@ class MotorEndpoint(rclpy.node.Node):
                 self.brake_time_used = 0
                 self.full_stop_count = 0
 
-        self.send_packet(target_speed / 1.7, int(self.brake), target_angle)
+        self.send_packet(
+            target_speed / self.autonomous_throttle_divider,
+            int(self.brake),
+            target_angle,
+        )
 
     def send_packet(self, throttle, brake, steer_angle):
         """This method is used to send instructions to the arduino that was connected in init."""
@@ -486,47 +533,30 @@ class MotorEndpoint(rclpy.node.Node):
         """Helper method to print  log tatements."""
         self.get_logger().info(f"{msg}")
 
-    def report_state_change(self):
-        if self.state == self.last_reported_state:
-            return
-
-        state_name = {
-            MOVING: "MOVING",
-            BRAKING: "BRAKING",
-            STOPPED: "STOPPED",
-        }.get(self.state, f"UNKNOWN({self.state})")
-        importance = AnomalyMsg.WARNING if self.state == BRAKING else AnomalyMsg.INFO
-        self.log_aad(
-            importance,
-            f"Motor endpoint state changed to {state_name}; planned_vel={self.vel_planned}, current_vel={self.vel_curr:.2f}",
-        )
-        self.last_reported_state = self.state
-
     # This is for publishing to anomaly logging
-    def log_aad(
-        self,
-        importance: int,
-        motor_endpoint_msg: str,
-    ):
-        if not self.AAD_LOGGING_ENABLED:
-            return
+    def log_aad(self, importance: int, motor_endpoint_msg: str):
+        """Publish motor endpoint info to anomaly logging."""
+        anomaly = AnomalyMsg()
 
-        anomaly = AnomalyMsg() 
-        
-        # Header 
-        anomaly.header = Header()
-        anomaly.header.stamp = self.get_clock().now().to_msg() 
-        anomaly.header.frame_id = "motor_endpoint_frame" 
-        
-        # Required fields 
-        anomaly.node_name = self.get_name() 
-        anomaly.importance = importance
-        anomaly.type = AnomalyMsg.TEXT 
-        
-        # Human-readable message 
-        anomaly.msg = f"Received Motor Endpoint Info: {motor_endpoint_msg}" 
-        #Publish 
-        self.aad_pub.publish(anomaly) 
+        if LEGACY_ANOMALY_MSG:
+            anomaly.header = Header()
+            anomaly.header.stamp = self.get_clock().now().to_msg()
+            anomaly.header.frame_id = "motor_endpoint_frame"
+            anomaly.node_name = self.get_name()
+            anomaly.importance = importance
+            anomaly.type = AnomalyMsg.TEXT
+            anomaly.msg = f"Received Motor Endpoint Info: {motor_endpoint_msg}"
+        else:
+            anomaly.stamp = self.get_clock().now().to_msg()
+            anomaly.node_name = self.get_name()
+            anomaly.source = "motor_control"
+            anomaly.description = f"{importance}: Received Motor Endpoint Info: {motor_endpoint_msg}"
+            anomaly.topic_name = "/motor_endpoint"
+            anomaly.data_type = "text"
+            anomaly.data = motor_endpoint_msg.encode("utf-8")
+
+        self.aad_pub.publish(anomaly)
+
 
 def main():
     """The main method that actually handles spinning up the node."""

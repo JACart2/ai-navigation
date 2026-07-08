@@ -134,6 +134,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             config_common_path,
             config_camera_path,
+            *extra_param_files,
             {
                 'use_sim_time': use_sim_time,
                 'simulation.sim_enabled': sim_mode,
@@ -149,13 +150,10 @@ def launch_setup(context, *args, **kwargs):
                 'pos_tracking.publish_map_tf': publish_map_tf,
                 'sensors.publish_imu_tf': publish_imu_tf,
                 'general.pub_frame_rate': 15.0,
-                'pos_tracking.publish_tf': publish_tf,
-                'pos_tracking.publish_map_tf': publish_map_tf,
-                'sensors.publish_imu_tf': publish_imu_tf,
                 'object_detection.od_enabled': True,
-                'object_detection.model': 'MULTI_CLASS_BOX_FAST',
+                'object_detection.detection_model': 'MULTI_CLASS_BOX_FAST',
+                'object_detection.filtering_mode': 'NMS3D',
             },
-            *extra_param_files,
         ],
     )
 

@@ -72,6 +72,19 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration("start_velodyne")),
     )
 
+    cameras_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("localization_launch"),
+                "/launch/cameras.launch.py",
+            ]
+        ),
+        launch_arguments={
+            "cart_config_path": LaunchConfiguration("cart_config_path"),
+        }.items(),
+        condition=IfCondition(LaunchConfiguration("start_cameras")),
+    )
+
     mola_localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [
@@ -118,6 +131,22 @@ def generate_launch_description():
             },
         ],
         condition=IfCondition(enable_mola_auto_localization),
+    )
+
+    anomaly_detection_node = Node(
+        package="anomaly_detection",
+        executable="anomaly_detection_node",
+        name="anomaly_detection",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("launch_aad_node")),
+    )
+
+    swri_console_node = Node(
+        package="swri_console",
+        executable="swri_console",
+        name="swri_console",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("launch_swri_console")),
     )
 
     navigation_launch = IncludeLaunchDescription(
@@ -262,6 +291,11 @@ def generate_launch_description():
                 description="Open the JACart MOLA RViz preset window.",
             ),
             DeclareLaunchArgument(
+                "launch_swri_console",
+                default_value="true",
+                description="Open the SWRI Console ROS topic/status window.",
+            ),
+            DeclareLaunchArgument(
                 "start_velodyne",
                 default_value="true",
                 description=(
@@ -276,6 +310,11 @@ def generate_launch_description():
                     "Seconds to wait after /pcl_pose before starting "
                     "navigation, giving RViz time to subscribe."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Start the front and rear ZED camera nodes.",
             ),
             DeclareLaunchArgument(
                 "enable_motor",
@@ -299,6 +338,11 @@ def generate_launch_description():
                 "enable_aad",
                 default_value="false",
                 description="Enable anomaly logging nodes.",
+            ),
+            DeclareLaunchArgument(
+                "launch_aad_node",
+                default_value="true",
+                description="Launch the anomaly_detection LLM/alert node.",
             ),
             DeclareLaunchArgument(
                 "enable_mola_auto_localization",
@@ -389,9 +433,12 @@ def generate_launch_description():
                 description="Publish dynamic TF from MOLA odometry.",
             ),
             velodyne_launch,
+            cameras_launch,
             mola_localization_launch,
             pcl_pose_relay,
             mola_auto_localization_supervisor,
+            anomaly_detection_node,
+            swri_console_node,
             rviz_node,
             rosbridge_cleanup,
             rosbridge_launch,

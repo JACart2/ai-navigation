@@ -72,6 +72,19 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration("start_velodyne")),
     )
 
+    cameras_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("localization_launch"),
+                "/launch/cameras.launch.py",
+            ]
+        ),
+        launch_arguments={
+            "cart_config_path": LaunchConfiguration("cart_config_path"),
+        }.items(),
+        condition=IfCondition(LaunchConfiguration("start_cameras")),
+    )
+
     mola_localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [
@@ -126,14 +139,6 @@ def generate_launch_description():
         name="anomaly_detection",
         output="screen",
         condition=IfCondition(LaunchConfiguration("launch_aad_node")),
-    )
-
-    aad_log_node = Node(
-        package="navigation",
-        executable="collision_avoidance_aad_log",
-        name="collision_avoidance_aad_log",
-        output="screen",
-        condition=IfCondition(enable_aad),
     )
 
     swri_console_node = Node(
@@ -307,6 +312,11 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
                 "enable_motor",
                 default_value="true",
                 description=(
@@ -423,11 +433,11 @@ def generate_launch_description():
                 description="Publish dynamic TF from MOLA odometry.",
             ),
             velodyne_launch,
+            cameras_launch,
             mola_localization_launch,
             pcl_pose_relay,
             mola_auto_localization_supervisor,
             anomaly_detection_node,
-            aad_log_node,
             swri_console_node,
             rviz_node,
             rosbridge_cleanup,

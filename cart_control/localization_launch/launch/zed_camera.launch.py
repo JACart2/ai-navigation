@@ -96,7 +96,6 @@ def launch_setup(context, *args, **kwargs):
     publish_tf = LaunchConfiguration('publish_tf')
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     publish_imu_tf = LaunchConfiguration('publish_imu_tf')
-    transform_time_offset = LaunchConfiguration('transform_time_offset')
     xacro_path = LaunchConfiguration('xacro_path')
 
     ros_params_override_path = LaunchConfiguration('ros_params_override_path')
@@ -117,7 +116,6 @@ def launch_setup(context, *args, **kwargs):
     publish_tf_val = as_bool(publish_tf.perform(context))
     publish_map_tf_val = as_bool(publish_map_tf.perform(context))
     publish_imu_tf_val = as_bool(publish_imu_tf.perform(context))
-    transform_time_offset_val = as_float(transform_time_offset.perform(context), 0.0)
 
     if (camera_name_val == ''):
         camera_name_val = 'zed'
@@ -179,7 +177,6 @@ def launch_setup(context, *args, **kwargs):
                 'depth.point_cloud_res': 'REDUCED',
                 'pos_tracking.publish_tf': publish_tf_val,
                 'pos_tracking.publish_map_tf': publish_map_tf_val,
-                'pos_tracking.transform_time_offset': transform_time_offset_val,
                 'sensors.publish_imu_tf': publish_imu_tf_val,
             },
             *extra_param_files,
@@ -244,10 +241,6 @@ def generate_launch_description():
                 default_value='true',
                 description='Enable publication of the `map -> odom` TF. Note: Ignored if `publish_tf` is False.',
                 choices=['true', 'false']),
-            DeclareLaunchArgument(
-                'transform_time_offset',
-                default_value='0.15',
-                description='Time offset added to ZED TF timestamps.'),
             DeclareLaunchArgument(
                 'publish_imu_tf',
                 default_value='true',

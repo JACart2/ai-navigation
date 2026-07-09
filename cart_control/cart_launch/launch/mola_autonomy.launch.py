@@ -128,6 +128,14 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration("launch_aad_node")),
     )
 
+    aad_log_node = Node(
+        package="navigation",
+        executable="collision_avoidance_aad_log",
+        name="collision_avoidance_aad_log",
+        output="screen",
+        condition=IfCondition(enable_aad),
+    )
+
     swri_console_node = Node(
         package="swri_console",
         executable="swri_console",
@@ -152,7 +160,7 @@ def generate_launch_description():
             "calibration_config_file": LaunchConfiguration(
                 "calibration_config_file"
             ),
-            "enable_aad": enable_aad,
+            "enable_aad": "false",
         }.items(),
     )
 
@@ -318,7 +326,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "enable_aad",
-                default_value="false",
+                default_value="true",
                 description="Enable anomaly logging nodes.",
             ),
             DeclareLaunchArgument(
@@ -419,6 +427,7 @@ def generate_launch_description():
             pcl_pose_relay,
             mola_auto_localization_supervisor,
             anomaly_detection_node,
+            aad_log_node,
             swri_console_node,
             rviz_node,
             rosbridge_cleanup,

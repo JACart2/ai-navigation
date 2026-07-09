@@ -3,13 +3,16 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 import threading
 from queue import Queue
+import json
+import re
 
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 from navigation_interface.msg import Stop
 from std_msgs.msg import Header
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, qos_profile_sensor_data
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
+import yaml
 
 from anomaly_msg.msg import AnomalyMsg
 
@@ -23,6 +26,8 @@ class CollisionAvoidanceAADLog(Node):
         self.MOVING_LOG_PERIOD = 5
         self.MOVING_SPEED_THRESHOLD_MPS = 0.1
         self.LOCALIZATION_HEALTH_LOG_PERIOD = 5
+        self.MOLA_BAD_ICP_QUALITY_THRESHOLD = 0.2
+        self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD = 0.4
 
         self.get_logger().info("Creating subscribers")
         # --- Subscribers ---
@@ -73,6 +78,13 @@ class CollisionAvoidanceAADLog(Node):
             DiagnosticArray,
             '/alignment_status',
             self.localization_health_callback,
+            10
+        )
+
+        self.mola_diagnostics_sub = self.create_subscription(
+            String,
+            '/mola_diagnostics/lidar_odom/status',
+            self.mola_diagnostics_callback,
             10
         )
         self.get_logger().info("Finished creating subscribers")
@@ -203,10 +215,38 @@ class CollisionAvoidanceAADLog(Node):
             return
 
         self.anomaly_logging(
-            self._format_localization_health(status, values),
+            self._format_legacy_localization_health(status, values),
             self._diagnostic_level_to_anomaly_importance(status.level),
             header=msg.header,
             frame_id="localization_health_frame",
+        )
+        self.last_localization_health_pub_time = now
+        self.last_localization_health_signature = signature
+
+    def mola_diagnostics_callback(self, msg: String):
+        fields = self._parse_mola_diagnostics(msg.data)
+        severity, reasons = self._mola_diagnostics_importance(fields)
+        signature = (
+            f"mola|{severity}|"
+            f"{fields.get('active', '')}|"
+            f"{fields.get('icp_quality', '')}|"
+            f"{fields.get('dropped_frames_ratio', '')}|"
+            f"{';'.join(reasons)}|"
+            f"{msg.data[:120]}"
+        )
+
+        now = self.get_clock().now()
+        should_publish_periodic = (
+            now - self.last_localization_health_pub_time
+        ).nanoseconds > self.LOCALIZATION_HEALTH_LOG_PERIOD * 1e9
+        should_publish_change = signature != self.last_localization_health_signature
+        if not should_publish_periodic and not should_publish_change:
+            return
+
+        self.anomaly_logging(
+            self._format_mola_localization_health(fields, reasons, msg.data),
+            severity,
+            frame_id="mola_localization_health_frame",
         )
         self.last_localization_health_pub_time = now
         self.last_localization_health_signature = signature
@@ -218,8 +258,9 @@ class CollisionAvoidanceAADLog(Node):
             return AnomalyMsg.WARNING
         return AnomalyMsg.INFO
 
-    def _format_localization_health(self, status, values):
+    def _format_legacy_localization_health(self, status, values):
         fields = [
+            f"source=legacy_alignment_status",
             f"status={status.message}",
             f"level={status.level}",
             f"fitness={values.get('fitness_score', 'unknown')}",
@@ -231,6 +272,133 @@ class CollisionAvoidanceAADLog(Node):
             f"consecutive_rejected={values.get('consecutive_rejected_updates', 'unknown')}",
         ]
         return "Localization health: " + ", ".join(fields)
+
+    def _format_mola_localization_health(self, fields, reasons, raw_text):
+        if not fields:
+            raw = " ".join(str(raw_text).split())
+            if len(raw) > 200:
+                raw = raw[:197] + "..."
+            return f"MOLA localization health: source=mola_diagnostics, raw={raw}"
+
+        summary_fields = [
+            "source=mola_diagnostics",
+            f"active={fields.get('active', 'unknown')}",
+            f"icp_quality={fields.get('icp_quality', 'unknown')}",
+            f"icp_quality_threshold={self.MOLA_BAD_ICP_QUALITY_THRESHOLD}",
+            f"dropped_frames_ratio={fields.get('dropped_frames_ratio', 'unknown')}",
+            f"dropped_frames_threshold={self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD}",
+            f"status={'unhealthy' if reasons else 'healthy'}",
+        ]
+        if reasons:
+            summary_fields.append(f"reasons={'; '.join(reasons)}")
+        return "MOLA localization health: " + ", ".join(summary_fields)
+
+    def _mola_diagnostics_importance(self, fields):
+        reasons = []
+        active = self._mola_field(fields, "active")
+        if active is False or active == 0.0:
+            reasons.append("MOLA diagnostics report inactive")
+
+        icp_quality = self._mola_float(fields, "icp_quality")
+        if (
+            icp_quality is not None
+            and icp_quality < self.MOLA_BAD_ICP_QUALITY_THRESHOLD
+        ):
+            reasons.append(
+                f"ICP quality {icp_quality:.3f} below "
+                f"{self.MOLA_BAD_ICP_QUALITY_THRESHOLD:.3f}"
+            )
+
+        dropped_frames_ratio = self._mola_float(fields, "dropped_frames_ratio")
+        if (
+            dropped_frames_ratio is not None
+            and dropped_frames_ratio > self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD
+        ):
+            reasons.append(
+                f"dropped frame ratio {dropped_frames_ratio:.3f} above "
+                f"{self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD:.3f}"
+            )
+
+        if active is False or active == 0.0:
+            return AnomalyMsg.ERROR, reasons
+        if reasons:
+            return AnomalyMsg.WARNING, reasons
+        return AnomalyMsg.INFO, reasons
+
+    def _parse_mola_diagnostics(self, text):
+        fields = {}
+        stripped = str(text).strip()
+        if not stripped:
+            return fields
+
+        parsed = None
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            try:
+                parsed = yaml.safe_load(stripped)
+            except yaml.YAMLError:
+                parsed = None
+
+        if isinstance(parsed, dict):
+            self._flatten_mola_diagnostics(parsed, fields)
+
+        for key, value in re.findall(
+            r"([A-Za-z_][\w./-]*)\s*[:=]\s*([^\s,;]+)",
+            stripped,
+        ):
+            fields[self._normalize_mola_key(key)] = self._normalize_mola_value(value)
+
+        return fields
+
+    def _flatten_mola_diagnostics(self, value, out, prefix=""):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                next_prefix = f"{prefix}.{key}" if prefix else str(key)
+                self._flatten_mola_diagnostics(child, out, next_prefix)
+            return
+
+        if prefix:
+            out[self._normalize_mola_key(prefix)] = self._normalize_mola_value(value)
+
+    def _mola_field(self, fields, wanted):
+        wanted_norm = self._normalize_mola_key(wanted)
+        for key, value in fields.items():
+            if key == wanted_norm or key.endswith("." + wanted_norm):
+                return value
+        return None
+
+    def _mola_float(self, fields, wanted):
+        value = self._mola_field(fields, wanted)
+        if isinstance(value, bool):
+            return 1.0 if value else 0.0
+        if isinstance(value, (float, int)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None
+        return None
+
+    def _normalize_mola_key(self, key):
+        return str(key).strip().lower().replace("-", "_").replace("/", ".")
+
+    def _normalize_mola_value(self, value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (float, int)):
+            return float(value)
+        text = str(value).strip().strip("'\"")
+        lowered = text.lower()
+        if lowered in {"1", "true", "yes", "on", "active", "enabled"}:
+            return True
+        if lowered in {"0", "false", "no", "off", "inactive", "disabled"}:
+            return False
+        try:
+            return float(text)
+        except ValueError:
+            return text
 
     def anomaly_logging(
         self,

@@ -161,12 +161,18 @@ def generate_launch_description():
                 "cart",
                 default_value="james",
                 choices=["james", "madison"],
-                description="Cart used to auto-select cart_james.yaml or cart_madison.yaml.",
+                description=(
+                    "Compatibility cart selector. Prefer cart_name for new "
+                    "commands."
+                ),
             ),
             DeclareLaunchArgument(
                 "cart_name",
                 default_value="",
-                description="Legacy alias for cart.",
+                description=(
+                    "Cart used to auto-select cart_james.yaml or "
+                    "cart_madison.yaml."
+                ),
             ),
             DeclareLaunchArgument(
                 "cart_config_path",

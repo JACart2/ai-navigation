@@ -169,12 +169,15 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "cart",
                 default_value="james",
-                description="Cart used to select cart-specific Velodyne settings.",
+                description=(
+                    "Compatibility cart selector. Prefer cart_name for new "
+                    "commands."
+                ),
             ),
             DeclareLaunchArgument(
                 "cart_name",
                 default_value="",
-                description="Legacy alias for cart.",
+                description="Cart used to select cart-specific Velodyne settings.",
             ),
             DeclareLaunchArgument(
                 "cart_config_path",

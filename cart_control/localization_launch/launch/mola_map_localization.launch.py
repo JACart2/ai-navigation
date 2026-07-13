@@ -211,13 +211,14 @@ def generate_launch_description():
                 "cart",
                 default_value="james",
                 description=(
-                    "Cart name used to auto-select cart-specific config."
+                    "Compatibility cart selector. Prefer cart_name for new "
+                    "commands."
                 ),
             ),
             DeclareLaunchArgument(
                 "cart_name",
                 default_value="",
-                description="Legacy alias for cart.",
+                description="Cart name used to auto-select cart-specific config.",
             ),
             DeclareLaunchArgument(
                 "use_rviz",

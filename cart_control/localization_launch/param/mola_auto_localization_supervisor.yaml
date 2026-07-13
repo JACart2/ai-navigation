@@ -3,6 +3,9 @@ mola_auto_localization_supervisor:
     cloud_topic: /velodyne_points
     mola_pose_topic: /lidar_odometry/pose
     pcl_pose_topic: /pcl_pose
+    manual_pose_topic: /initialpose
+    manual_pose_cooldown_sec: 30.0
+    manual_pose_lockout_sec: 30.0
     diagnostics_topic: /mola_diagnostics/lidar_odom/status
     relocalize_service: /relocalize_near_pose
 
@@ -27,9 +30,9 @@ mola_auto_localization_supervisor:
     max_pose_jump_m: 8.0
     max_yaw_jump_rad: 2.5
 
-    relocalize_cooldown_sec: 15.0
+    relocalize_cooldown_sec: 8.0
     startup_relocalize_delay_sec: 5.0
-    max_relocalize_attempts_per_event: 3
+    max_relocalize_attempts_per_event: 5
     service_wait_timeout_sec: 0.05
     relocalize_response_timeout_sec: 10.0
 
@@ -40,9 +43,77 @@ mola_auto_localization_supervisor:
     startup_xy_std: 8.0
     startup_yaw_std: 1.57
 
-    recovery_xy_std: 4.0
-    recovery_yaw_std: 0.8
+    recovery_xy_std: 6.0
+    recovery_yaw_std: 3.14
 
-    enable_startup_relocalize: true
+    # Optional GPS seed for recovery relocalization.
+    # Disabled by default so LiDAR-only behavior is unchanged.
+    use_gps_relocalize: false
+    gps_topic: /gps
+    gps_fix_timeout_sec: 3.0
+    # Legacy alias used by earlier supervisor versions; keep in sync with
+    # gps_seed_max_age_sec unless deliberately testing different behavior.
+    gps_stale_timeout_sec: 3.0
+    gps_seed_max_age_sec: 3.0
+    gps_min_status: 0
+    # Maximum accepted NavSatFix position covariance diagonal entry in m^2.
+    # Set <= 0.0 to disable the covariance threshold.
+    gps_max_covariance: 100.0
+    gps_reject_unknown_covariance: false
+    gps_relocalize_cooldown_sec: 8.0
+    gps_seed_freeze_during_recovery: true
+    gps_recovery_xy_std: 10.0
+    # GPS altitude is ignored; z uses last-good pose z or startup_pose_z.
+    gps_recovery_z_std: 5.0
+    gps_recovery_yaw_std: 3.14
+    gps_to_map_source: landmark_calibration
+    gps_calibration_config_path: ""
+    calibration_config_dir: ""
+    calibration_config_file: ""
+
+    # Optional heading sweep at the GPS-derived x/y.
+    # Disabled by default so existing GPS recovery behavior is unchanged.
+    gps_yaw_sweep_enabled: false
+    # absolute means candidates are map-frame yaws; relative means offsets
+    # from the frozen seed yaw.
+    gps_yaw_sweep_mode: absolute
+    # Preferred name. Keep values as floats; ROS 2 must see a double array.
+    gps_yaw_candidates_deg:
+      [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]
+    # Legacy alias retained for older launch/config snippets.
+    gps_yaw_sweep_angles_deg:
+      [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]
+    gps_yaw_sweep_attempt_delay_sec: 1.0
+    yaw_candidate_settle_sec: 1.0
+    yaw_candidate_timeout_sec: 7.0
+    post_recovery_lockout_sec: 25.0
+    acceptance_near_seed_m: 6.0
+    acceptance_min_fresh_pose_count: 3
+    acceptance_require_diagnostics_ok: true
+    acceptance_require_match_quality: false
+    # Keep false unless MOLA diagnostics do not expose a direct match metric.
+    # If set true, acceptance still requires diagnostics OK, pose stability,
+    # enough fresh pose updates, and the confirmation window.
+    acceptance_allow_quality_fallback: false
+    acceptance_confirmation_window_sec: 2.0
+    acceptance_require_pose_stability: true
+    acceptance_pose_stability_window_sec: 2.0
+    acceptance_max_pose_drift_m: 1.0
+    acceptance_max_yaw_drift_rad: 0.35
+    acceptance_min_icp_quality: 0.75
+    acceptance_min_inlier_ratio: 0.60
+    acceptance_min_matched_points: 0
+    acceptance_max_icp_error: 0.75
+    acceptance_max_pose_covariance: 4.0
+    acceptance_max_dropped_frames: 0.10
+    acceptance_required_diagnostic_level: 0
+    gps_yaw_sweep_accept_icp_quality: 0.0
+    gps_yaw_sweep_accept_dropped_frames_ratio: 0.2
+    gps_yaw_sweep_max_attempts: 8
+    gps_yaw_sweep_candidate_yaw_std: 1.57
+    recovery_require_sustained_loss: true
+    recovery_min_lost_duration_sec: 3.0
+
+    enable_startup_relocalize: false
     enable_recovery_relocalize: true
     debug: false

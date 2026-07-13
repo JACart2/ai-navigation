@@ -21,9 +21,12 @@ Usage: launch_mola_stack.sh [--cart NAME] [--no-motor] [--build-image] [--no-cle
 Examples:
   scripts/launch_mola_stack.sh --cart james
   scripts/launch_mola_stack.sh --cart madison
-  scripts/launch_mola_stack.sh cart:=madison
+  scripts/launch_mola_stack.sh cart_name:=madison
   scripts/launch_mola_stack.sh --cart madison --no-motor
-  scripts/launch_mola_stack.sh --cart james enable_mola_auto_localization:=true
+  scripts/launch_mola_stack.sh --cart james \
+    enable_mola_auto_localization:=true \
+    use_gps_relocalize:=true \
+    gps_yaw_sweep_enabled:=true
 
 Motor control is enabled by default. Use --no-motor or enable_motor:=false for
 safe no-motor testing.
@@ -41,6 +44,7 @@ start_ui=true
 motor_enabled=true
 build_image=false
 cart_forwarded=false
+cart_name_forwarded=false
 motor_forwarded=false
 motor_port_forwarded=false
 motor_baudrate_forwarded=false
@@ -130,8 +134,8 @@ while [[ $# -gt 0 ]]; do
       ;;
     cart_name:=*)
       cart="${1#cart_name:=}"
-      launch_args+=("cart:=$cart")
-      cart_forwarded=true
+      launch_args+=("$1")
+      cart_name_forwarded=true
       shift
       ;;
     cart_config_path:=*)
@@ -173,6 +177,10 @@ cart="${cart,,}"
 if [[ "$cart" != "james" && "$cart" != "madison" ]]; then
   echo "Invalid cart '$cart'. Expected 'james' or 'madison'." >&2
   exit 2
+fi
+
+if [[ "$cart_name_forwarded" != true ]]; then
+  launch_args=("cart_name:=$cart" "${launch_args[@]}")
 fi
 
 if [[ "$cart_forwarded" != true ]]; then
@@ -291,6 +299,7 @@ cleanup_old_autolaunch_children() {
         else if (cmd ~ /mola_odom_to_tf/) print pid
         else if (cmd ~ /rosbridge_websocket|rosapi_node/) print pid
         else if (cmd ~ /velodyne_driver_node|velodyne_transform_node/) print pid
+        else if (cmd ~ /garmin_gps18x_driver|valid_fix_filter|velodyne_gps_udp_driver/) print pid
         else if (cmd ~ /(^|\/)localization\.rviz/) print pid
         else if (cmd ~ /rviz2/) print pid
         else if (cmd ~ /swri_console/) print pid
@@ -355,10 +364,11 @@ run_mola_launch_with_cleanup() {
     status=$?
     trap - EXIT INT TERM
 
-    echo "Cleaning up ROS stack opened by launch_mola_stack.sh..."
+    echo "LAUNCH_CLEANUP starting"
 
     if [[ -n "${launch_pid:-}" ]] && kill -0 "$launch_pid" 2>/dev/null; then
       kill -INT "$launch_pid" 2>/dev/null || true
+      echo "LAUNCH_CLEANUP sent SIGINT"
       sleep 2
       if kill -0 "$launch_pid" 2>/dev/null; then
         kill -TERM "$launch_pid" 2>/dev/null || true
@@ -370,6 +380,7 @@ run_mola_launch_with_cleanup() {
     fi
 
     cleanup_old_autolaunch_children || true
+    echo "LAUNCH_CLEANUP complete"
     exit "$status"
   }
 
@@ -396,6 +407,7 @@ if [[ "$use_docker" == true ]]; then
   docker_dir="${DOCKER_FILES_DIR:-$HOME/docker_files}"
   if [[ -f "$docker_dir/compose.yaml" ]]; then
     container_script="$(mktemp /tmp/jacart_mola_container.XXXXXX.sh)"
+    active_launch_pid=""
     cleanup_container_script() {
       rm -f "$container_script"
     }
@@ -425,9 +437,20 @@ if [[ "$use_docker" == true ]]; then
     cleanup_everything_on_exit() {
       local status=$?
       trap - EXIT INT TERM
+      echo "LAUNCH_CLEANUP starting"
+      if [[ -n "${active_launch_pid:-}" ]] && kill -0 "$active_launch_pid" 2>/dev/null; then
+        mapfile -t active_launch_children < <(pgrep -P "$active_launch_pid" 2>/dev/null || true)
+        if ((${#active_launch_children[@]} > 0)); then
+          kill -INT "${active_launch_children[@]}" 2>/dev/null || true
+        fi
+        kill -INT "$active_launch_pid" 2>/dev/null || true
+        echo "LAUNCH_CLEANUP sent SIGINT"
+        sleep 2
+      fi
       cleanup_container_stack
       cleanup_ui
       cleanup_container_script
+      echo "LAUNCH_CLEANUP complete"
       exit "$status"
     }
 
@@ -441,6 +464,7 @@ if [[ "$use_docker" == true ]]; then
     chmod +x "$container_script"
     bash -n "$container_script"
 
+    launch_status=0
     (
       cd "$docker_dir"
       if [[ -x ./initialize_host.sh ]]; then
@@ -454,8 +478,11 @@ if [[ "$use_docker" == true ]]; then
       fi
       echo "Launching ROS stack inside backend container..."
       docker compose exec -T -e DISPLAY="${DISPLAY:-}" -w /root/dev_ws backend bash -s -- "${launch_args[@]}" < "$container_script"
-    )
-    exit $?
+    ) &
+    active_launch_pid=$!
+    wait "$active_launch_pid" || launch_status=$?
+    active_launch_pid=""
+    exit "$launch_status"
   fi
   echo "Docker compose file not found at $docker_dir/compose.yaml. Use --no-docker only for explicit local ROS testing." >&2
   exit 1

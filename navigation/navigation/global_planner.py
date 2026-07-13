@@ -77,6 +77,16 @@ class GlobalPlanner(rclpy.node.Node):
         self.cy_gps = 0.0
         self.calibration_theta = 0.0
 
+
+        # GPS calibration state using landmark-based calibration
+        self.ref_lat = 0.0
+        self.ref_lon = 0.0
+        self.cx_local = 0.0
+        self.cy_local = 0.0
+        self.cx_gps = 0.0
+        self.cy_gps = 0.0
+        self.calibration_theta = 0.0
+
         self.declare_parameter(
             "calibration_config_dir",
             "/maps",
@@ -119,9 +129,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         self.declare_parameter(
             "graph_dir",
-            os.path.join(
-                get_package_share_directory("navigation"), "maps"
-            ),
+            "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
         self.declare_parameter("graph_file", "main_shift3.gml")
         self.declare_parameter("graph_coordinate_format", "ros")
@@ -174,23 +182,11 @@ class GlobalPlanner(rclpy.node.Node):
         )
 
         # Publish the path for local planner to begin navigating
-        self.path_pub = self.create_publisher(
-            LocalPointsArray,
-            "/global_path",
-            qos_profile=latching_qos,
-        )
+        self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
 
         # GPS publishers and position update timer
-        self.gps_path_pub = self.create_publisher(
-            LatLongArray,
-            "/gps_global_path",
-            qos_profile=latching_qos,
-        )
-        self.display_pub = self.create_publisher(
-            Marker,
-            "/display_gps",
-            qos_profile=latching_qos,
-        )
+        self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
+        self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
         # Publishes current cart position in GPS coordinates
         self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
         # Publish cart GPS position at 10 Hz while navigating

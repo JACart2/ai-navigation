@@ -91,6 +91,7 @@ def launch_setup(context, *args, **kwargs):
 
     serial_number = LaunchConfiguration('serial_number')
     camera_id = LaunchConfiguration('camera_id')
+    camera_flip = LaunchConfiguration('camera_flip')
 
     publish_urdf = LaunchConfiguration('publish_urdf')
     publish_tf = LaunchConfiguration('publish_tf')

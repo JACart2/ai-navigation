@@ -41,6 +41,7 @@ import tf_transformations as tf
 # Custom-made libraries.
 from navigation_interface.msg import ObstacleArray, Obstacle, Stop
 from motor_control_interface.msg import VelAngle
+from anomaly_msg.msg import AnomalyMsg
 
 
 ARC_DISPLAY_LENGTH_M = 5.0
@@ -61,6 +62,8 @@ class CollisionDetector(rclpy.node.Node):
         self.prev_time = None
         self.prev_obstacle_speed = 0
         self.obstacle_detected = False
+        self.last_obstacle_count = None
+        self.potential_collision_active = False
 
         self.resume_confid = 0
 
@@ -185,6 +188,7 @@ class CollisionDetector(rclpy.node.Node):
         # cart in the event an obstacle is moving in front of the cart,
         # allowing the cart to "follow" the obstacle.
         self.speed_pub = self.create_publisher(Float32, "/speed", 10)
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, "/ai_anomaly_logging", 10)
 
         # Pretty sure this is just used to get the physical corners of the cart.
         # Zane, the previous student who worked on this file, made suggestions
@@ -205,6 +209,10 @@ class CollisionDetector(rclpy.node.Node):
         speed_msg = Float32()
         speed_msg.data = float(speed)
         self.speed_pub.publish(speed_msg)
+        self.anomaly_logging(
+            f"Collision detector requested planner speed: {float(speed):.2f} km/h",
+            AnomalyMsg.INFO,
+        )
 
     def clear_follow_speed_override(self):
         """Restore the planner's normal cruise speed after obstacle following ends."""
@@ -214,6 +222,10 @@ class CollisionDetector(rclpy.node.Node):
         self.prev_time = None
         self.prev_obstacle_speed = 0
         self.publish_speed_request(self.CRUISE_SPEED)
+        self.anomaly_logging(
+            "Obstacle following ended; restored normal cruise speed",
+            AnomalyMsg.INFO,
+        )
 
     def angle_callback(self, msg):
         self.requested_steering_angle = msg.angle
@@ -316,6 +328,7 @@ class CollisionDetector(rclpy.node.Node):
         # Control for undoing a stop
         clear_path = True
         follow_speed_active = False
+        saw_potential_collision = False
 
         cur_obstacle_list = self.cur_obstacles
         for obstacle in cur_obstacle_list:
@@ -413,6 +426,10 @@ class CollisionDetector(rclpy.node.Node):
                         self.stopped = True
                         stop_msg.distance = distance
                         self.stop_pub.publish(stop_msg)
+                        self.anomaly_logging(
+                            f"Emergency stop requested for obstacle: distance={distance:.2f}m, impact_time={impact_time:.2f}s, speed={self.cur_speed:.2f}m/s",
+                            AnomalyMsg.ERROR,
+                        )
 
                     # Show a red obstacle, an obstacle worth stopping for
                     display = self.show_colliding_obstacle(
@@ -433,6 +450,13 @@ class CollisionDetector(rclpy.node.Node):
                     display = self.show_colliding_obstacle(
                         obstacle.pos.point.x, obstacle.pos.point.y
                     )
+                    saw_potential_collision = True
+                    if not self.potential_collision_active:
+                        self.anomaly_logging(
+                            f"Potential collision obstacle in path: distance={distance:.2f}m, impact_time={impact_time:.2f}s",
+                            AnomalyMsg.WARNING,
+                        )
+                        self.potential_collision_active = True
 
             if display is not None:
                 collision_array.markers.append(display)
@@ -448,6 +472,8 @@ class CollisionDetector(rclpy.node.Node):
         # If a run detects a clear path, but we are still stopped. allow nav to continue, and we have confidence is clear (15 spins/3 seconds given rate of 5 hz)
         if clear_path:
             self.cleared_confidence += 1
+            if not saw_potential_collision:
+                self.potential_collision_active = False
             if self.stopped and self.cleared_confidence >= 15:
                 self.cleared_confidence = 0
                 self.stopped = False
@@ -456,6 +482,11 @@ class CollisionDetector(rclpy.node.Node):
                 stop_msg.sender_id.data = "collision_detector"
                 stop_msg.distance = -1.0
                 self.stop_pub.publish(stop_msg)
+                self.anomaly_logging(
+                    "Collision detector cleared stop request; path has been clear for 15 cycles",
+                    AnomalyMsg.INFO,
+                )
+                self.potential_collision_active = False
 
         self.collision_pub.publish(collision_array)
 
@@ -517,6 +548,18 @@ class CollisionDetector(rclpy.node.Node):
 
     def obstacle_callback(self, msg):
         self.cur_obstacles = msg.obstacles
+        obstacle_count = len(msg.obstacles)
+        if obstacle_count != self.last_obstacle_count:
+            severity = AnomalyMsg.INFO
+            message = f"Obstacle stream update: count={obstacle_count}"
+            if obstacle_count >= 5:
+                severity = AnomalyMsg.WARNING
+                message = f"Obstacle stream is busy: count={obstacle_count}"
+            self.anomaly_logging(
+                message,
+                severity,
+            )
+            self.last_obstacle_count = obstacle_count
 
     # def position_callback(self, msg):
     #     self.cur_pos = msg.pose
@@ -578,6 +621,21 @@ class CollisionDetector(rclpy.node.Node):
             bound_display.points.append(arc_point)
 
         return bound_display
+
+    def anomaly_logging(
+        self,
+        message: str,
+        severity: int,
+    ):
+        anomaly_msg = AnomalyMsg()
+        anomaly_msg.header = Header()
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "collision_detector"
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
+        self.anomaly_pub.publish(anomaly_msg)
 
     def distance(self, x1, y1, x2, y2):
         dX = (x2 - x1) ** 2

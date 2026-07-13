@@ -1,0 +1,48 @@
+mola_auto_localization_supervisor:
+  ros__parameters:
+    cloud_topic: /velodyne_points
+    mola_pose_topic: /lidar_odometry/pose
+    pcl_pose_topic: /pcl_pose
+    diagnostics_topic: /mola_diagnostics/lidar_odom/status
+    relocalize_service: /relocalize_near_pose
+
+    # Leave empty to discover the service type from the ROS graph.
+    # Set this only if discovery fails in the target MOLA environment.
+    relocalize_service_type: "mola_msgs/srv/RelocalizeNearPose"
+
+    map_frame: map
+    check_period_sec: 1.0
+
+    min_cloud_points_for_relocalize: 2000
+    cloud_stale_timeout_sec: 2.0
+    pose_stale_timeout_sec: 3.0
+    min_good_pose_age_sec: 3.0
+
+    bad_icp_quality_threshold: 0.2
+    bad_dropped_frames_threshold: 0.4
+    bad_diagnostics_grace_sec: 5.0
+
+    max_reasonable_speed_mps: 8.0
+    max_reasonable_yaw_rate_radps: 3.0
+    max_pose_jump_m: 8.0
+    max_yaw_jump_rad: 2.5
+
+    relocalize_cooldown_sec: 15.0
+    startup_relocalize_delay_sec: 5.0
+    max_relocalize_attempts_per_event: 3
+    service_wait_timeout_sec: 0.05
+    relocalize_response_timeout_sec: 10.0
+
+    startup_pose_x: 0.0
+    startup_pose_y: 0.0
+    startup_pose_z: 0.0
+    startup_pose_yaw: 0.0
+    startup_xy_std: 8.0
+    startup_yaw_std: 1.57
+
+    recovery_xy_std: 4.0
+    recovery_yaw_std: 0.8
+
+    enable_startup_relocalize: true
+    enable_recovery_relocalize: true
+    debug: false

@@ -45,6 +45,22 @@ def generate_launch_description():
                 "calibration_config_file",
                 default_value="SpeedBoiMap.yaml",
             ),
+            DeclareLaunchArgument(
+                "graph_file",
+                default_value="main_shift3.gml",
+            ),
+            DeclareLaunchArgument(
+                "graph_coordinate_format",
+                default_value="ros",
+            ),
+            DeclareLaunchArgument(
+                "calibration_config_dir",
+                default_value="/maps",
+            ),
+            DeclareLaunchArgument(
+                "calibration_config_file",
+                default_value="SpeedBoiMap.yaml",
+            ),
             Node(
                 package="navigation",
                 executable="global_planner",

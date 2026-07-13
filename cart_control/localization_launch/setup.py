@@ -1,6 +1,6 @@
-from setuptools import find_packages, setup
 import os
 from glob import glob
+from setuptools import find_packages
 from setuptools import setup
 
 package_name = 'localization_launch'
@@ -13,7 +13,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), 
+        (os.path.join('share', package_name, 'launch'),
         glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
@@ -31,6 +31,12 @@ setup(
         'console_scripts': [
             'velodyne_pointcloud_tf_fallback = localization_launch.velodyne_pointcloud_tf_fallback:main',
             'velodyne_packet_downsample_filter = localization_launch.velodyne_packet_downsample_filter:main',
+            'garmin_gps18x_driver = '
+            'localization_launch.garmin_gps18x_driver:main',
+            'mola_odom_to_tf = localization_launch.mola_odom_to_tf:main',
+            'pcl_pose_relay = localization_launch.pcl_pose_relay:main',
+            'mola_auto_localization_supervisor = '
+            'localization_launch.mola_auto_localization_supervisor:main',
         ],
     },
 )

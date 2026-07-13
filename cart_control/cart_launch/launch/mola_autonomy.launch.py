@@ -71,6 +71,19 @@ def generate_launch_description():
         }.items(),
         condition=IfCondition(LaunchConfiguration("start_velodyne")),
     )
+    
+    cameras_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("localization_launch"),
+                "/launch/cameras.launch.py",
+            ]
+        ),
+        launch_arguments={
+            "cart_config_path": LaunchConfiguration("cart_config_path"),
+        }.items(),
+        condition=IfCondition(LaunchConfiguration("start_cameras")),
+    )
 
     mola_localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -435,6 +448,7 @@ def generate_launch_description():
             aad_log_node,
             swri_console_node,
             rviz_node,
+            cameras_launch,
             rosbridge_cleanup,
             rosbridge_launch,
             wait_for_pcl_pose,

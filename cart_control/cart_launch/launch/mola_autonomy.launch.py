@@ -408,6 +408,11 @@ def generate_launch_description():
                 description="Shared/default LiDAR yaw when cart YAML has no lidar_tf.",
             ),
             DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
                 "lidar_pitch",
                 default_value="0.0",
                 description="Shared/default LiDAR pitch when cart YAML has no lidar_tf.",

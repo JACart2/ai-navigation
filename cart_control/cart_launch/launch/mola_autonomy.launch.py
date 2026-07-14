@@ -71,6 +71,19 @@ def generate_launch_description():
         }.items(),
         condition=IfCondition(LaunchConfiguration("start_velodyne")),
     )
+    
+    cameras_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("localization_launch"),
+                "/launch/cameras.launch.py",
+            ]
+        ),
+        launch_arguments={
+            "cart_config_path": LaunchConfiguration("cart_config_path"),
+        }.items(),
+        condition=IfCondition(LaunchConfiguration("start_cameras")),
+    )
 
     cameras_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -418,6 +431,11 @@ def generate_launch_description():
                 description="Shared/default LiDAR yaw when cart YAML has no lidar_tf.",
             ),
             DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
                 "lidar_pitch",
                 default_value="0.0",
                 description="Shared/default LiDAR pitch when cart YAML has no lidar_tf.",
@@ -440,6 +458,7 @@ def generate_launch_description():
             anomaly_detection_node,
             swri_console_node,
             rviz_node,
+            cameras_launch,
             rosbridge_cleanup,
             rosbridge_launch,
             wait_for_pcl_pose,

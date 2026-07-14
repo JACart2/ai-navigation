@@ -91,13 +91,12 @@ def launch_setup(context, *args, **kwargs):
 
     serial_number = LaunchConfiguration('serial_number')
     camera_id = LaunchConfiguration('camera_id')
+    camera_flip = LaunchConfiguration('camera_flip')
 
     publish_urdf = LaunchConfiguration('publish_urdf')
     publish_tf = LaunchConfiguration('publish_tf')
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     publish_imu_tf = LaunchConfiguration('publish_imu_tf')
-    transform_time_offset = LaunchConfiguration('transform_time_offset')
-    camera_flip = LaunchConfiguration('camera_flip')
     xacro_path = LaunchConfiguration('xacro_path')
 
     ros_params_override_path = LaunchConfiguration('ros_params_override_path')
@@ -118,7 +117,6 @@ def launch_setup(context, *args, **kwargs):
     publish_tf_val = as_bool(publish_tf.perform(context))
     publish_map_tf_val = as_bool(publish_map_tf.perform(context))
     publish_imu_tf_val = as_bool(publish_imu_tf.perform(context))
-    transform_time_offset_val = as_float(transform_time_offset.perform(context), 0.0)
 
     if (camera_name_val == ''):
         camera_name_val = 'zed'
@@ -174,19 +172,18 @@ def launch_setup(context, *args, **kwargs):
                 'general.camera_flip': as_bool(camera_flip.perform(context)),
                 'general.pub_frame_rate': 15.0,
                 'general.svo_file': svo_path,
-                'general.serial_number': serial_number,
-                'general.camera_id': camera_id,
-                'pos_tracking.publish_tf': publish_tf,
-                'pos_tracking.publish_map_tf': publish_map_tf,
-                'sensors.publish_imu_tf': publish_imu_tf,
-                'general.pub_frame_rate': 15.0,
-                'object_detection.od_enabled': True,
-                'object_detection.detection_model': 'MULTI_CLASS_BOX_FAST',
-                'object_detection.filtering_mode': 'NMS3D',
+                'general.serial_number': serial_number_val,
+                'general.camera_id': camera_id_val,
+                'depth.depth_mode': 'PERFORMANCE',
+                'depth.point_cloud_freq': 15.0,
+                'depth.point_cloud_res': 'REDUCED',
+                'pos_tracking.publish_tf': publish_tf_val,
+                'pos_tracking.publish_map_tf': publish_map_tf_val,
+                'sensors.publish_imu_tf': publish_imu_tf_val,
             },
         ],
     )
-
+    
     load_zed_component = LoadComposableNodes(
         target_container=[namespace, '/', container_name],
         composable_node_descriptions=[zed_component],
@@ -245,10 +242,6 @@ def generate_launch_description():
                 default_value='true',
                 description='Enable publication of the `map -> odom` TF. Note: Ignored if `publish_tf` is False.',
                 choices=['true', 'false']),
-            DeclareLaunchArgument(
-                'transform_time_offset',
-                default_value='0.15',
-                description='Time offset added to ZED TF timestamps.'),
             DeclareLaunchArgument(
                 'publish_imu_tf',
                 default_value='true',

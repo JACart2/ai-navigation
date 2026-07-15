@@ -4,6 +4,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
+from autonomous_launch.cart_config_resolver import resolve_cart_config_path
 from ament_index_python.packages import get_package_share_directory
 import os
 import yaml
@@ -28,9 +29,9 @@ def generate_launch_description():
     )
 
     def _include_zed_multi_camera(context, *args, **kwargs):
-        cfg_path = perform_substitutions(context, [cart_config_path]).strip()
-        if not cfg_path:
-            raise RuntimeError("Required launch argument 'cart_config_path' is empty")
+        cfg_path = resolve_cart_config_path(
+            perform_substitutions(context, [cart_config_path]).strip()
+        )
 
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
@@ -93,7 +94,11 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "cart_config_path",
-                description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
+                default_value="",
+                description=(
+                    "Optional path to cart-specific YAML config. When omitted, "
+                    "the config is inferred from ROS_DOMAIN_ID."
+                ),
             ),
             zed_multi_camera_launch,
             multi_link_tf,

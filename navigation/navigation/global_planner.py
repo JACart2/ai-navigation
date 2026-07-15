@@ -333,8 +333,14 @@ class GlobalPlanner(rclpy.node.Node):
             # Allows for class changes again
             self.calculating_nav = False
 
-            # Convert the path to GPS coordinates and publish for networking
-            if self.gps_calibrated:
+            # Publish the geographic route directly from the original GML
+            # latitude/longitude attributes. The local ROS path remains derived
+            # from node["pos"] for RViz and the local planner.
+            if not self.output_gml_path_gps(nodelist) and self.gps_calibrated:
+                self.get_logger().warning(
+                    "Selected graph path does not contain lat/lon attributes; "
+                    "falling back to local-to-GPS conversion"
+                )
                 self.output_path_gps(points_arr)
 
             self.path_pub.publish(points_arr)
@@ -649,6 +655,56 @@ class GlobalPlanner(rclpy.node.Node):
             self.vel_polls = 0
             self.cur_speed = 0
 
+    def output_gml_path_gps(self, nodelist):
+        """Publish a selected graph route using its original GML GPS coordinates.
+
+        The graph's ``lat`` and ``lon`` attributes remain the authoritative
+        geographic representation. The derived ``pos`` coordinates are used
+        separately by ROS, RViz, and the local planner.
+
+        Args:
+            nodelist: Ordered NetworkX node identifiers selected for the route.
+
+        Returns:
+            bool: True when the direct GML route was published, otherwise False.
+        """
+        gps_path = LatLongArray()
+
+        for node in nodelist:
+            node_data = self.global_graph.nodes[node]
+
+            if "lat" not in node_data or "lon" not in node_data:
+                self.get_logger().warning(
+                    f"Graph node '{node}' is missing lat/lon attributes"
+                )
+                return False
+
+            gps_point = LatLongPoint()
+            gps_point.latitude = float(node_data["lat"])
+            gps_point.longitude = float(node_data["lon"])
+            gps_path.gpspoints.append(gps_point)
+
+        self.gps_path_pub.publish(gps_path)
+
+        self.get_logger().info(
+            f"Published /gps_global_path directly from "
+            f"{len(gps_path.gpspoints)} GML nodes"
+        )
+
+        if self.destination_node is not None:
+            destination_data = self.global_graph.nodes[self.destination_node]
+
+            if "lat" in destination_data and "lon" in destination_data:
+                dest_x, dest_y = destination_data["pos"]
+                self.get_logger().info(
+                    f"Destination node {self.destination_node}: "
+                    f"ROS coordinates ({dest_x}, {dest_y}), "
+                    f"GML GPS coordinates "
+                    f"({destination_data['lat']}, {destination_data['lon']})"
+                )
+
+        return True
+
     def output_path_gps(self, path, single=False):
         """Function for converting the list of points along a path to latitude and longitude
 
@@ -702,7 +758,7 @@ class GlobalPlanner(rclpy.node.Node):
         rather than GPS which can be relatively inaccurate.
 
         """
-        if self.navigating and self.gps_calibrated and self.current_pos is not None:
+        if self.gps_calibrated and self.current_pos is not None:
             package_point = LocalPointsArray()
             cart_pos = self.current_pos.pose
             package_point.localpoints.append(cart_pos)

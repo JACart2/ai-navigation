@@ -82,8 +82,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 15.433197021484375
-        Min Value: -11.012880325317383
+        Max Value: 3.68681263923645
+        Min Value: -1.7625994682312012
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -275,7 +275,7 @@ Visualization Manager:
       Enabled: true
       Name: Marker
       Namespaces:
-        Object_NS: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -343,7 +343,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /zed_front/zed_node_0/rgb/color/rect/image
+        Value: /zed_rear/zed_node_1/rgb/color/rect/image
       Value: true
       Visibility:
         Camera: true

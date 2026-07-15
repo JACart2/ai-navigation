@@ -9,7 +9,6 @@ Panels:
         - /PointCloud21/Topic1
         - /PointCloud22/Topic1
         - /Camera1
-        - /Camera2
       Splitter Ratio: 0.5
     Tree Height: 220
   - Class: rviz_common/Selection
@@ -82,8 +81,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 3.68681263923645
-        Min Value: -1.7625994682312012
+        Max Value: 4.070806980133057
+        Min Value: -1.3509910106658936
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -330,7 +329,7 @@ Visualization Manager:
         Path: true
         PointCloud2: true
         PoseWithCovariance: true
-        Value: true
+        Value: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -353,7 +352,7 @@ Visualization Manager:
         Path: true
         PointCloud2: true
         PoseWithCovariance: true
-        Value: true
+        Value: false
       Zoom Factor: 1
   Enabled: true
   Global Options:

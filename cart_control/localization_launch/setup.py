@@ -37,6 +37,8 @@ setup(
             'pcl_pose_relay = localization_launch.pcl_pose_relay:main',
             'mola_auto_localization_supervisor = '
             'localization_launch.mola_auto_localization_supervisor:main',
+            'gps_auto_anchor_monitor = '
+            'localization_launch.gps_auto_anchor_monitor:main',
         ],
     },
 )

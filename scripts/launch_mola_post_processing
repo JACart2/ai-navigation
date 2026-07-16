@@ -1,0 +1,383 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  launch_mola_post_processing TEST_NAME [options]
+
+Runs mapping_instruction_manual_v4 post-processing steps 2.14 through 2.19:
+  2.14 replay the bag through MOLA to generate an offline .simplemap/.mm
+  2.15 run loop closure on the .simplemap
+  2.16 convert the loop-closed .simplemap to a visualization .mm
+  2.17 compute georeferencing metadata from GNSS observations
+  2.18 bake georeferencing into a new .mm
+  2.19 print final artifact paths and optional viewing commands
+
+Primary parameter:
+  TEST_NAME                         Base name for input bag and output maps.
+
+Defaults:
+  Bag input:                        /root/dev_ws/bagfiles/TEST_NAME
+  Offline simplemap:                /root/dev_ws/maps/TEST_NAME_offline.simplemap
+  Offline mm:                       /root/dev_ws/maps/TEST_NAME_offline.mm
+  Loop-closed simplemap:            /root/dev_ws/maps/TEST_NAME_lc.simplemap
+  Loop-closed visualization mm:      /root/dev_ws/maps/TEST_NAME_lc_visual.mm
+  Georeference metadata:            /root/dev_ws/maps/TEST_NAME.georef
+  Georeferenced mm:                 /root/dev_ws/maps/TEST_NAME_georef.mm
+
+Options:
+  --bag PATH                        Bag directory to process.
+  --maps-dir DIR                    Map output directory. Default: /root/dev_ws/maps
+  --bag-dir DIR                     Bag parent directory. Default: /root/dev_ws/bagfiles
+  --lidar-topic TOPIC               Lidar topic. Default: /velodyne_points
+  --imu-topic TOPIC                 IMU topic to replay/record into MOLA. Default: /zed_front/zed_node_0/imu/data
+  --use-imu-roll-pitch              Use IMU gravity for initial roll/pitch. Not recommended on James until IMU TF is calibrated.
+  --use-imu-deskew                  Use IMU motion compensation. Default is linear deskew for safer replay.
+  --gnss-topic TOPIC                GNSS topic. Default: /fix
+  --base-frame FRAME                MOLA base frame. Default: base_link
+  --pipeline PATH                   Loop-closure pipeline YAML.
+  --simplemap-output PATH           Override offline simplemap output.
+  --mm-output PATH                  Override offline .mm output.
+  --lc-simplemap-output PATH        Override loop-closed simplemap output.
+  --lc-mm-output PATH               Override loop-closed visualization .mm output.
+  --georef-output PATH              Override georeference metadata output.
+  --georef-mm-output PATH           Override georeferenced .mm output.
+  --skip-offline-map                Skip bag replay/simplemap generation.
+  --skip-loop-closure               Skip loop closure.
+  --skip-sm2mm                      Skip loop-closed .simplemap to .mm conversion.
+  --skip-georef                     Skip georeferencing metadata computation.
+  --skip-georef-mm                  Skip georeferenced .mm generation.
+  --allow-existing-output           Permit overwriting/reusing existing output paths.
+  --dry-run                         Print commands without executing them.
+  -h, --help                        Show this help.
+
+Examples:
+  scripts/launch_mola_post_processing test1
+  scripts/launch_mola_post_processing test1 --bag /root/dev_ws/bagfiles/test1
+  scripts/launch_mola_post_processing test1 --skip-offline-map --allow-existing-output
+USAGE
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ws_dir="${DEV_WS:-/root/dev_ws}"
+setup_file="$ws_dir/install/setup.bash"
+
+test_name=""
+bag_dir="$ws_dir/bagfiles"
+maps_dir="$ws_dir/maps"
+bag_path=""
+lidar_topic="/velodyne_points"
+imu_topic="/zed_front/zed_node_0/imu/data"
+use_imu_roll_pitch=false
+use_imu_deskew=false
+gnss_topic="/fix"
+base_frame="base_link"
+pipeline="$ws_dir/src/mola_sm_loop_closure/pipelines/loop-closure-lidar3d-gicp.yaml"
+simplemap_output=""
+mm_output=""
+lc_simplemap_output=""
+lc_mm_output=""
+georef_output=""
+georef_mm_output=""
+skip_offline_map=false
+skip_loop_closure=false
+skip_sm2mm=false
+skip_georef=false
+skip_georef_mm=false
+allow_existing_output=false
+dry_run=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --bag)
+      bag_path="${2:?--bag requires a bag directory}"
+      shift 2
+      ;;
+    --bag-dir)
+      bag_dir="${2:?--bag-dir requires a directory}"
+      shift 2
+      ;;
+    --maps-dir)
+      maps_dir="${2:?--maps-dir requires a directory}"
+      shift 2
+      ;;
+    --lidar-topic)
+      lidar_topic="${2:?--lidar-topic requires a topic}"
+      shift 2
+      ;;
+    --imu-topic)
+      imu_topic="${2:?--imu-topic requires a topic}"
+      shift 2
+      ;;
+    --use-imu-roll-pitch)
+      use_imu_roll_pitch=true
+      shift
+      ;;
+    --use-imu-deskew)
+      use_imu_deskew=true
+      shift
+      ;;
+    --gnss-topic)
+      gnss_topic="${2:?--gnss-topic requires a topic}"
+      shift 2
+      ;;
+    --base-frame)
+      base_frame="${2:?--base-frame requires a frame}"
+      shift 2
+      ;;
+    --pipeline)
+      pipeline="${2:?--pipeline requires a YAML path}"
+      shift 2
+      ;;
+    --simplemap-output)
+      simplemap_output="${2:?--simplemap-output requires a path}"
+      shift 2
+      ;;
+    --mm-output)
+      mm_output="${2:?--mm-output requires a path}"
+      shift 2
+      ;;
+    --lc-simplemap-output)
+      lc_simplemap_output="${2:?--lc-simplemap-output requires a path}"
+      shift 2
+      ;;
+    --lc-mm-output)
+      lc_mm_output="${2:?--lc-mm-output requires a path}"
+      shift 2
+      ;;
+    --georef-output)
+      georef_output="${2:?--georef-output requires a path}"
+      shift 2
+      ;;
+    --georef-mm-output)
+      georef_mm_output="${2:?--georef-mm-output requires a path}"
+      shift 2
+      ;;
+    --skip-offline-map)
+      skip_offline_map=true
+      shift
+      ;;
+    --skip-loop-closure)
+      skip_loop_closure=true
+      shift
+      ;;
+    --skip-sm2mm)
+      skip_sm2mm=true
+      shift
+      ;;
+    --skip-georef)
+      skip_georef=true
+      shift
+      ;;
+    --skip-georef-mm)
+      skip_georef_mm=true
+      shift
+      ;;
+    --allow-existing-output)
+      allow_existing_output=true
+      shift
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [[ -z "$test_name" ]]; then
+        test_name="$1"
+        shift
+      else
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
+
+if [[ -z "$test_name" ]]; then
+  echo "Missing TEST_NAME." >&2
+  usage >&2
+  exit 2
+fi
+
+bag_path="${bag_path:-$bag_dir/$test_name}"
+simplemap_output="${simplemap_output:-$maps_dir/${test_name}_offline.simplemap}"
+mm_output="${mm_output:-$maps_dir/${test_name}_offline.mm}"
+lc_simplemap_output="${lc_simplemap_output:-$maps_dir/${test_name}_lc.simplemap}"
+lc_mm_output="${lc_mm_output:-$maps_dir/${test_name}_lc_visual.mm}"
+georef_output="${georef_output:-$maps_dir/${test_name}.georef}"
+georef_mm_output="${georef_mm_output:-$maps_dir/${test_name}_georef.mm}"
+
+source_ros_setup() {
+  if [[ ! -f "$setup_file" ]]; then
+    echo "Workspace setup file not found: $setup_file" >&2
+    exit 1
+  fi
+  set +u
+  # shellcheck source=/root/dev_ws/install/setup.bash
+  source "$setup_file"
+  set -u
+}
+
+require_file() {
+  local path="$1"
+  local label="$2"
+  if [[ ! -e "$path" ]]; then
+    echo "$label not found: $path" >&2
+    exit 1
+  fi
+}
+
+check_output_path() {
+  local path="$1"
+  local enabled="$2"
+  if [[ "$enabled" != true ]]; then
+    return
+  fi
+  if [[ "$allow_existing_output" != true && -e "$path" ]]; then
+    echo "Output already exists: $path" >&2
+    echo "Use a new TEST_NAME, an explicit output path, or --allow-existing-output." >&2
+    exit 1
+  fi
+}
+
+run_cmd() {
+  echo
+  printf '+ '
+  printf '%q ' "$@"
+  echo
+  if [[ "$dry_run" == true ]]; then
+    return 0
+  fi
+  "$@"
+}
+
+mkdir -p "$maps_dir"
+source_ros_setup
+
+require_file "$bag_path" "Bag input"
+if [[ "$skip_loop_closure" != true ]]; then
+  require_file "$pipeline" "Loop-closure pipeline"
+  if ! grep -q 'submap_max_length_wrt_map' "$pipeline"; then
+    echo "Loop-closure pipeline appears incompatible with this mola-sm-lc-cli:" >&2
+    echo "  $pipeline" >&2
+    echo "Missing required YAML entry: submap_max_length_wrt_map" >&2
+    echo "Use --pipeline $ws_dir/src/mola_sm_loop_closure/pipelines/loop-closure-lidar3d-gicp.yaml" >&2
+    exit 1
+  fi
+fi
+
+check_output_path "$simplemap_output" "$([[ "$skip_offline_map" != true ]] && echo true || echo false)"
+check_output_path "$mm_output" "$([[ "$skip_offline_map" != true ]] && echo true || echo false)"
+check_output_path "$lc_simplemap_output" "$([[ "$skip_loop_closure" != true ]] && echo true || echo false)"
+check_output_path "$lc_mm_output" "$([[ "$skip_sm2mm" != true ]] && echo true || echo false)"
+check_output_path "$georef_output" "$([[ "$skip_georef" != true ]] && echo true || echo false)"
+check_output_path "$georef_mm_output" "$([[ "$skip_georef_mm" != true ]] && echo true || echo false)"
+
+echo "MOLA post-processing for test: $test_name"
+echo "Bag input: $bag_path"
+echo "Maps dir: $maps_dir"
+echo "Offline simplemap: $simplemap_output"
+echo "Offline mm: $mm_output"
+echo "Loop-closed simplemap: $lc_simplemap_output"
+echo "Loop-closed mm: $lc_mm_output"
+echo "Georef metadata: $georef_output"
+echo "Georeferenced mm: $georef_mm_output"
+echo "Use IMU roll/pitch initialization: $use_imu_roll_pitch"
+echo "Use IMU deskew: $use_imu_deskew"
+
+if [[ "$skip_offline_map" != true ]]; then
+  echo
+  echo "2.14 Replay Bag And Generate Offline Map"
+  export MOLA_LIDAR_TOPIC="$lidar_topic"
+  export MOLA_LIDAR_TOPIC_TYPE=PointCloud2
+  export MOLA_START_ACTIVE=True
+  export MOLA_MAPPING_ENABLED=True
+  export MOLA_GENERATE_SIMPLEMAP=true
+  export MOLA_SIMPLEMAP_MIN_XYZ=1.0
+  export MOLA_SIMPLEMAP_MIN_ROT=20.0
+  export MOLA_MIN_XYZ_BETWEEN_MAP_UPDATES=0.25
+  export MOLA_MIN_ROT_BETWEEN_MAP_UPDATES=5.0
+  export MOLA_PUBLISH_LOCAL_MAP_UPDATES_EVERY_N=40
+  export MOLA_TF_BASE_LINK="$base_frame"
+  export MOLA_NAVSTATE_ENFORCE_PLANAR_MOTION=true
+  if [[ "$use_imu_roll_pitch" == true || "$use_imu_deskew" == true ]]; then
+    export MOLA_NAVSTATE_IMU_SENSOR_NAME='.*'
+  else
+    export MOLA_NAVSTATE_IMU_SENSOR_NAME='__disabled_for_mapping__'
+  fi
+  export MOLA_OBS_VALIDITY_MIN_POINTS=100
+  export MOLA_ENABLE_OBS_VALIDITY_FILTER=True
+  export MOLA_IMU_TOPIC="$imu_topic"
+  if [[ "$use_imu_deskew" == true ]]; then
+    export MOLA_DESKEW_METHOD=MotionCompensationMethod::IMU
+  else
+    export MOLA_DESKEW_METHOD=MotionCompensationMethod::Linear
+  fi
+
+  if [[ "$use_imu_roll_pitch" == true ]]; then
+    export MOLA_LO_INITIAL_LOCALIZATION_METHOD=InitLocalization::PitchAndRollFromIMU
+    export MOLA_IMU_GRAVITY_CORRECTION=true
+  else
+    export MOLA_LO_INITIAL_LOCALIZATION_METHOD=InitLocalization::FixedPose
+    export MOLA_IMU_GRAVITY_CORRECTION=false
+  fi
+  export MOLA_IMU_GRAVITY_SIGMA_DEG=3.0
+
+  echo "MOLA_LO_INITIAL_LOCALIZATION_METHOD=$MOLA_LO_INITIAL_LOCALIZATION_METHOD"
+  echo "MOLA_DESKEW_METHOD=$MOLA_DESKEW_METHOD"
+  echo "MOLA_IMU_GRAVITY_CORRECTION=$MOLA_IMU_GRAVITY_CORRECTION"
+  echo "MOLA_NAVSTATE_ENFORCE_PLANAR_MOTION=$MOLA_NAVSTATE_ENFORCE_PLANAR_MOTION"
+  echo "MOLA_NAVSTATE_IMU_SENSOR_NAME=$MOLA_NAVSTATE_IMU_SENSOR_NAME"
+  export MOLA_GNSS_TOPIC="$gnss_topic"
+  export MOLA_SIMPLEMAP_OUTPUT="$simplemap_output"
+  export MOLA_SAVE_MM="$mm_output"
+  run_cmd mola-lo-gui-rosbag2 "$bag_path"
+fi
+
+if [[ "$skip_loop_closure" != true ]]; then
+  echo
+  echo "2.15 Run Loop Closure"
+  require_file "$simplemap_output" "Input simplemap for loop closure"
+  run_cmd mola-sm-lc-cli -i "$simplemap_output" -o "$lc_simplemap_output" -p "$pipeline"
+fi
+
+if [[ "$skip_sm2mm" != true ]]; then
+  echo
+  echo "2.16 Convert Loop-Closed Simplemap To Visualization MM"
+  require_file "$lc_simplemap_output" "Input loop-closed simplemap"
+  run_cmd sm2mm -i "$lc_simplemap_output" -o "$lc_mm_output"
+fi
+
+if [[ "$skip_georef" != true ]]; then
+  echo
+  echo "2.17 Compute Georeferencing Metadata"
+  require_file "$lc_simplemap_output" "Input loop-closed simplemap"
+  run_cmd mola-sm-georeferencing -i "$lc_simplemap_output" -o "$georef_output"
+fi
+
+if [[ "$skip_georef_mm" != true ]]; then
+  echo
+  echo "2.18 Bake Georeferencing Into MM"
+  require_file "$lc_simplemap_output" "Input loop-closed simplemap"
+  require_file "$georef_output" "Georeference metadata"
+  run_cmd sm2mm -i "$lc_simplemap_output" -g "$georef_output" -o "$georef_mm_output"
+fi
+
+echo
+echo "2.19 Post-Processing Outputs"
+echo "Offline simplemap:       $simplemap_output"
+echo "Offline mm:              $mm_output"
+echo "Loop-closed simplemap:   $lc_simplemap_output"
+echo "Loop-closed visual mm:   $lc_mm_output"
+echo "Georef metadata:         $georef_output"
+echo "Georeferenced mm:        $georef_mm_output"
+echo
+echo "View commands:"
+echo "  mm-viewer $lc_mm_output"
+echo "  mm-viewer $georef_mm_output"

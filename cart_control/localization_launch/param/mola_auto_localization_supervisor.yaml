@@ -43,6 +43,31 @@ mola_auto_localization_supervisor:
     recovery_xy_std: 4.0
     recovery_yaw_std: 0.8
 
+    # GPS-assisted recovery is intentionally off until the map GPS origin is set.
+    # When enabled, GPS is used only after localization is suspected lost, and only
+    # as a broad relocalization hint; LiDAR still has to confirm the pose.
+    enable_gps_recovery: false
+    enable_gps_auto_anchor: true
+    gps_fix_topic: /fix
+    gps_fix_max_age_sec: 5.0
+    gps_min_status: 0
+    gps_max_xy_std: 25.0
+    gps_min_xy_std: 6.0
+    gps_z_std: 30.0
+    gps_yaw_std: 3.14
+    gps_auto_anchor_min_samples: 5
+    gps_auto_anchor_min_move_m: 8.0
+    gps_auto_anchor_max_xy_std: 12.0
+
+    # Manual map-frame conversion fallback for GPS recovery hints. Set these
+    # from the georeference origin if auto-anchor is disabled or unavailable.
+    # gps_map_yaw_from_enu is
+    # radians, rotating local ENU coordinates into the MOLA map frame.
+    gps_map_origin_lat: 0.0
+    gps_map_origin_lon: 0.0
+    gps_map_origin_alt: 0.0
+    gps_map_yaw_from_enu: 0.0
+
     enable_startup_relocalize: true
     enable_recovery_relocalize: true
     debug: false

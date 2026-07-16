@@ -48,6 +48,7 @@ def generate_launch_description():
     enable_mola_auto_localization = LaunchConfiguration(
         "enable_mola_auto_localization"
     )
+    enable_gps_recovery = LaunchConfiguration("enable_gps_recovery")
 
     mola_auto_localization_params = PathJoinSubstitution(
         [
@@ -83,6 +84,21 @@ def generate_launch_description():
             "cart_config_path": LaunchConfiguration("cart_config_path"),
         }.items(),
         condition=IfCondition(LaunchConfiguration("start_cameras")),
+    )
+
+    gps_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("localization_launch"),
+                "/launch/garmin_gps18x.launch.py",
+            ]
+        ),
+        launch_arguments={
+            "port": LaunchConfiguration("gps_port"),
+            "baud": LaunchConfiguration("gps_baud"),
+            "frame_id": LaunchConfiguration("gps_frame"),
+        }.items(),
+        condition=IfCondition(enable_gps_recovery),
     )
 
     mola_localization_launch = IncludeLaunchDescription(
@@ -128,6 +144,25 @@ def generate_launch_description():
             {
                 "cloud_topic": LaunchConfiguration("lidar_topic"),
                 "mola_pose_topic": "/lidar_odometry/pose",
+                "enable_gps_recovery": ParameterValue(
+                    enable_gps_recovery, value_type=bool
+                ),
+                "enable_gps_auto_anchor": ParameterValue(
+                    LaunchConfiguration("enable_gps_auto_anchor"), value_type=bool
+                ),
+                "gps_fix_topic": LaunchConfiguration("gps_fix_topic"),
+                "gps_map_origin_lat": ParameterValue(
+                    LaunchConfiguration("gps_map_origin_lat"), value_type=float
+                ),
+                "gps_map_origin_lon": ParameterValue(
+                    LaunchConfiguration("gps_map_origin_lon"), value_type=float
+                ),
+                "gps_map_origin_alt": ParameterValue(
+                    LaunchConfiguration("gps_map_origin_alt"), value_type=float
+                ),
+                "gps_map_yaw_from_enu": ParameterValue(
+                    LaunchConfiguration("gps_map_yaw_from_enu"), value_type=float
+                ),
             },
         ],
         condition=IfCondition(enable_mola_auto_localization),
@@ -351,8 +386,70 @@ def generate_launch_description():
                 "enable_mola_auto_localization",
                 default_value="false",
                 description=(
-                    "Start the conservative LiDAR-only MOLA auto-localization "
+                    "Start the conservative LiDAR-first MOLA auto-localization "
                     "supervisor."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "enable_gps_recovery",
+                default_value="false",
+                description=(
+                    "Allow the auto-localization supervisor to use GPS as a "
+                    "broad relocalization hint after localization is lost."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "enable_gps_auto_anchor",
+                default_value="true",
+                description=(
+                    "Learn the GPS-to-map anchor from healthy MOLA localization "
+                    "instead of requiring manual GPS origin/yaw inputs."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "gps_fix_topic",
+                default_value="/fix",
+                description="NavSatFix topic used for GPS-assisted recovery.",
+            ),
+            DeclareLaunchArgument(
+                "gps_port",
+                default_value="/dev/ttyACM0",
+                description=(
+                    "Serial device for the Garmin GPS 18x when GPS recovery "
+                    "is enabled."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "gps_baud",
+                default_value="4800",
+                description="Serial baud rate for the Garmin GPS 18x.",
+            ),
+            DeclareLaunchArgument(
+                "gps_frame",
+                default_value="gps",
+                description="Frame id stamped into GPS fixes.",
+            ),
+            DeclareLaunchArgument(
+                "gps_map_origin_lat",
+                default_value="0.0",
+                description="Latitude of map-frame origin for GPS recovery.",
+            ),
+            DeclareLaunchArgument(
+                "gps_map_origin_lon",
+                default_value="0.0",
+                description="Longitude of map-frame origin for GPS recovery.",
+            ),
+            DeclareLaunchArgument(
+                "gps_map_origin_alt",
+                default_value="0.0",
+                description="Altitude of map-frame origin for GPS recovery.",
+            ),
+            DeclareLaunchArgument(
+                "gps_map_yaw_from_enu",
+                default_value="0.0",
+                description=(
+                    "Yaw in radians rotating local ENU coordinates into the "
+                    "MOLA map frame for GPS recovery."
                 ),
             ),
             DeclareLaunchArgument(
@@ -441,6 +538,7 @@ def generate_launch_description():
                 description="Publish dynamic TF from MOLA odometry.",
             ),
             velodyne_launch,
+            gps_launch,
             mola_localization_launch,
             pcl_pose_relay,
             mola_auto_localization_supervisor,

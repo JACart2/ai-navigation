@@ -1,11 +1,12 @@
-"""Conservative LiDAR-only MOLA auto-localization supervisor."""
+"""Conservative LiDAR-first MOLA auto-localization supervisor."""
 
 import importlib
 import json
 import math
 import re
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 try:
     import yaml
@@ -20,6 +21,7 @@ from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import NavSatFix
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import String
 
@@ -38,8 +40,31 @@ class PoseSample:
     msg: Odometry
 
 
+
+
+@dataclass
+class GpsSample:
+    time_sec: float
+    latitude: float
+    longitude: float
+    altitude: float
+    xy_std: float
+
+
+@dataclass
+class GpsMapAnchor:
+    gps: GpsSample
+    map_x: float
+    map_y: float
+    map_z: float
+    map_yaw: float
+    yaw_from_enu: Optional[float] = None
+
+
 class MolaAutoLocalizationSupervisor(Node):
     """Watch MOLA health and request cautious relocalization when needed."""
+
+    EARTH_RADIUS_M = 6378137.0
 
     def __init__(self) -> None:
         super().__init__("mola_auto_localization_supervisor")
@@ -56,6 +81,12 @@ class MolaAutoLocalizationSupervisor(Node):
         self.last_good_pose: Optional[PoseWithCovarianceStamped] = None
         self.last_good_pose_time: Optional[float] = None
         self.last_pcl_pose_time: Optional[float] = None
+        self.last_gps_fix: Optional[NavSatFix] = None
+        self.last_gps_fix_time: Optional[float] = None
+        self.gps_samples: Deque[GpsSample] = deque(maxlen=60)
+        self.gps_map_anchor: Optional[GpsMapAnchor] = None
+        self.logged_first_gps_fix = False
+        self.logged_gps_anchor_wait = False
         self.last_diag_time: Optional[float] = None
         self.last_diag_fields: Dict[str, Any] = {}
         self.bad_diag_since: Optional[float] = None
@@ -108,6 +139,13 @@ class MolaAutoLocalizationSupervisor(Node):
             self._diagnostics_callback,
             10,
         )
+        if self.enable_gps_recovery:
+            self.create_subscription(
+                NavSatFix,
+                self.gps_fix_topic,
+                self._gps_fix_callback,
+                qos_profile_sensor_data,
+            )
         self.create_timer(self.check_period_sec, self._tick)
 
         self.get_logger().info(
@@ -116,6 +154,24 @@ class MolaAutoLocalizationSupervisor(Node):
             f"diagnostics={self.diagnostics_topic}, "
             f"relocalize_service={self.relocalize_service}"
         )
+        if self.enable_gps_recovery:
+            if self.enable_gps_auto_anchor:
+                self.get_logger().info(
+                    "GPS-assisted recovery enabled with auto-anchor learning; "
+                    "GPS will become a recovery hint after MOLA is healthy "
+                    "and the cart drives far enough to estimate map yaw."
+                )
+            elif self._gps_origin_configured():
+                self.get_logger().info(
+                    "GPS-assisted recovery enabled; /fix will be used as a "
+                    "broad map-frame suggestion only after localization is lost."
+                )
+            else:
+                self.get_logger().warn(
+                    "GPS-assisted recovery is enabled but map GPS origin is "
+                    "not configured and auto-anchor is disabled; GPS recovery "
+                    "hints will be ignored."
+                )
         self.get_logger().info(
             "Waiting for LiDAR before requesting startup relocalization."
         )
@@ -155,6 +211,22 @@ class MolaAutoLocalizationSupervisor(Node):
         self.declare_parameter("recovery_yaw_std", 0.8)
         self.declare_parameter("enable_startup_relocalize", True)
         self.declare_parameter("enable_recovery_relocalize", True)
+        self.declare_parameter("enable_gps_recovery", False)
+        self.declare_parameter("enable_gps_auto_anchor", True)
+        self.declare_parameter("gps_fix_topic", "/fix")
+        self.declare_parameter("gps_fix_max_age_sec", 5.0)
+        self.declare_parameter("gps_min_status", 0)
+        self.declare_parameter("gps_max_xy_std", 25.0)
+        self.declare_parameter("gps_min_xy_std", 6.0)
+        self.declare_parameter("gps_z_std", 30.0)
+        self.declare_parameter("gps_yaw_std", 3.14)
+        self.declare_parameter("gps_auto_anchor_min_samples", 5)
+        self.declare_parameter("gps_auto_anchor_min_move_m", 8.0)
+        self.declare_parameter("gps_auto_anchor_max_xy_std", 12.0)
+        self.declare_parameter("gps_map_origin_lat", 0.0)
+        self.declare_parameter("gps_map_origin_lon", 0.0)
+        self.declare_parameter("gps_map_origin_alt", 0.0)
+        self.declare_parameter("gps_map_yaw_from_enu", 0.0)
         self.declare_parameter("max_relocalize_attempts_per_event", 3)
         self.declare_parameter("service_wait_timeout_sec", 0.05)
         self.declare_parameter("relocalize_response_timeout_sec", 10.0)
@@ -220,6 +292,22 @@ class MolaAutoLocalizationSupervisor(Node):
         self.enable_recovery_relocalize = self._param_bool(
             "enable_recovery_relocalize"
         )
+        self.enable_gps_recovery = self._param_bool("enable_gps_recovery")
+        self.enable_gps_auto_anchor = self._param_bool("enable_gps_auto_anchor")
+        self.gps_fix_topic = self._param_str("gps_fix_topic")
+        self.gps_fix_max_age_sec = self._param_float("gps_fix_max_age_sec")
+        self.gps_min_status = self._param_int("gps_min_status")
+        self.gps_max_xy_std = self._param_float("gps_max_xy_std")
+        self.gps_min_xy_std = self._param_float("gps_min_xy_std")
+        self.gps_z_std = self._param_float("gps_z_std")
+        self.gps_yaw_std = self._param_float("gps_yaw_std")
+        self.gps_auto_anchor_min_samples = max(1, self._param_int("gps_auto_anchor_min_samples"))
+        self.gps_auto_anchor_min_move_m = self._param_float("gps_auto_anchor_min_move_m")
+        self.gps_auto_anchor_max_xy_std = self._param_float("gps_auto_anchor_max_xy_std")
+        self.gps_map_origin_lat = self._param_float("gps_map_origin_lat")
+        self.gps_map_origin_lon = self._param_float("gps_map_origin_lon")
+        self.gps_map_origin_alt = self._param_float("gps_map_origin_alt")
+        self.gps_map_yaw_from_enu = self._param_float("gps_map_yaw_from_enu")
         self.max_relocalize_attempts_per_event = max(
             1,
             self._param_int("max_relocalize_attempts_per_event"),
@@ -297,6 +385,20 @@ class MolaAutoLocalizationSupervisor(Node):
             3600.0,
             "Observed /pcl_pose relay; using it as secondary visibility only.",
         )
+
+    def _gps_fix_callback(self, msg: NavSatFix) -> None:
+        now_sec = self._now_sec()
+        self.last_gps_fix = msg
+        self.last_gps_fix_time = now_sec
+        if not self.logged_first_gps_fix:
+            self.logged_first_gps_fix = True
+            self.get_logger().info(
+                f"Received first GPS fix on {self.gps_fix_topic}."
+            )
+
+        sample = self._gps_sample_from_fix(msg, now_sec)
+        if sample is not None:
+            self.gps_samples.append(sample)
 
     def _diagnostics_callback(self, msg: String) -> None:
         now_sec = self._now_sec()
@@ -437,6 +539,8 @@ class MolaAutoLocalizationSupervisor(Node):
             self.get_logger().info("Localization healthy.")
             self.logged_healthy = True
 
+        self._maybe_update_gps_auto_anchor(now_sec)
+
         if self.last_pose_sample is not None:
             self.last_good_pose = self._pose_msg_from_sample(
                 self.last_pose_sample,
@@ -552,11 +656,13 @@ class MolaAutoLocalizationSupervisor(Node):
             )
             return False
 
-        pose_msg, pose_source = self._select_relocalize_pose()
-        xy_std = (
+        pose_msg, pose_source, suggested_xy_std, suggested_yaw_std = (
+            self._select_relocalize_pose(kind)
+        )
+        xy_std = suggested_xy_std or (
             self.startup_xy_std if use_startup_std else self.recovery_xy_std
         )
-        yaw_std = (
+        yaw_std = suggested_yaw_std or (
             self.startup_yaw_std if use_startup_std else self.recovery_yaw_std
         )
 
@@ -813,10 +919,312 @@ class MolaAutoLocalizationSupervisor(Node):
 
     def _select_relocalize_pose(
         self,
-    ) -> Tuple[PoseWithCovarianceStamped, str]:
+        kind: str,
+    ) -> Tuple[PoseWithCovarianceStamped, str, Optional[float], Optional[float]]:
+        if kind == "recovery":
+            gps_pose = self._gps_recovery_pose_msg()
+            if gps_pose is not None:
+                pose_msg, xy_std, yaw_std = gps_pose
+                return pose_msg, "GPS recovery hint", xy_std, yaw_std
+
         if self.last_good_pose is not None:
-            return self.last_good_pose, "last known good"
-        return self._startup_pose_msg(), "configured startup"
+            return self.last_good_pose, "last known good", None, None
+        return self._startup_pose_msg(), "configured startup", None, None
+
+    def _maybe_update_gps_auto_anchor(self, now_sec: float) -> None:
+        if not (self.enable_gps_recovery and self.enable_gps_auto_anchor):
+            return
+        if self.lost_active or self.last_pose_sample is None:
+            return
+        if self.last_good_pose_time is None:
+            return
+
+        sample = self._averaged_recent_gps_sample(now_sec)
+        if sample is None:
+            self._log_throttled(
+                "info",
+                "gps_auto_anchor_wait_samples",
+                10.0,
+                "GPS auto-anchor waiting for several recent good fixes.",
+            )
+            return
+
+        pose = self.last_pose_sample
+        if self.gps_map_anchor is None:
+            self.gps_map_anchor = GpsMapAnchor(
+                gps=sample,
+                map_x=pose.x,
+                map_y=pose.y,
+                map_z=pose.z,
+                map_yaw=pose.yaw,
+            )
+            self.get_logger().info(
+                "GPS auto-anchor captured at healthy MOLA pose: "
+                f"lat={sample.latitude:.8f}, lon={sample.longitude:.8f}, "
+                f"alt={sample.altitude:.2f}, map=({pose.x:.2f}, "
+                f"{pose.y:.2f}, {pose.z:.2f}). Waiting for "
+                f"{self.gps_auto_anchor_min_move_m:.1f}m of healthy movement "
+                "to learn map yaw."
+            )
+            return
+
+        if self.gps_map_anchor.yaw_from_enu is not None:
+            return
+
+        east, north, _ = self._gps_delta_from_anchor(sample)
+        gps_dist = math.hypot(east, north)
+        map_dx = pose.x - self.gps_map_anchor.map_x
+        map_dy = pose.y - self.gps_map_anchor.map_y
+        map_dist = math.hypot(map_dx, map_dy)
+        min_move = self.gps_auto_anchor_min_move_m
+        if gps_dist < min_move or map_dist < min_move:
+            self._log_throttled(
+                "info",
+                "gps_auto_anchor_wait_motion",
+                10.0,
+                "GPS auto-anchor captured; waiting for enough healthy "
+                f"motion to learn yaw (gps={gps_dist:.1f}m, "
+                f"map={map_dist:.1f}m, required={min_move:.1f}m).",
+            )
+            return
+
+        enu_angle = math.atan2(north, east)
+        map_angle = math.atan2(map_dy, map_dx)
+        self.gps_map_anchor.yaw_from_enu = self._normalize_angle(
+            map_angle - enu_angle
+        )
+        self.get_logger().info(
+            "GPS auto-anchor yaw learned: "
+            f"gps_map_yaw_from_enu={self.gps_map_anchor.yaw_from_enu:.4f} rad "
+            f"after gps={gps_dist:.1f}m/map={map_dist:.1f}m movement."
+        )
+
+    def _gps_sample_from_fix(
+        self,
+        fix: NavSatFix,
+        now_sec: float,
+    ) -> Optional[GpsSample]:
+        if fix.status.status < self.gps_min_status:
+            return None
+        if not (math.isfinite(fix.latitude) and math.isfinite(fix.longitude)):
+            return None
+        xy_std = self._gps_xy_std(fix)
+        if xy_std > self.gps_auto_anchor_max_xy_std:
+            return None
+        altitude = fix.altitude if math.isfinite(fix.altitude) else 0.0
+        return GpsSample(
+            time_sec=now_sec,
+            latitude=fix.latitude,
+            longitude=fix.longitude,
+            altitude=altitude,
+            xy_std=xy_std,
+        )
+
+    def _averaged_recent_gps_sample(self, now_sec: float) -> Optional[GpsSample]:
+        recent = [
+            sample
+            for sample in self.gps_samples
+            if now_sec - sample.time_sec <= self.gps_fix_max_age_sec
+            and sample.xy_std <= self.gps_auto_anchor_max_xy_std
+        ]
+        if len(recent) < self.gps_auto_anchor_min_samples:
+            return None
+
+        count = float(len(recent))
+        return GpsSample(
+            time_sec=max(sample.time_sec for sample in recent),
+            latitude=sum(sample.latitude for sample in recent) / count,
+            longitude=sum(sample.longitude for sample in recent) / count,
+            altitude=sum(sample.altitude for sample in recent) / count,
+            xy_std=max(sample.xy_std for sample in recent),
+        )
+
+    def _gps_auto_anchor_recovery_pose_msg(
+        self,
+    ) -> Optional[Tuple[PoseWithCovarianceStamped, float, float]]:
+        if self.gps_map_anchor is None:
+            self._log_throttled(
+                "info",
+                "gps_auto_anchor_not_captured",
+                10.0,
+                "GPS recovery waiting for a healthy MOLA pose to capture "
+                "the auto-anchor.",
+            )
+            return None
+        if self.gps_map_anchor.yaw_from_enu is None:
+            self._log_throttled(
+                "info",
+                "gps_auto_anchor_no_yaw",
+                10.0,
+                "GPS recovery waiting for auto-anchor yaw to be learned "
+                "from healthy motion.",
+            )
+            return None
+        if self.last_gps_fix is None or self.last_gps_fix_time is None:
+            return None
+
+        now_sec = self._now_sec()
+        age = now_sec - self.last_gps_fix_time
+        if age > self.gps_fix_max_age_sec:
+            self._log_throttled(
+                "warn",
+                "gps_auto_anchor_stale",
+                5.0,
+                f"GPS auto-anchor hint stale for {age:.1f}s; ignoring GPS.",
+            )
+            return None
+
+        fix_sample = self._gps_sample_from_fix(self.last_gps_fix, now_sec)
+        if fix_sample is None:
+            self._log_throttled(
+                "warn",
+                "gps_auto_anchor_bad_fix",
+                5.0,
+                "GPS auto-anchor hint ignored because the latest fix is "
+                "not good enough.",
+            )
+            return None
+
+        east, north, up = self._gps_delta_from_anchor(fix_sample)
+        yaw = self.gps_map_anchor.yaw_from_enu
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+        map_dx = cos_yaw * east - sin_yaw * north
+        map_dy = sin_yaw * east + cos_yaw * north
+
+        msg = PoseWithCovarianceStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.map_frame
+        msg.pose.pose.position.x = self.gps_map_anchor.map_x + map_dx
+        msg.pose.pose.position.y = self.gps_map_anchor.map_y + map_dy
+        msg.pose.pose.position.z = self.gps_map_anchor.map_z + up
+        msg.pose.pose.orientation = self._quaternion_from_yaw(
+            self.gps_map_anchor.map_yaw
+        )
+        msg.pose.covariance = self._covariance_from_std(
+            fix_sample.xy_std,
+            self.gps_yaw_std,
+            z_std=self.gps_z_std,
+        )
+        return msg, fix_sample.xy_std, self.gps_yaw_std
+
+    def _gps_delta_from_anchor(self, sample: GpsSample) -> Tuple[float, float, float]:
+        if self.gps_map_anchor is None:
+            return 0.0, 0.0, 0.0
+        anchor = self.gps_map_anchor.gps
+        lat0 = math.radians(anchor.latitude)
+        d_lat = math.radians(sample.latitude - anchor.latitude)
+        d_lon = math.radians(sample.longitude - anchor.longitude)
+        east = self.EARTH_RADIUS_M * d_lon * math.cos(lat0)
+        north = self.EARTH_RADIUS_M * d_lat
+        up = sample.altitude - anchor.altitude
+        return east, north, up
+
+    def _gps_recovery_pose_msg(
+        self,
+    ) -> Optional[Tuple[PoseWithCovarianceStamped, float, float]]:
+        if not self.enable_gps_recovery:
+            return None
+        if self.enable_gps_auto_anchor:
+            anchored_pose = self._gps_auto_anchor_recovery_pose_msg()
+            if anchored_pose is not None:
+                return anchored_pose
+            if not self._gps_origin_configured():
+                return None
+        elif not self._gps_origin_configured():
+            return None
+        if self.last_gps_fix is None or self.last_gps_fix_time is None:
+            self._log_throttled(
+                "info",
+                "gps_recovery_wait_fix",
+                10.0,
+                "GPS recovery waiting for a NavSatFix.",
+            )
+            return None
+
+        now_sec = self._now_sec()
+        age = now_sec - self.last_gps_fix_time
+        if age > self.gps_fix_max_age_sec:
+            self._log_throttled(
+                "warn",
+                "gps_recovery_stale",
+                5.0,
+                f"GPS recovery hint stale for {age:.1f}s; ignoring GPS.",
+            )
+            return None
+
+        fix = self.last_gps_fix
+        if fix.status.status < self.gps_min_status:
+            self._log_throttled(
+                "warn",
+                "gps_recovery_bad_status",
+                5.0,
+                "GPS recovery hint ignored because fix status "
+                f"{fix.status.status} is below {self.gps_min_status}.",
+            )
+            return None
+        if not (math.isfinite(fix.latitude) and math.isfinite(fix.longitude)):
+            return None
+
+        xy_std = self._gps_xy_std(fix)
+        if xy_std > self.gps_max_xy_std:
+            self._log_throttled(
+                "warn",
+                "gps_recovery_bad_covariance",
+                5.0,
+                "GPS recovery hint ignored because estimated xy std "
+                f"{xy_std:.1f}m exceeds {self.gps_max_xy_std:.1f}m.",
+            )
+            return None
+
+        x, y, z = self._gps_fix_to_map_xyz(fix)
+        yaw = self.startup_pose_yaw
+        if self.last_good_pose is not None:
+            yaw = self._yaw_from_pose(self.last_good_pose.pose.pose)
+
+        msg = PoseWithCovarianceStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.map_frame
+        msg.pose.pose.position.x = x
+        msg.pose.pose.position.y = y
+        msg.pose.pose.position.z = z
+        msg.pose.pose.orientation = self._quaternion_from_yaw(yaw)
+        msg.pose.covariance = self._covariance_from_std(
+            xy_std,
+            self.gps_yaw_std,
+            z_std=self.gps_z_std,
+        )
+        return msg, xy_std, self.gps_yaw_std
+
+    def _gps_origin_configured(self) -> bool:
+        return (
+            abs(self.gps_map_origin_lat) > 1e-9
+            or abs(self.gps_map_origin_lon) > 1e-9
+        )
+
+    def _gps_xy_std(self, fix: NavSatFix) -> float:
+        cov = list(fix.position_covariance)
+        xy_var = max(cov[0] if len(cov) > 0 else 0.0, cov[4] if len(cov) > 4 else 0.0)
+        if not math.isfinite(xy_var) or xy_var <= 0.0:
+            return self.gps_max_xy_std
+        return max(self.gps_min_xy_std, math.sqrt(xy_var))
+
+    def _gps_fix_to_map_xyz(self, fix: NavSatFix) -> Tuple[float, float, float]:
+        lat0 = math.radians(self.gps_map_origin_lat)
+        d_lat = math.radians(fix.latitude - self.gps_map_origin_lat)
+        d_lon = math.radians(fix.longitude - self.gps_map_origin_lon)
+        east = self.EARTH_RADIUS_M * d_lon * math.cos(lat0)
+        north = self.EARTH_RADIUS_M * d_lat
+
+        yaw = self.gps_map_yaw_from_enu
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+        x = cos_yaw * east - sin_yaw * north
+        y = sin_yaw * east + cos_yaw * north
+        z = 0.0
+        if math.isfinite(fix.altitude):
+            z = fix.altitude - self.gps_map_origin_alt
+        return x, y, z
 
     def _sample_from_odom(self, msg: Odometry, now_sec: float) -> PoseSample:
         pose = msg.pose.pose
@@ -955,13 +1363,15 @@ class MolaAutoLocalizationSupervisor(Node):
         self,
         xy_std: float,
         yaw_std: float,
+        z_std: Optional[float] = None,
     ) -> List[float]:
         covariance = [0.0] * 36
         xy_var = xy_std * xy_std
         yaw_var = yaw_std * yaw_std
+        z_var = (z_std if z_std is not None else max(0.1, xy_std)) ** 2
         covariance[0] = xy_var
         covariance[7] = xy_var
-        covariance[14] = max(0.01, xy_var)
+        covariance[14] = z_var
         covariance[21] = math.pi * math.pi
         covariance[28] = math.pi * math.pi
         covariance[35] = yaw_var

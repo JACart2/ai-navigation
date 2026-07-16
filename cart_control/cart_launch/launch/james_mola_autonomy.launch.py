@@ -20,16 +20,52 @@ def generate_launch_description():
                 "enable_mola_auto_localization",
                 default_value="false",
                 description=(
-                    "Start the conservative LiDAR-only MOLA auto-localization "
+                    "Start the conservative LiDAR-first MOLA auto-localization "
                     "supervisor."
                 ),
             ),
+            DeclareLaunchArgument(
+                "enable_gps_recovery",
+                default_value="false",
+                description="Use GPS as a recovery hint after localization is lost.",
+            ),
+            DeclareLaunchArgument("enable_gps_auto_anchor", default_value="true"),
+            DeclareLaunchArgument("gps_fix_topic", default_value="/fix"),
+            DeclareLaunchArgument("gps_port", default_value="/dev/ttyACM0"),
+            DeclareLaunchArgument("gps_baud", default_value="4800"),
+            DeclareLaunchArgument("gps_frame", default_value="gps"),
+            DeclareLaunchArgument("gps_map_origin_lat", default_value="0.0"),
+            DeclareLaunchArgument("gps_map_origin_lon", default_value="0.0"),
+            DeclareLaunchArgument("gps_map_origin_alt", default_value="0.0"),
+            DeclareLaunchArgument("gps_map_yaw_from_enu", default_value="0.0"),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(mola_autonomy_launch),
                 launch_arguments={
                     "cart": "james",
                     "enable_mola_auto_localization": LaunchConfiguration(
                         "enable_mola_auto_localization"
+                    ),
+                    "enable_gps_recovery": LaunchConfiguration(
+                        "enable_gps_recovery"
+                    ),
+                    "enable_gps_auto_anchor": LaunchConfiguration(
+                        "enable_gps_auto_anchor"
+                    ),
+                    "gps_fix_topic": LaunchConfiguration("gps_fix_topic"),
+                    "gps_port": LaunchConfiguration("gps_port"),
+                    "gps_baud": LaunchConfiguration("gps_baud"),
+                    "gps_frame": LaunchConfiguration("gps_frame"),
+                    "gps_map_origin_lat": LaunchConfiguration(
+                        "gps_map_origin_lat"
+                    ),
+                    "gps_map_origin_lon": LaunchConfiguration(
+                        "gps_map_origin_lon"
+                    ),
+                    "gps_map_origin_alt": LaunchConfiguration(
+                        "gps_map_origin_alt"
+                    ),
+                    "gps_map_yaw_from_enu": LaunchConfiguration(
+                        "gps_map_yaw_from_enu"
                     ),
                 }.items(),
             )

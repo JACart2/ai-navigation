@@ -49,6 +49,7 @@ motor_forwarded=false
 motor_port_forwarded=false
 motor_baudrate_forwarded=false
 cart_config_path=""
+cart_config_path_forwarded=false
 map_file=""
 launch_args=()
 
@@ -148,6 +149,7 @@ while [[ $# -gt 0 ]]; do
     cart_config_path:=*)
       cart_config_path="${1#cart_config_path:=}"
       launch_args+=("$1")
+      cart_config_path_forwarded=true
       shift
       ;;
     map_file:=*)
@@ -206,6 +208,12 @@ fi
 
 if [[ -z "$cart_config_path" ]]; then
   cart_config_path="$repo_root/cart_control/cart_launch/config/cart_${cart}.yaml"
+fi
+
+# The wrapper resolves the cart configuration itself, so always forward that
+# resolved path unless the caller already supplied cart_config_path explicitly.
+if [[ "$cart_config_path_forwarded" != true ]]; then
+  launch_args=("cart_config_path:=$cart_config_path" "${launch_args[@]}")
 fi
 
 if [[ -z "$map_file" ]]; then

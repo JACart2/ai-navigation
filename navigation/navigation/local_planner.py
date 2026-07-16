@@ -227,7 +227,7 @@ class LocalPlanner(rclpy.node.Node):
         else:
             self.log("Empty path received.")
 
-        # self.anomaly_logging("New path received", AnomalyMsg.INFO)
+        self.anomaly_logging("New path received", AnomalyMsg.INFO)
 
     def create_path(self):
         """Creates a path for the cart with a set of local_points

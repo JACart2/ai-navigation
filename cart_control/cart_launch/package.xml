@@ -8,6 +8,7 @@
   <license>Apache 2.0</license> 
 
   <exec_depend>ros2launch</exec_depend>
+  <exec_depend>anomaly_detection</exec_depend>
   <exec_depend>launch_xml</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>motor_control</exec_depend>

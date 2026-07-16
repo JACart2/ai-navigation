@@ -13,6 +13,7 @@ from navigation_interface.msg import Obstacle, ObstacleArray
 import rclpy.node
 from std_msgs.msg import Header
 from zed_msgs.msg import ObjectsStamped
+from anomaly_msg.msg import AnomalyMsg
 
 # Display purposes
 from visualization_msgs.msg import Marker
@@ -49,6 +50,8 @@ class ZedObstacleConverter(rclpy.node.Node):
         print("IM HERE")
         self.obstacle_pub = self.create_publisher(ObstacleArray, "/obstacles", 10)
         self.display_pub = self.create_publisher(Marker, "/obs_visualization", 10)
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, "/ai_anomaly_logging", 10)
+        self.last_object_count = None
 
     def receiveObjects(self, msg):
         """
@@ -81,6 +84,15 @@ class ZedObstacleConverter(rclpy.node.Node):
             obstacles.obstacles.append(obs)
 
         self.obstacle_pub.publish(obstacles)
+        object_count = len(obstacles.obstacles)
+        if object_count != self.last_object_count:
+            severity = AnomalyMsg.INFO
+            message = f"ZED obstacle converter published object obstacles: count={object_count}"
+            if object_count >= 5:
+                severity = AnomalyMsg.WARNING
+                message = f"ZED obstacle converter sees dense object field: count={object_count}"
+            self.anomaly_logging(message, severity)
+            self.last_object_count = object_count
         self.get_logger().info("published the obstacles")
         # rospy.loginfo("[%s] Published %d obstacles!" % (self.name, len(obstacles.obstacles)))
         self.local_display("/zed_front_camera_link", obstacles)
@@ -115,6 +127,17 @@ class ZedObstacleConverter(rclpy.node.Node):
             marker.scale.z = 0.3
 
             self.display_pub.publish(marker)
+
+    def anomaly_logging(self, message, severity):
+        anomaly_msg = AnomalyMsg()
+        anomaly_msg.header = Header()
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "zed_object_to_obstacle"
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
+        self.anomaly_pub.publish(anomaly_msg)
 
 
 def main():

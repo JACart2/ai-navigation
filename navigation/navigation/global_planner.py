@@ -38,6 +38,7 @@ from navigation_interface.msg import (
     LocalPointsArray,
     LatLongArray,
 )
+from anomaly_msg.msg import AnomalyMsg
 
 
 class GlobalPlanner(rclpy.node.Node):
@@ -59,10 +60,22 @@ class GlobalPlanner(rclpy.node.Node):
         self.cur_speed = 0.0
 
         self.vel_polls = 0
+        self.last_reported_navigating = None
 
         self.gps_calibrated = False
 
         self.minimize_travel = True  # TODO - Consider removing or setting another way
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, "/ai_anomaly_logging", 10)
+
+
+        # GPS calibration state using landmark-based calibration
+        self.ref_lat = 0.0
+        self.ref_lon = 0.0
+        self.cx_local = 0.0
+        self.cy_local = 0.0
+        self.cx_gps = 0.0
+        self.cy_gps = 0.0
+        self.calibration_theta = 0.0
 
 
         # GPS calibration state using landmark-based calibration
@@ -116,9 +129,7 @@ class GlobalPlanner(rclpy.node.Node):
 
         self.declare_parameter(
             "graph_dir",
-            os.path.join(
-                get_package_share_directory("navigation"), "maps"
-            ),
+            "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
         self.declare_parameter("graph_file", "main_shift3.gml")
         self.declare_parameter("graph_coordinate_format", "ros")
@@ -171,23 +182,11 @@ class GlobalPlanner(rclpy.node.Node):
         )
 
         # Publish the path for local planner to begin navigating
-        self.path_pub = self.create_publisher(
-            LocalPointsArray,
-            "/global_path",
-            qos_profile=latching_qos,
-        )
+        self.path_pub = self.create_publisher(LocalPointsArray, "/global_path", 10)
 
         # GPS publishers and position update timer
-        self.gps_path_pub = self.create_publisher(
-            LatLongArray,
-            "/gps_global_path",
-            qos_profile=latching_qos,
-        )
-        self.display_pub = self.create_publisher(
-            Marker,
-            "/display_gps",
-            qos_profile=latching_qos,
-        )
+        self.gps_path_pub = self.create_publisher(LatLongArray, "/gps_global_path", 10)
+        self.display_pub = self.create_publisher(Marker, "/display_gps", 10)
         # Publishes current cart position in GPS coordinates
         self.gps_pose_pub = self.create_publisher(LatLongPoint, "/gps_send", 10)
         # Publish cart GPS position at 10 Hz while navigating
@@ -218,9 +217,17 @@ class GlobalPlanner(rclpy.node.Node):
 
             for node in self.global_graph:
                 self.global_graph.nodes[node]["active"] = True
+            self.anomaly_logging(
+                f"Loaded route graph: file={file_name}, nodes={self.global_graph.number_of_nodes()}, edges={self.global_graph.number_of_edges()}",
+                AnomalyMsg.INFO,
+            )
         except Exception as e:
             self.log_header(
                 f"Unable to launch graph file pointed to in the constants file in {file_name} because {e}"
+            )
+            self.anomaly_logging(
+                f"Unable to load route graph: file={file_name}, error={e}",
+                AnomalyMsg.ERROR,
             )
 
     def calc_nav(self, destination):
@@ -235,12 +242,20 @@ class GlobalPlanner(rclpy.node.Node):
         # Allows other functions to not make critical decisions or modify data while calculating navigation
         self.calculating_nav = True
         self.total_distance = 0
+        self.anomaly_logging(
+            f"Navigation request received: destination=({destination.x:.2f}, {destination.y:.2f})",
+            AnomalyMsg.INFO,
+        )
 
         # Make a destination request when we don't know where the cart is at yet
         if self.current_pos is None:
             self.current_pos = PoseStamped()
             self.current_pos.pose.position.x = 0.0
             self.current_pos.pose.position.y = 0.0
+            self.anomaly_logging(
+                "Planning before localization pose is available; using origin as temporary cart position",
+                AnomalyMsg.WARNING,
+            )
 
         current_cart_pos = self.current_pos.pose.position
 
@@ -275,10 +290,19 @@ class GlobalPlanner(rclpy.node.Node):
                 self.log_header(
                     "Make sure you are within reliable distance of the road network supported by the graph(~10 meters)"
                 )
+                self.calculating_nav = False
+                self.anomaly_logging(
+                    "Unable to match cart pose to a drivable graph lane; route request aborted",
+                    AnomalyMsg.ERROR,
+                )
                 return None
             else:
                 self.log_header(
                     "A suitable node was found, please check RViz to make sure the pathing is safe"
+                )
+                self.anomaly_logging(
+                    f"Recovered cart graph lane using fallback search: node={self.current_cart_node}",
+                    AnomalyMsg.WARNING,
                 )
 
         # Attempt to find a route to the destination
@@ -309,13 +333,23 @@ class GlobalPlanner(rclpy.node.Node):
             # Allows for class changes again
             self.calculating_nav = False
 
-            # Convert the path to GPS coordinates and publish for networking
-            if self.gps_calibrated:
+            # Publish the geographic route directly from the original GML
+            # latitude/longitude attributes. The local ROS path remains derived
+            # from node["pos"] for RViz and the local planner.
+            if not self.output_gml_path_gps(nodelist) and self.gps_calibrated:
+                self.get_logger().warning(
+                    "Selected graph path does not contain lat/lon attributes; "
+                    "falling back to local-to-GPS conversion"
+                )
                 self.output_path_gps(points_arr)
 
             self.path_pub.publish(points_arr)
             self.get_logger().info(
                 f"Publishing Path: {str(self.current_cart_node)} to {str(destination_point)}"
+            )
+            self.anomaly_logging(
+                f"Published route: start_node={self.current_cart_node}, destination_node={destination_point}, waypoints={len(points_arr.localpoints)}",
+                AnomalyMsg.INFO,
             )
 
         except nx.NetworkXNoPath:
@@ -332,6 +366,11 @@ class GlobalPlanner(rclpy.node.Node):
                 self.log_header("NetworkX can't find a connection")
             else:
                 self.log_header("NetworkX can find a connection")
+            self.calculating_nav = False
+            self.anomaly_logging(
+                f"No route found: start_node={self.current_cart_node}, destination_node={destination_point}",
+                AnomalyMsg.ERROR,
+            )
 
     def determine_lane(self, cart_node):
         """A function for determining which lane the cart is in, or should be in. (Note lanes being directions in the directed graph)
@@ -592,6 +631,14 @@ class GlobalPlanner(rclpy.node.Node):
             msg (VehicleState): A VehicleState message containing navigation status
         """
         self.navigating = msg.is_navigating
+        if msg.reached_destination:
+            self.anomaly_logging("Vehicle state reports destination reached", AnomalyMsg.INFO)
+        elif msg.is_navigating and self.last_reported_navigating is not True:
+            self.anomaly_logging(
+                "Vehicle state changed to navigating",
+                AnomalyMsg.INFO,
+            )
+        self.last_reported_navigating = msg.is_navigating
 
     def vel_callback(self, msg):
         """Keeps the global planner updated on current speed of the cart
@@ -607,6 +654,56 @@ class GlobalPlanner(rclpy.node.Node):
             self.cur_speed = self.cur_speed / self.vel_polls
             self.vel_polls = 0
             self.cur_speed = 0
+
+    def output_gml_path_gps(self, nodelist):
+        """Publish a selected graph route using its original GML GPS coordinates.
+
+        The graph's ``lat`` and ``lon`` attributes remain the authoritative
+        geographic representation. The derived ``pos`` coordinates are used
+        separately by ROS, RViz, and the local planner.
+
+        Args:
+            nodelist: Ordered NetworkX node identifiers selected for the route.
+
+        Returns:
+            bool: True when the direct GML route was published, otherwise False.
+        """
+        gps_path = LatLongArray()
+
+        for node in nodelist:
+            node_data = self.global_graph.nodes[node]
+
+            if "lat" not in node_data or "lon" not in node_data:
+                self.get_logger().warning(
+                    f"Graph node '{node}' is missing lat/lon attributes"
+                )
+                return False
+
+            gps_point = LatLongPoint()
+            gps_point.latitude = float(node_data["lat"])
+            gps_point.longitude = float(node_data["lon"])
+            gps_path.gpspoints.append(gps_point)
+
+        self.gps_path_pub.publish(gps_path)
+
+        self.get_logger().info(
+            f"Published /gps_global_path directly from "
+            f"{len(gps_path.gpspoints)} GML nodes"
+        )
+
+        if self.destination_node is not None:
+            destination_data = self.global_graph.nodes[self.destination_node]
+
+            if "lat" in destination_data and "lon" in destination_data:
+                dest_x, dest_y = destination_data["pos"]
+                self.get_logger().info(
+                    f"Destination node {self.destination_node}: "
+                    f"ROS coordinates ({dest_x}, {dest_y}), "
+                    f"GML GPS coordinates "
+                    f"({destination_data['lat']}, {destination_data['lon']})"
+                )
+
+        return True
 
     def output_path_gps(self, path, single=False):
         """Function for converting the list of points along a path to latitude and longitude
@@ -661,7 +758,7 @@ class GlobalPlanner(rclpy.node.Node):
         rather than GPS which can be relatively inaccurate.
 
         """
-        if self.navigating and self.gps_calibrated and self.current_pos is not None:
+        if self.gps_calibrated and self.current_pos is not None:
             package_point = LocalPointsArray()
             cart_pos = self.current_pos.pose
             package_point.localpoints.append(cart_pos)
@@ -721,6 +818,21 @@ class GlobalPlanner(rclpy.node.Node):
         self.get_logger().info("=" * 50)
         self.get_logger().info(f"{msg}")
         self.get_logger().info("=" * 50)
+
+    def anomaly_logging(
+        self,
+        message: str,
+        severity: int,
+    ):
+        anomaly_msg = AnomalyMsg()
+        anomaly_msg.header = Header()
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "global_planner"
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
+        self.anomaly_pub.publish(anomaly_msg)
 
 
 def main():

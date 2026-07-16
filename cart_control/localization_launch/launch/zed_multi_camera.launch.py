@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
@@ -43,6 +43,16 @@ def parse_array_param(param):
     return arr
 
 def launch_setup(context, *args, **kwargs):
+    front_flip = LaunchConfiguration("zed_front_flip").perform(context)
+    rear_flip = LaunchConfiguration("zed_rear_flip").perform(context)
+
+    front_camera_parameters = {
+        "general.camera_flip": front_flip.lower() == "true",
+    }
+
+    rear_camera_parameters = {
+        "general.camera_flip": rear_flip.lower() == "true",
+    }
 
     # List of actions to be launched
     actions = []
@@ -138,6 +148,13 @@ def launch_setup(context, *args, **kwargs):
 
         # A different node name is required by the Diagnostic Updated
         node_name = 'zed_node_' + str(cam_idx)
+        
+        camera_parameters = (
+            front_camera_parameters
+            if cam_idx == 0
+            else rear_camera_parameters
+        )   
+        camera_flip = camera_parameters["general.camera_flip"]
 
         # Add the node
         # ZED Wrapper launch file
@@ -159,6 +176,7 @@ def launch_setup(context, *args, **kwargs):
                 'publish_imu_tf': 'true',
                 'namespace': namespace_val,
                 'node_name': node_name,
+                "camera_flip": str(camera_flip).lower(),
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.
                 'ros_params_override_path': ''
             }.items()
@@ -224,6 +242,11 @@ def generate_launch_description():
                 'disable_tf',
                 default_value='False',
                 description='If `True` disable TF broadcasting for all the cameras in order to fuse visual odometry information externally.'),
-            OpaqueFunction(function=launch_setup)
+            DeclareLaunchArgument(
+                "camera_flip",
+                default_value="false",
+                description="Flip the camera image for upside-down mounting."),
+            OpaqueFunction(function=launch_setup),
+            
         ]
     )

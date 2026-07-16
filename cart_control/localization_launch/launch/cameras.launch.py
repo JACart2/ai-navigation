@@ -53,6 +53,17 @@ def generate_launch_description():
             cam_models = "[zed2i, zed2i]"
             cam_serials = f"[{zed_front_serial}, {zed_rear_serial}]"
 
+        # Set the flip parameters for the ZED cameras based on the configuration
+        zed_front_flip = _as_bool(
+            cfg.get("zed_front_flip"),
+            default=False,
+        )
+
+        zed_rear_flip = _as_bool(
+            cfg.get("zed_rear_flip"),
+            default=False,
+        )
+
         # Include the zed_multi_camera launch file
         return [
             IncludeLaunchDescription(
@@ -62,6 +73,8 @@ def generate_launch_description():
                     "cam_names": cam_names,  # Names of the cameras
                     "cam_models": cam_models,  # Models of the cameras
                     "cam_serials": cam_serials,  # Serial numbers of the cameras
+                    "zed_front_flip": str(zed_front_flip).lower(), # Flip parameter for the front camera
+                    "zed_rear_flip": str(zed_rear_flip).lower(), # Flip parameter for the rear camera
                     # Kept for compatibility; zed_multi_camera disables dynamic ZED TF.
                     "disable_tf": "True",  # Disable TF broadcasting (no odom)
                 }.items(),

@@ -13,7 +13,7 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -45,6 +45,17 @@ def generate_launch_description():
     launch_rviz = LaunchConfiguration("launch_rviz")
     enable_motor = LaunchConfiguration("enable_motor")
     enable_aad = LaunchConfiguration("enable_aad")
+    enable_mola_auto_localization = LaunchConfiguration(
+        "enable_mola_auto_localization"
+    )
+
+    mola_auto_localization_params = PathJoinSubstitution(
+        [
+            FindPackageShare("localization_launch"),
+            "param",
+            "mola_auto_localization_supervisor.yaml",
+        ]
+    )
 
     velodyne_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -59,6 +70,19 @@ def generate_launch_description():
             "cart_config_path": LaunchConfiguration("cart_config_path"),
         }.items(),
         condition=IfCondition(LaunchConfiguration("start_velodyne")),
+    )
+    
+    cameras_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                FindPackageShare("localization_launch"),
+                "/launch/cameras.launch.py",
+            ]
+        ),
+        launch_arguments={
+            "cart_config_path": LaunchConfiguration("cart_config_path"),
+        }.items(),
+        condition=IfCondition(LaunchConfiguration("start_cameras")),
     )
 
     mola_localization_launch = IncludeLaunchDescription(
@@ -94,6 +118,45 @@ def generate_launch_description():
         output="screen",
     )
 
+    mola_auto_localization_supervisor = Node(
+        package="localization_launch",
+        executable="mola_auto_localization_supervisor",
+        name="mola_auto_localization_supervisor",
+        output="screen",
+        parameters=[
+            mola_auto_localization_params,
+            {
+                "cloud_topic": LaunchConfiguration("lidar_topic"),
+                "mola_pose_topic": "/lidar_odometry/pose",
+            },
+        ],
+        condition=IfCondition(enable_mola_auto_localization),
+    )
+
+    anomaly_detection_node = Node(
+        package="anomaly_detection",
+        executable="anomaly_detection_node",
+        name="anomaly_detection",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("launch_aad_node")),
+    )
+
+    aad_log_node = Node(
+        package="navigation",
+        executable="collision_avoidance_aad_log",
+        name="collision_avoidance_aad_log",
+        output="screen",
+        condition=IfCondition(enable_aad),
+    )
+
+    swri_console_node = Node(
+        package="swri_console",
+        executable="swri_console",
+        name="swri_console",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("launch_swri_console")),
+    )
+
     navigation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [FindPackageShare("navigation"), "/launch/navigation.launch.py"]
@@ -110,7 +173,7 @@ def generate_launch_description():
             "calibration_config_file": LaunchConfiguration(
                 "calibration_config_file"
             ),
-            "enable_aad": enable_aad,
+            "enable_aad": "false",
         }.items(),
     )
 
@@ -162,7 +225,7 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "port": LaunchConfiguration("motor_port"),
+                "arduino_port": LaunchConfiguration("motor_port"),
                 "baudrate": ParameterValue(
                     LaunchConfiguration("motor_baudrate"),
                     value_type=int,
@@ -236,6 +299,11 @@ def generate_launch_description():
                 description="Open the JACart MOLA RViz preset window.",
             ),
             DeclareLaunchArgument(
+                "launch_swri_console",
+                default_value="true",
+                description="Open the SWRI Console ROS topic/status window.",
+            ),
+            DeclareLaunchArgument(
                 "start_velodyne",
                 default_value="true",
                 description=(
@@ -271,8 +339,21 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "enable_aad",
-                default_value="false",
+                default_value="true",
                 description="Enable anomaly logging nodes.",
+            ),
+            DeclareLaunchArgument(
+                "launch_aad_node",
+                default_value="true",
+                description="Launch the anomaly_detection LLM/alert node.",
+            ),
+            DeclareLaunchArgument(
+                "enable_mola_auto_localization",
+                default_value="false",
+                description=(
+                    "Start the conservative LiDAR-only MOLA auto-localization "
+                    "supervisor."
+                ),
             ),
             DeclareLaunchArgument(
                 "graph_dir",
@@ -340,6 +421,11 @@ def generate_launch_description():
                 description="Shared/default LiDAR yaw when cart YAML has no lidar_tf.",
             ),
             DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
                 "lidar_pitch",
                 default_value="0.0",
                 description="Shared/default LiDAR pitch when cart YAML has no lidar_tf.",
@@ -357,7 +443,12 @@ def generate_launch_description():
             velodyne_launch,
             mola_localization_launch,
             pcl_pose_relay,
+            mola_auto_localization_supervisor,
+            anomaly_detection_node,
+            aad_log_node,
+            swri_console_node,
             rviz_node,
+            cameras_launch,
             rosbridge_cleanup,
             rosbridge_launch,
             wait_for_pcl_pose,

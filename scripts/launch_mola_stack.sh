@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+
 open_ui_page() {
     local url="http://localhost:5173/"
     if command -v xdg-open >/dev/null 2>&1; then
@@ -13,15 +16,20 @@ open_ui_page() {
 
 usage() {
   cat <<'EOF'
-Usage: launch_mola_stack.sh [--cart NAME] [--no-motor] [--build-image] [--no-cleanup-old-stack] [--no-docker] [--no-ui] [ros2 launch args...]
+Usage: launch_mola_stack.sh [--cart NAME] [--no-motor] [--build-image] [--no-cleanup-old-stack] [--docker] [--no-docker] [--no-ui] [ros2 launch args...]
 
 Examples:
+  scripts/launch_mola_stack.sh --cart james
   scripts/launch_mola_stack.sh --cart madison
   scripts/launch_mola_stack.sh cart:=madison
   scripts/launch_mola_stack.sh --cart madison --no-motor
+  scripts/launch_mola_stack.sh --cart james enable_mola_auto_localization:=true
 
 Motor control is enabled by default. Use --no-motor or enable_motor:=false for
 safe no-motor testing.
+
+The script uses Docker Compose when run on the host. When run from inside the
+backend container, it launches ROS directly.
 
 Expected UI URLs:
   http://localhost:5173/
@@ -32,12 +40,54 @@ EOF
 cart="madison"
 cleanup_old_stack=true
 use_docker=true
+docker_mode_explicit=false
 start_ui=true
 motor_enabled=true
 build_image=false
 cart_forwarded=false
 motor_forwarded=false
+motor_port_forwarded=false
+motor_baudrate_forwarded=false
+cart_config_path=""
+map_file=""
 launch_args=()
+
+cart_config_value() {
+  local config_path="$1"
+  local key="$2"
+
+  python3 - "$config_path" "$key" <<'PY'
+import sys
+
+path, wanted_key = sys.argv[1:3]
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+try:
+    if yaml is not None:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        value = data.get(wanted_key)
+        if value is not None:
+            print(value)
+        sys.exit(0)
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or ":" not in stripped:
+                continue
+            key, value = stripped.split(":", 1)
+            if key.strip() == wanted_key:
+                print(value.strip().strip("'\""))
+                break
+except Exception:
+    pass
+PY
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,6 +117,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-docker)
       use_docker=false
+      docker_mode_explicit=true
+      shift
+      ;;
+    --docker)
+      use_docker=true
+      docker_mode_explicit=true
       shift
       ;;
     --no-ui)
@@ -89,6 +145,16 @@ while [[ $# -gt 0 ]]; do
       cart_forwarded=true
       shift
       ;;
+    cart_config_path:=*)
+      cart_config_path="${1#cart_config_path:=}"
+      launch_args+=("$1")
+      shift
+      ;;
+    map_file:=*)
+      map_file="${1#map_file:=}"
+      launch_args+=("$1")
+      shift
+      ;;
     enable_motor:=true)
       motor_enabled=true
       launch_args+=("$1")
@@ -101,6 +167,16 @@ while [[ $# -gt 0 ]]; do
       motor_forwarded=true
       shift
       ;;
+    motor_port:=*)
+      launch_args+=("$1")
+      motor_port_forwarded=true
+      shift
+      ;;
+    motor_baudrate:=*)
+      launch_args+=("$1")
+      motor_baudrate_forwarded=true
+      shift
+      ;;
     *)
       launch_args+=("$1")
       shift
@@ -110,6 +186,15 @@ done
 
 cart="${cart,,}"
 
+running_in_container=false
+if [[ -f /.dockerenv ]] || grep -qaE '/docker/|/kubepods/|/containerd/' /proc/1/cgroup 2>/dev/null; then
+  running_in_container=true
+fi
+
+if [[ "$running_in_container" == true && "$docker_mode_explicit" != true ]]; then
+  use_docker=false
+fi
+
 if [[ "$cart" != "james" && "$cart" != "madison" ]]; then
   echo "Invalid cart '$cart'. Expected 'james' or 'madison'." >&2
   exit 2
@@ -117,6 +202,47 @@ fi
 
 if [[ "$cart_forwarded" != true ]]; then
   launch_args=("cart:=$cart" "${launch_args[@]}")
+fi
+
+if [[ -z "$cart_config_path" ]]; then
+  cart_config_path="$repo_root/cart_control/cart_launch/config/cart_${cart}.yaml"
+fi
+
+if [[ -z "$map_file" ]]; then
+  map_file="/root/dev_ws/maps/with_gps2.mm"
+fi
+
+if [[ ! -f "$map_file" ]]; then
+  cat >&2 <<EOF
+MOLA map file not found: $map_file
+
+Provide a valid map with:
+  scripts/launch_mola_stack.sh --cart $cart map_file:=/path/to/map.mm
+
+Or place the expected map at:
+  /root/dev_ws/maps/with_gps2.mm
+EOF
+  exit 1
+fi
+
+if [[ -f "$cart_config_path" ]]; then
+  if [[ "$motor_port_forwarded" != true ]]; then
+    config_motor_port="$(
+      cart_config_value "$cart_config_path" motor_port
+    )"
+    if [[ -n "$config_motor_port" ]]; then
+      launch_args=("motor_port:=$config_motor_port" "${launch_args[@]}")
+    fi
+  fi
+
+  if [[ "$motor_baudrate_forwarded" != true ]]; then
+    config_motor_baudrate="$(
+      cart_config_value "$cart_config_path" motor_baudrate
+    )"
+    if [[ -n "$config_motor_baudrate" ]]; then
+      launch_args=("motor_baudrate:=$config_motor_baudrate" "${launch_args[@]}")
+    fi
+  fi
 fi
 
 if [[ "$motor_enabled" == true ]]; then
@@ -201,17 +327,21 @@ cleanup_old_autolaunch_children() {
         if (pid == 1 || pid == shell_pid || ppid == shell_pid) next
 
         if (cmd ~ /ros2 launch cart_launch mola_autonomy\.launch\.py/) print pid
+        else if (cmd ~ /ros2 launch rosbridge_server/) print pid
+        else if (cmd ~ /mola-cli/) print pid
         else if (cmd ~ /mola_bridge_ros2/) print pid
-        else if (cmd ~ /rosbridge_websocket/) print pid
+        else if (cmd ~ /mola_odom_to_tf/) print pid
+        else if (cmd ~ /rosbridge_websocket|rosapi_node/) print pid
         else if (cmd ~ /velodyne_driver_node|velodyne_transform_node/) print pid
         else if (cmd ~ /(^|\/)localization\.rviz/) print pid
         else if (cmd ~ /rviz2/) print pid
         else if (cmd ~ /swri_console/) print pid
-        else if (cmd ~ /base_link_to_velodyne_tf|lidar_tf/) print pid
+        else if (cmd ~ /base_link_to_velodyne_tf|lidar_tf|static_transform_publisher/) print pid
         else if (cmd ~ /pcl_pose_relay/) print pid
+        else if (cmd ~ /mola_auto_localization_supervisor/) print pid
         else if (cmd ~ /robot_state_publisher/) print pid
         else if (cmd ~ /global_planner|local_planner|display_global_path|visualize_graph|speed_node/) print pid
-        else if (cmd ~ /zed_object_to_obstacle|collision_detector|collision_avoidance_aad_log/) print pid
+        else if (cmd ~ /zed_object_to_obstacle|lidar_object_to_obstacle|collision_detector|collision_avoidance_aad_log/) print pid
         else if (cmd ~ /dummy_pointcloud_publisher|pointcloud_to_laserscan_node/) print pid
         else if (cmd ~ /motor_endpoint/) print pid
       }
@@ -245,11 +375,13 @@ EOS
 
 ros_setup_command='
 set -e
+set +u
 source /opt/ros/jazzy/setup.bash
 source /opt/ros_ws/install/setup.bash
 if [ -f /root/dev_ws/install/setup.bash ]; then
   source /root/dev_ws/install/setup.bash
 fi
+set -u
 '
 
 if [[ "$cleanup_old_stack" == true ]]; then
@@ -258,7 +390,44 @@ else
   cleanup_invocation='echo "Skipping old-stack cleanup."'
 fi
 
-launch_command='exec ros2 launch cart_launch mola_autonomy.launch.py "$@"'
+read -r -d '' launch_command <<'EOS' || true
+run_mola_launch_with_cleanup() {
+  local launch_pid status
+  launch_pid=""
+
+  cleanup_after_launch() {
+    status=$?
+    trap - EXIT INT TERM
+
+    echo "Cleaning up ROS stack opened by launch_mola_stack.sh..."
+
+    if [[ -n "${launch_pid:-}" ]] && kill -0 "$launch_pid" 2>/dev/null; then
+      kill -INT "$launch_pid" 2>/dev/null || true
+      sleep 2
+      if kill -0 "$launch_pid" 2>/dev/null; then
+        kill -TERM "$launch_pid" 2>/dev/null || true
+        sleep 2
+      fi
+      if kill -0 "$launch_pid" 2>/dev/null; then
+        kill -KILL "$launch_pid" 2>/dev/null || true
+      fi
+    fi
+
+    cleanup_old_autolaunch_children || true
+    exit "$status"
+  }
+
+  trap cleanup_after_launch EXIT INT TERM
+
+  ros2 launch cart_launch mola_autonomy.launch.py "$@" &
+  launch_pid=$!
+  wait "$launch_pid"
+  status=$?
+  return "$status"
+}
+
+run_mola_launch_with_cleanup "$@"
+EOS
 
 start_host_ui
 
@@ -274,7 +443,39 @@ if [[ "$use_docker" == true ]]; then
     cleanup_container_script() {
       rm -f "$container_script"
     }
-    trap 'cleanup_ui; cleanup_container_script' EXIT
+
+    container_stack_cleanup_ran=false
+    cleanup_container_stack() {
+      if [[ "$container_stack_cleanup_ran" == true ]]; then
+        return
+      fi
+      container_stack_cleanup_ran=true
+
+      if [[ "$cleanup_old_stack" != true ]]; then
+        return
+      fi
+
+      echo "Host cleanup: stopping ROS/MOLA stack inside backend container..."
+      (
+        cd "$docker_dir"
+        {
+          printf '%s\n' "$ros_setup_command"
+          printf '%s\n' "$cleanup_command"
+          printf '%s\n' 'cleanup_old_autolaunch_children'
+        } | docker compose exec -T backend bash -s
+      ) || true
+    }
+
+    cleanup_everything_on_exit() {
+      local status=$?
+      trap - EXIT INT TERM
+      cleanup_container_stack
+      cleanup_ui
+      cleanup_container_script
+      exit "$status"
+    }
+
+    trap cleanup_everything_on_exit EXIT INT TERM
     {
       printf '%s\n' "$ros_setup_command"
       printf '%s\n' "$cleanup_command"
@@ -304,6 +505,7 @@ if [[ "$use_docker" == true ]]; then
   exit 1
 fi
 
+set +u
 source /opt/ros/jazzy/setup.bash
 if [[ -f /opt/ros_ws/install/setup.bash ]]; then
   source /opt/ros_ws/install/setup.bash
@@ -313,6 +515,7 @@ if [[ -f /root/dev_ws/install/setup.bash ]]; then
 elif [[ -f "$HOME/dev_ws/install/setup.bash" ]]; then
   source "$HOME/dev_ws/install/setup.bash"
 fi
+set -u
 
 if [[ "$cleanup_old_stack" == true ]]; then
   eval "$cleanup_command"
@@ -321,4 +524,5 @@ else
   echo "Skipping old-stack cleanup."
 fi
 
-exec ros2 launch cart_launch mola_autonomy.launch.py "${launch_args[@]}"
+set -- "${launch_args[@]}"
+eval "$launch_command"

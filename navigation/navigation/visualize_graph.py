@@ -25,9 +25,7 @@ class GraphVisual(rclpy.node.Node):
 
         self.declare_parameter(
             "graph_dir",
-            os.path.join(
-                get_package_share_directory("navigation"), "maps"
-            ),
+            "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
         self.declare_parameter("graph_file", "main_shift3.gml")
         self.declare_parameter("graph_coordinate_format", "ros")

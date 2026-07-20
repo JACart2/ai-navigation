@@ -24,12 +24,22 @@ def generate_launch_description():
                     "supervisor."
                 ),
             ),
+            DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Subscribe to raw cameras for bounded AAD stop-event context."
+                ),
+            ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(mola_autonomy_launch),
                 launch_arguments={
                     "cart": "james",
                     "enable_mola_auto_localization": LaunchConfiguration(
                         "enable_mola_auto_localization"
+                    ),
+                    "enable_aad_camera_capture": LaunchConfiguration(
+                        "enable_aad_camera_capture"
                     ),
                 }.items(),
             )

@@ -3,6 +3,7 @@
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -62,6 +63,13 @@ def generate_launch_description():
                 "enable_aad",
                 default_value="true",
                 description="Enable collision avoidance anomaly logging node"
+            ),
+            DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Subscribe to raw cameras for bounded AAD stop-event context"
+                ),
             ),
             Node(
                 package="navigation",
@@ -123,6 +131,14 @@ def generate_launch_description():
                 executable="collision_avoidance_aad_log",
                 name="collision_avoidance_aad_log",
                 output="screen",
+                parameters=[
+                    {
+                        "enable_camera_capture": ParameterValue(
+                            LaunchConfiguration("enable_aad_camera_capture"),
+                            value_type=bool,
+                        )
+                    }
+                ],
                 condition=IfCondition(LaunchConfiguration("enable_aad")),
             ),
         ]

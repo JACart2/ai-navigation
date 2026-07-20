@@ -49,6 +49,9 @@ def generate_launch_description():
         "motor_port": LaunchConfiguration("motor_port"),
         "motor_baudrate": LaunchConfiguration("motor_baudrate"),
         "enable_aad": LaunchConfiguration("enable_aad"),
+        "enable_aad_camera_capture": LaunchConfiguration(
+            "enable_aad_camera_capture"
+        ),
         "graph_dir": LaunchConfiguration("graph_dir"),
         "graph_file": LaunchConfiguration("graph_file"),
         "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
@@ -131,6 +134,13 @@ def generate_launch_description():
                 "enable_aad",
                 default_value="false",
                 description="Enable anomaly logging nodes.",
+            ),
+            DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Subscribe to raw cameras for bounded AAD stop-event context."
+                ),
             ),
             DeclareLaunchArgument(
                 "graph_dir",

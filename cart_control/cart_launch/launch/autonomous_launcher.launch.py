@@ -40,6 +40,13 @@ def generate_launch_description():
                 description="Enable anomaly logging.",
             ),
             DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Subscribe to raw cameras for bounded AAD stop-event context."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "launch_aad_node",
                 default_value="false",
                 description=(
@@ -53,6 +60,9 @@ def generate_launch_description():
                     "cart": LaunchConfiguration("cart"),
                     "cart_config_path": LaunchConfiguration("cart_config_path"),
                     "enable_aad": LaunchConfiguration("enable_aad"),
+                    "enable_aad_camera_capture": LaunchConfiguration(
+                        "enable_aad_camera_capture"
+                    ),
                     "launch_aad_node": LaunchConfiguration("launch_aad_node"),
                 }.items(),
             ),

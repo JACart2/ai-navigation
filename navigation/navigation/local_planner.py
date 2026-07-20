@@ -194,10 +194,22 @@ class LocalPlanner(rclpy.node.Node):
         self.cur_pose = msg.pose.pose
 
     def stop_cb(self, msg):
-        self.stop_requests[str(msg.sender_id.data).lower()] = [msg.stop, msg.distance]
+        sender = str(msg.sender_id.data).strip().lower() or "unknown"
+        self.stop_requests[sender] = [msg.stop, msg.distance]
         self.log(
-            f"{str(msg.sender_id.data).lower()} requested stop: {str(msg.stop)} with distance {str(msg.distance)}"
+            f"{sender} requested stop: {str(msg.stop)} with distance {str(msg.distance)}"
         )
+        if msg.stop:
+            self.anomaly_logging(
+                f"Collision avoidance stop active from {sender}: "
+                f"distance={msg.distance:.2f}m",
+                AnomalyMsg.ERROR,
+            )
+        else:
+            self.anomaly_logging(
+                f"Collision avoidance stop cleared by {sender}",
+                AnomalyMsg.INFO,
+            )
 
     def tar_speed_cb(self, msg):
         self.tar_speed = msg.data / self.SECONDS

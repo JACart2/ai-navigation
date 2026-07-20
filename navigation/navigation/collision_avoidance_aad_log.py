@@ -153,15 +153,17 @@ class CollisionAvoidanceAADLog(Node):
             pass
 
     def stop_callback(self, stop_msg: Stop):
+        sender = str(stop_msg.sender_id.data).strip()
+
         if stop_msg.stop:
             self.anomaly_logging(
-                f"Stop signal received from {stop_msg.sender_id.data}; distance={stop_msg.distance:.2f}",
-                AnomalyMsg.WARNING,
+                f"Stop signal received from {sender}; distance={stop_msg.distance:.2f}",
+                AnomalyMsg.ERROR,
                 header=stop_msg.header,
             )
         else:
             self.anomaly_logging(
-                f"Stop signal cleared by {stop_msg.sender_id.data}",
+                f"Stop signal cleared by {sender}",
                 AnomalyMsg.INFO,
                 header=stop_msg.header,
             )

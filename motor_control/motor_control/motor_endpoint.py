@@ -177,8 +177,9 @@ class MotorEndpoint(rclpy.node.Node):
             self.obstacle_distance = abs(self.vel_planned)
             self.vel_planned = 0
             self.log_aad(
-                AnomalyMsg.WARNING,
-                f"Obstacle braking command received: distance={self.obstacle_distance:.2f}m",
+                AnomalyMsg.ERROR,
+                f"Collision avoidance braking active: "
+                f"distance={self.obstacle_distance:.2f}m",
             )
         else:
             # reset obstacle distance and brake time

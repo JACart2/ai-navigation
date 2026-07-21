@@ -42,6 +42,7 @@ import tf_transformations as tf
 from navigation_interface.msg import ObstacleArray, Obstacle, Stop
 from motor_control_interface.msg import VelAngle
 from anomaly_msg.msg import AnomalyMsg
+from navigation.obstacle_log_context import format_obstacle_context
 
 
 ARC_DISPLAY_LENGTH_M = 5.0
@@ -550,11 +551,21 @@ class CollisionDetector(rclpy.node.Node):
         self.cur_obstacles = msg.obstacles
         obstacle_count = len(msg.obstacles)
         if obstacle_count != self.last_obstacle_count:
+            spatial_context = format_obstacle_context(
+                msg.obstacles,
+                msg.header.frame_id,
+            )
             severity = AnomalyMsg.INFO
-            message = f"Obstacle stream update: count={obstacle_count}"
+            message = (
+                f"Obstacle stream update: count={obstacle_count}, "
+                f"{spatial_context}"
+            )
             if obstacle_count >= 5:
                 severity = AnomalyMsg.WARNING
-                message = f"Obstacle stream is busy: count={obstacle_count}"
+                message = (
+                    f"Obstacle stream is busy: count={obstacle_count}, "
+                    f"{spatial_context}"
+                )
             self.anomaly_logging(
                 message,
                 severity,

@@ -31,6 +31,7 @@ from visualization_msgs.msg import Marker
 from tf2_ros import Buffer
 from std_msgs.msg import Header
 from anomaly_msg.msg import AnomalyMsg
+from navigation.obstacle_log_context import format_obstacle_context
 
 class Point(object):
 
@@ -190,11 +191,21 @@ class LidarObjectToObstacle(rclpy.node.Node):
         self.obstacle_pub.publish (self.obstacles)
         obstacle_count = len(self.obstacles.obstacles)
         if obstacle_count != self.last_obstacle_count:
+            spatial_context = format_obstacle_context(
+                self.obstacles.obstacles,
+                self.obstacles.header.frame_id,
+            )
             severity = AnomalyMsg.INFO
-            message = f"LiDAR obstacle converter published obstacles: count={obstacle_count}"
+            message = (
+                f"LiDAR obstacle converter published obstacles: "
+                f"count={obstacle_count}, {spatial_context}"
+            )
             if obstacle_count >= 5:
                 severity = AnomalyMsg.WARNING
-                message = f"LiDAR obstacle converter sees dense obstacle field: count={obstacle_count}"
+                message = (
+                    f"LiDAR obstacle converter sees dense obstacle field: "
+                    f"count={obstacle_count}, {spatial_context}"
+                )
             self.anomaly_logging(message, severity)
             self.last_obstacle_count = obstacle_count
 

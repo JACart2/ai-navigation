@@ -334,7 +334,7 @@ cleanup_old_autolaunch_children() {
 
         if (pid == 1 || pid == shell_pid || ppid == shell_pid) next
 
-        if (cmd ~ /ros2 launch cart_launch mola_autonomy\.launch\.py/) print pid
+        if (cmd ~ /ros2 launch cart_launch (autonomous_launcher|mola_autonomy)\.launch\.py/) print pid
         else if (cmd ~ /ros2 launch rosbridge_server/) print pid
         else if (cmd ~ /mola-cli/) print pid
         else if (cmd ~ /mola_bridge_ros2/) print pid
@@ -427,7 +427,7 @@ run_mola_launch_with_cleanup() {
 
   trap cleanup_after_launch EXIT INT TERM
 
-  ros2 launch cart_launch mola_autonomy.launch.py "$@" &
+  ros2 launch cart_launch autonomous_launcher.launch.py "$@" &
   launch_pid=$!
   wait "$launch_pid"
   status=$?

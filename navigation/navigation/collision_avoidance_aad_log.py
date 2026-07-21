@@ -26,6 +26,15 @@ class CollisionAvoidanceAADLog(Node):
         self.enable_camera_capture = bool(
             self.declare_parameter("enable_camera_capture", True).value
         )
+        self.camera_publish_period_seconds = max(
+            0.2,
+            float(
+                self.declare_parameter(
+                    "camera_publish_period_seconds",
+                    1.0,
+                ).value
+            ),
+        )
         self.MOVING_LOG_PERIOD = 5
         self.MOVING_SPEED_THRESHOLD_MPS = 0.1
         self.LOCALIZATION_HEALTH_LOG_PERIOD = 5
@@ -120,9 +129,16 @@ class CollisionAvoidanceAADLog(Node):
         self._camera_lock = threading.Lock()
         self._latest_camera_frames = {}
         self._last_stop_state = False
+        self.camera_publish_timer = None
+        if self.enable_camera_capture:
+            self.camera_publish_timer = self.create_timer(
+                self.camera_publish_period_seconds,
+                self._publish_periodic_camera_snapshot,
+            )
         self.get_logger().info(
             "AAD camera capture is "
-            f"{'enabled' if self.enable_camera_capture else 'disabled'}."
+            f"{'enabled' if self.enable_camera_capture else 'disabled'}; "
+            f"publish_period={self.camera_publish_period_seconds:.2f}s."
         )
 
     # --- Callbacks ---
@@ -135,6 +151,14 @@ class CollisionAvoidanceAADLog(Node):
 
     def _publish_stop_camera_snapshot(self):
         """Publish at most one fresh frame per camera for a new stop event."""
+        CollisionAvoidanceAADLog._publish_camera_snapshot(self, "stop event")
+
+    def _publish_periodic_camera_snapshot(self):
+        """Refresh AAD's bounded pre-event camera history."""
+        CollisionAvoidanceAADLog._publish_camera_snapshot(self, "periodic context")
+
+    def _publish_camera_snapshot(self, reason):
+        """Publish at most one fresh frame per configured camera."""
         if not self.enable_camera_capture or self.anomaly_camera_pub is None:
             return
 
@@ -154,7 +178,7 @@ class CollisionAvoidanceAADLog(Node):
             event_header.stamp = img_msg.header.stamp
             event_header.frame_id = f"camera:{source}"
             self.anomaly_logging(
-                f"Camera frame captured for stop event; camera={source}",
+                f"Camera frame captured for {reason}; camera={source}",
                 AnomalyMsg.INFO,
                 header=event_header,
                 msg_type=AnomalyMsg.IMAGE,

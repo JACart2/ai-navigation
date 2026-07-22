@@ -139,7 +139,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="main_shift3_gps.gml",
+                default_value="main_shift3_gps_final_candidate_v8.gml",
                 description="Navigation graph file.",
             ),
             DeclareLaunchArgument(
@@ -154,7 +154,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "calibration_config_file",
-                default_value="with_gps2_adjusted_route.yaml",
+                default_value="with_gps2_route_calibration.yaml",
                 description="Landmark calibration YAML file.",
             ),
             DeclareLaunchArgument(

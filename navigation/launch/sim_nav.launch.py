@@ -31,35 +31,19 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="main_shift3.gml",
+                default_value="main_shift3_gps_final_candidate_v8.gml",
             ),
             DeclareLaunchArgument(
                 "graph_coordinate_format",
-                default_value="ros",
+                default_value="gps",
             ),
             DeclareLaunchArgument(
                 "calibration_config_dir",
-                default_value="/maps",
+                default_value="/root/dev_ws/src/ai-navigation/navigation/maps",
             ),
             DeclareLaunchArgument(
                 "calibration_config_file",
-                default_value="SpeedBoiMap.yaml",
-            ),
-            DeclareLaunchArgument(
-                "graph_file",
-                default_value="main_shift3.gml",
-            ),
-            DeclareLaunchArgument(
-                "graph_coordinate_format",
-                default_value="ros",
-            ),
-            DeclareLaunchArgument(
-                "calibration_config_dir",
-                default_value="/maps",
-            ),
-            DeclareLaunchArgument(
-                "calibration_config_file",
-                default_value="SpeedBoiMap.yaml",
+                default_value="with_gps2_route_calibration.yaml",
             ),
             Node(
                 package="navigation",

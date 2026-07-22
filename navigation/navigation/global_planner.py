@@ -89,11 +89,11 @@ class GlobalPlanner(rclpy.node.Node):
 
         self.declare_parameter(
             "calibration_config_dir",
-            "/maps",
+            "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
         self.declare_parameter(
             "calibration_config_file",
-            "SpeedBoiMap.yaml",
+            "with_gps2_route_calibration.yaml",
         )
         calibration_config_dir = self.get_parameter(
             "calibration_config_dir"
@@ -131,8 +131,11 @@ class GlobalPlanner(rclpy.node.Node):
             "graph_dir",
             "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
-        self.declare_parameter("graph_file", "main_shift3.gml")
-        self.declare_parameter("graph_coordinate_format", "ros")
+        self.declare_parameter(
+            "graph_file",
+            "main_shift3_gps_final_candidate_v8.gml",
+        )
+        self.declare_parameter("graph_coordinate_format", "gps")
         graph_path = simple_gps_util.resolve_graph_path(
             self.get_parameter("graph_dir").get_parameter_value().string_value,
             self.get_parameter("graph_file").get_parameter_value().string_value,

@@ -43,8 +43,14 @@ def generate_launch_description():
                 "enable_aad_camera_capture",
                 default_value="true",
                 description=(
-                    "Subscribe to raw cameras for bounded AAD stop-event context."
+                    "Optionally subscribe to raw cameras for bounded AAD "
+                    "stop-event context."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Optionally start the front and rear ZED camera nodes.",
             ),
             DeclareLaunchArgument(
                 "launch_aad_node",
@@ -63,6 +69,7 @@ def generate_launch_description():
                     "enable_aad_camera_capture": LaunchConfiguration(
                         "enable_aad_camera_capture"
                     ),
+                    "start_cameras": LaunchConfiguration("start_cameras"),
                     "launch_aad_node": LaunchConfiguration("launch_aad_node"),
                 }.items(),
             ),

@@ -354,7 +354,7 @@ def generate_launch_description():
                 "enable_aad_camera_capture",
                 default_value="true",
                 description=(
-                    "Subscribe to raw cameras for bounded AAD stop-event context. "
+                    "Optionally subscribe to raw cameras for bounded AAD stop-event context. "
                     "Enable together with AAD vision_enabled."
                 ),
             ),
@@ -439,7 +439,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "start_cameras",
                 default_value="true",
-                description="Start the front and rear ZED camera nodes.",
+                description="Optionally start the front and rear ZED camera nodes.",
             ),
             DeclareLaunchArgument(
                 "lidar_pitch",

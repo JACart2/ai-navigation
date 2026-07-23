@@ -68,7 +68,7 @@ def generate_launch_description():
                 "enable_aad_camera_capture",
                 default_value="true",
                 description=(
-                    "Subscribe to raw cameras for bounded AAD stop-event context"
+                    "Optionally subscribe to raw cameras for bounded AAD stop-event context"
                 ),
             ),
             Node(

@@ -86,6 +86,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.serial_retry_reported = False
         self.last_arduino_throttle_command = 0
         self.last_arduino_brake_command = 0
+        self.collision_braking_active = False
 
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
@@ -179,13 +180,21 @@ class MotorEndpoint(rclpy.node.Node):
             # indicates an obstacle
             self.obstacle_distance = abs(self.vel_planned)
             self.vel_planned = 0
-            self.log_aad(
-                AnomalyMsg.ERROR,
-                f"Collision avoidance braking active: "
-                f"distance={self.obstacle_distance:.2f}m, "
-                f"{self._speed_context_for_log()}",
-            )
+            if not self.collision_braking_active:
+                self.collision_braking_active = True
+                self.log_aad(
+                    AnomalyMsg.ERROR,
+                    f"Collision avoidance braking active: "
+                    f"distance={self.obstacle_distance:.2f}m, "
+                    f"{self._speed_context_for_log()}",
+                )
         else:
+            if self.collision_braking_active:
+                self.log_aad(
+                    AnomalyMsg.INFO,
+                    "Collision avoidance braking cleared",
+                )
+            self.collision_braking_active = False
             # reset obstacle distance and brake time
             self.obstacle_distance = -1
             self.brake_time_used = 0

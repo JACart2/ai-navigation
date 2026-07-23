@@ -6,13 +6,13 @@ usage() {
 Usage:
   launch_mola_post_processing TEST_NAME [options]
 
-Runs mapping_instruction_manual_v4 post-processing steps 2.14 through 2.19:
-  2.14 replay the bag through MOLA to generate an offline .simplemap/.mm
+Runs mapping_instruction_manual_v6 post-processing steps 2.14 through 2.18:
+  2.14 replay the bag through MOLA to generate an offline .simplemap
   2.15 run loop closure on the .simplemap
-  2.16 convert the loop-closed .simplemap to a visualization .mm
-  2.17 compute georeferencing metadata from GNSS observations
-  2.18 bake georeferencing into a new .mm
-  2.19 print final artifact paths and optional viewing commands
+  2.15b rigidly level the loop-closed .simplemap
+  2.16 compute georeferencing metadata from GNSS observations
+  2.17 build a georeferenced GICP localization .mm
+  2.18 print final artifact paths and an optional viewing command
 
 Primary parameter:
   TEST_NAME                         Base name for input bag and output maps.
@@ -20,11 +20,10 @@ Primary parameter:
 Defaults:
   Bag input:                        /root/dev_ws/bagfiles/TEST_NAME
   Offline simplemap:                /root/dev_ws/maps/TEST_NAME_offline.simplemap
-  Offline mm:                       /root/dev_ws/maps/TEST_NAME_offline.mm
-  Loop-closed simplemap:            /root/dev_ws/maps/TEST_NAME_lc.simplemap
-  Loop-closed visualization mm:      /root/dev_ws/maps/TEST_NAME_lc_visual.mm
-  Georeference metadata:            /root/dev_ws/maps/TEST_NAME.georef
-  Georeferenced mm:                 /root/dev_ws/maps/TEST_NAME_georef.mm
+  Unleveled loop-closed simplemap:  temporary by default; input to leveling
+  Leveled loop-closed simplemap:    /root/dev_ws/maps/TEST_NAME_lc.simplemap
+  Georeference metadata:            temporary by default; baked into final .mm
+  Georeferenced localization mm:    /root/dev_ws/maps/TEST_NAME_georef_localization.mm
 
 Options:
   --bag PATH                        Bag directory to process.
@@ -32,22 +31,35 @@ Options:
   --bag-dir DIR                     Bag parent directory. Default: /root/dev_ws/bagfiles
   --lidar-topic TOPIC               Lidar topic. Default: /velodyne_points
   --imu-topic TOPIC                 IMU topic to replay/record into MOLA. Default: /zed_front/zed_node_0/imu/data
-  --use-imu-roll-pitch              Use IMU gravity for initial roll/pitch. Not recommended on James until IMU TF is calibrated.
-  --use-imu-deskew                  Use IMU motion compensation. Default is linear deskew for safer replay.
+  --use-imu-roll-pitch              Use IMU gravity for initial roll/pitch (terrain-aware default).
+  --no-imu-roll-pitch               Disable IMU roll/pitch initialization.
+  --use-imu-deskew                  Use IMU motion compensation (terrain-aware default).
+  --no-imu-deskew                   Use linear deskew instead.
   --gnss-topic TOPIC                GNSS topic. Default: /fix
   --base-frame FRAME                MOLA base frame. Default: base_link
-  --pipeline PATH                   Loop-closure pipeline YAML.
+  --pipeline PATH                   Loop-closure pipeline YAML. Defaults to the
+                                    final1 non-ground KISS+ICP submap pipeline.
+  --endpoint-window-percent PCT     Use first/last PCT of poses for automatic
+                                    endpoint hints. Range: (0,5]. Default: 5.
+  --endpoint-loop-pairs N           Automatic endpoint hint count. Default: 3.
+  --no-auto-endpoint-loop           Use constraints already in --pipeline.
   --simplemap-output PATH           Override offline simplemap output.
-  --mm-output PATH                  Override offline .mm output.
   --lc-simplemap-output PATH        Override loop-closed simplemap output.
-  --lc-mm-output PATH               Override loop-closed visualization .mm output.
+  --save-unleveled-simplemap        Retain TEST_NAME_lc_unleveled.simplemap.
+                                    Disabled by default.
   --georef-output PATH              Override georeference metadata output.
-  --georef-mm-output PATH           Override georeferenced .mm output.
+                                    Specifying this also retains the file.
+  --save-georef-file                Retain TEST_NAME.georef after baking it into
+                                    the localization map. Disabled by default.
+  --georef-mm-output PATH           Override georeferenced localization .mm output.
+  --localization-pipeline PATH      sm2mm GICP localization pipeline. Default:
+                                    /root/dev_ws/maps/sm2mm_gicp_localmap.yaml
   --skip-offline-map                Skip bag replay/simplemap generation.
   --skip-loop-closure               Skip loop closure.
-  --skip-sm2mm                      Skip loop-closed .simplemap to .mm conversion.
   --skip-georef                     Skip georeferencing metadata computation.
   --skip-georef-mm                  Skip georeferenced .mm generation.
+  --save-trajectory-files           Save loop-closure TUM trajectories and
+                                    covariance sidecars. Disabled by default.
   --allow-existing-output           Permit overwriting/reusing existing output paths.
   --dry-run                         Print commands without executing them.
   -h, --help                        Show this help.
@@ -69,22 +81,31 @@ maps_dir="$ws_dir/maps"
 bag_path=""
 lidar_topic="/velodyne_points"
 imu_topic="/zed_front/zed_node_0/imu/data"
-use_imu_roll_pitch=false
-use_imu_deskew=false
+use_imu_roll_pitch=true
+use_imu_deskew=true
 gnss_topic="/fix"
 base_frame="base_link"
-pipeline="$ws_dir/src/mola_sm_loop_closure/pipelines/loop-closure-lidar3d-gicp.yaml"
+pipeline="$ws_dir/maps/final1_v8_nonground_submap.yaml"
+endpoint_pipeline_generator="$script_dir/generate_endpoint_lc_pipeline.sh"
+endpoint_window_percent="5.0"
+endpoint_loop_pairs="3"
+auto_endpoint_loop=true
+generated_endpoint_pipeline=""
+localization_pipeline="$ws_dir/maps/sm2mm_gicp_localmap.yaml"
 simplemap_output=""
-mm_output=""
 lc_simplemap_output=""
-lc_mm_output=""
+lc_unleveled_simplemap_output=""
 georef_output=""
 georef_mm_output=""
 skip_offline_map=false
 skip_loop_closure=false
-skip_sm2mm=false
 skip_georef=false
 skip_georef_mm=false
+save_georef_file=false
+georef_is_temporary=false
+save_unleveled_simplemap=false
+lc_unleveled_is_temporary=false
+save_trajectory_files=false
 allow_existing_output=false
 dry_run=false
 
@@ -114,8 +135,16 @@ while [[ $# -gt 0 ]]; do
       use_imu_roll_pitch=true
       shift
       ;;
+    --no-imu-roll-pitch)
+      use_imu_roll_pitch=false
+      shift
+      ;;
     --use-imu-deskew)
       use_imu_deskew=true
+      shift
+      ;;
+    --no-imu-deskew)
+      use_imu_deskew=false
       shift
       ;;
     --gnss-topic)
@@ -130,28 +159,45 @@ while [[ $# -gt 0 ]]; do
       pipeline="${2:?--pipeline requires a YAML path}"
       shift 2
       ;;
-    --simplemap-output)
-      simplemap_output="${2:?--simplemap-output requires a path}"
+    --endpoint-window-percent)
+      endpoint_window_percent="${2:?--endpoint-window-percent requires a percentage}"
       shift 2
       ;;
-    --mm-output)
-      mm_output="${2:?--mm-output requires a path}"
+    --endpoint-loop-pairs)
+      endpoint_loop_pairs="${2:?--endpoint-loop-pairs requires a count}"
+      shift 2
+      ;;
+    --no-auto-endpoint-loop)
+      auto_endpoint_loop=false
+      shift
+      ;;
+    --simplemap-output)
+      simplemap_output="${2:?--simplemap-output requires a path}"
       shift 2
       ;;
     --lc-simplemap-output)
       lc_simplemap_output="${2:?--lc-simplemap-output requires a path}"
       shift 2
       ;;
-    --lc-mm-output)
-      lc_mm_output="${2:?--lc-mm-output requires a path}"
-      shift 2
+    --save-unleveled-simplemap)
+      save_unleveled_simplemap=true
+      shift
       ;;
     --georef-output)
       georef_output="${2:?--georef-output requires a path}"
+      save_georef_file=true
       shift 2
+      ;;
+    --save-georef-file)
+      save_georef_file=true
+      shift
       ;;
     --georef-mm-output)
       georef_mm_output="${2:?--georef-mm-output requires a path}"
+      shift 2
+      ;;
+    --localization-pipeline)
+      localization_pipeline="${2:?--localization-pipeline requires a YAML path}"
       shift 2
       ;;
     --skip-offline-map)
@@ -162,16 +208,16 @@ while [[ $# -gt 0 ]]; do
       skip_loop_closure=true
       shift
       ;;
-    --skip-sm2mm)
-      skip_sm2mm=true
-      shift
-      ;;
     --skip-georef)
       skip_georef=true
       shift
       ;;
     --skip-georef-mm)
       skip_georef_mm=true
+      shift
+      ;;
+    --save-trajectory-files)
+      save_trajectory_files=true
       shift
       ;;
     --allow-existing-output)
@@ -207,11 +253,45 @@ fi
 
 bag_path="${bag_path:-$bag_dir/$test_name}"
 simplemap_output="${simplemap_output:-$maps_dir/${test_name}_offline.simplemap}"
-mm_output="${mm_output:-$maps_dir/${test_name}_offline.mm}"
 lc_simplemap_output="${lc_simplemap_output:-$maps_dir/${test_name}_lc.simplemap}"
-lc_mm_output="${lc_mm_output:-$maps_dir/${test_name}_lc_visual.mm}"
-georef_output="${georef_output:-$maps_dir/${test_name}.georef}"
-georef_mm_output="${georef_mm_output:-$maps_dir/${test_name}_georef.mm}"
+if [[ "$save_unleveled_simplemap" == true ]]; then
+  if [[ "$lc_simplemap_output" == *.simplemap ]]; then
+    lc_unleveled_simplemap_output="${lc_simplemap_output%.simplemap}_unleveled.simplemap"
+  else
+    lc_unleveled_simplemap_output="${lc_simplemap_output}.unleveled"
+  fi
+elif [[ "$dry_run" == true ]]; then
+  lc_unleveled_simplemap_output="/tmp/${test_name}.lc_unleveled.TEMPORARY.simplemap"
+  lc_unleveled_is_temporary=true
+else
+  lc_unleveled_simplemap_output="$(mktemp --suffix=.simplemap "/tmp/${test_name}.lc_unleveled.XXXXXX")"
+  lc_unleveled_is_temporary=true
+fi
+if [[ -z "$georef_output" ]]; then
+  if [[ "$save_georef_file" == true ]]; then
+    georef_output="$maps_dir/${test_name}.georef"
+  elif [[ "$dry_run" == true ]]; then
+    georef_output="/tmp/${test_name}.georef.TEMPORARY"
+    georef_is_temporary=true
+  else
+    georef_output="$(mktemp "/tmp/${test_name}.georef.XXXXXX")"
+    georef_is_temporary=true
+  fi
+fi
+georef_mm_output="${georef_mm_output:-$maps_dir/${test_name}_georef_localization.mm}"
+
+cleanup_temporary_artifacts() {
+  if [[ "$georef_is_temporary" == true && "$dry_run" != true ]]; then
+    rm -f -- "$georef_output"
+  fi
+  if [[ "$lc_unleveled_is_temporary" == true && "$dry_run" != true ]]; then
+    rm -f -- "$lc_unleveled_simplemap_output"
+  fi
+  if [[ -n "$generated_endpoint_pipeline" && "$dry_run" != true ]]; then
+    rm -f -- "$generated_endpoint_pipeline"
+  fi
+}
+trap cleanup_temporary_artifacts EXIT
 
 source_ros_setup() {
   if [[ ! -f "$setup_file" ]]; then
@@ -263,33 +343,46 @@ source_ros_setup
 require_file "$bag_path" "Bag input"
 if [[ "$skip_loop_closure" != true ]]; then
   require_file "$pipeline" "Loop-closure pipeline"
-  if ! grep -q 'submap_max_length_wrt_map' "$pipeline"; then
+  if [[ "$auto_endpoint_loop" == true ]]; then
+    require_file "$endpoint_pipeline_generator" "Endpoint pipeline generator"
+  fi
+  if ! grep -q 'Frame-to-Frame Loop Closure' "$pipeline"; then
     echo "Loop-closure pipeline appears incompatible with this mola-sm-lc-cli:" >&2
     echo "  $pipeline" >&2
-    echo "Missing required YAML entry: submap_max_length_wrt_map" >&2
-    echo "Use --pipeline $ws_dir/src/mola_sm_loop_closure/pipelines/loop-closure-lidar3d-gicp.yaml" >&2
+    echo "Expected a mola::FrameToFrameLoopClosure configuration." >&2
+    echo "Use --pipeline $ws_dir/maps/final1_v8_nonground_submap.yaml" >&2
     exit 1
   fi
 fi
+if [[ "$skip_georef_mm" != true ]]; then
+  require_file "$localization_pipeline" "Localization sm2mm pipeline"
+fi
 
 check_output_path "$simplemap_output" "$([[ "$skip_offline_map" != true ]] && echo true || echo false)"
-check_output_path "$mm_output" "$([[ "$skip_offline_map" != true ]] && echo true || echo false)"
+check_output_path "$lc_unleveled_simplemap_output" "$([[ "$skip_loop_closure" != true && "$lc_unleveled_is_temporary" != true ]] && echo true || echo false)"
 check_output_path "$lc_simplemap_output" "$([[ "$skip_loop_closure" != true ]] && echo true || echo false)"
-check_output_path "$lc_mm_output" "$([[ "$skip_sm2mm" != true ]] && echo true || echo false)"
-check_output_path "$georef_output" "$([[ "$skip_georef" != true ]] && echo true || echo false)"
+check_output_path "$georef_output" "$([[ "$skip_georef" != true && "$georef_is_temporary" != true ]] && echo true || echo false)"
 check_output_path "$georef_mm_output" "$([[ "$skip_georef_mm" != true ]] && echo true || echo false)"
 
 echo "MOLA post-processing for test: $test_name"
 echo "Bag input: $bag_path"
 echo "Maps dir: $maps_dir"
 echo "Offline simplemap: $simplemap_output"
-echo "Offline mm: $mm_output"
-echo "Loop-closed simplemap: $lc_simplemap_output"
-echo "Loop-closed mm: $lc_mm_output"
+echo "Unleveled loop-closed simplemap: $lc_unleveled_simplemap_output"
+echo "Retain unleveled simplemap: $save_unleveled_simplemap"
+echo "Leveled loop-closed simplemap: $lc_simplemap_output"
 echo "Georef metadata: $georef_output"
-echo "Georeferenced mm: $georef_mm_output"
+echo "Retain standalone georef file: $save_georef_file"
+echo "Georeferenced localization mm: $georef_mm_output"
+echo "Localization sm2mm pipeline: $localization_pipeline"
+echo "Automatic endpoint loop constraints: $auto_endpoint_loop"
+if [[ "$auto_endpoint_loop" == true ]]; then
+  echo "Endpoint window/pairs: ${endpoint_window_percent}% / $endpoint_loop_pairs"
+fi
+echo "Save loop-closure TUM/COV diagnostics: $save_trajectory_files"
 echo "Use IMU roll/pitch initialization: $use_imu_roll_pitch"
 echo "Use IMU deskew: $use_imu_deskew"
+echo "Loop closure: KISS-Matcher + non-ground ±5-keyframe submaps + ICP/GNC (GNSS disabled)"
 
 if [[ "$skip_offline_map" != true ]]; then
   echo
@@ -298,6 +391,8 @@ if [[ "$skip_offline_map" != true ]]; then
   export MOLA_LIDAR_TOPIC_TYPE=PointCloud2
   export MOLA_START_ACTIVE=True
   export MOLA_MAPPING_ENABLED=True
+  # Let MOLA own end-of-bag shutdown so final maps are serialized cleanly.
+  export MOLA_QUIT_ON_DATASET_END=true
   export MOLA_GENERATE_SIMPLEMAP=true
   export MOLA_SIMPLEMAP_MIN_XYZ=1.0
   export MOLA_SIMPLEMAP_MIN_ROT=20.0
@@ -305,7 +400,7 @@ if [[ "$skip_offline_map" != true ]]; then
   export MOLA_MIN_ROT_BETWEEN_MAP_UPDATES=5.0
   export MOLA_PUBLISH_LOCAL_MAP_UPDATES_EVERY_N=40
   export MOLA_TF_BASE_LINK="$base_frame"
-  export MOLA_NAVSTATE_ENFORCE_PLANAR_MOTION=true
+  export MOLA_NAVSTATE_ENFORCE_PLANAR_MOTION=false
   if [[ "$use_imu_roll_pitch" == true || "$use_imu_deskew" == true ]]; then
     export MOLA_NAVSTATE_IMU_SENSOR_NAME='.*'
   else
@@ -336,7 +431,7 @@ if [[ "$skip_offline_map" != true ]]; then
   echo "MOLA_NAVSTATE_IMU_SENSOR_NAME=$MOLA_NAVSTATE_IMU_SENSOR_NAME"
   export MOLA_GNSS_TOPIC="$gnss_topic"
   export MOLA_SIMPLEMAP_OUTPUT="$simplemap_output"
-  export MOLA_SAVE_MM="$mm_output"
+  unset MOLA_SAVE_MM
   run_cmd mola-lo-gui-rosbag2 "$bag_path"
 fi
 
@@ -344,40 +439,76 @@ if [[ "$skip_loop_closure" != true ]]; then
   echo
   echo "2.15 Run Loop Closure"
   require_file "$simplemap_output" "Input simplemap for loop closure"
-  run_cmd mola-sm-lc-cli -i "$simplemap_output" -o "$lc_simplemap_output" -p "$pipeline"
-fi
+  effective_pipeline="$pipeline"
+  if [[ "$auto_endpoint_loop" == true ]]; then
+    if [[ "$dry_run" == true ]]; then
+      generated_endpoint_pipeline="/tmp/${test_name}.endpoint_lc.TEMPORARY.yaml"
+    else
+      generated_endpoint_pipeline="$(mktemp --suffix=.yaml "/tmp/${test_name}.endpoint_lc.XXXXXX")"
+    fi
+    run_cmd "$endpoint_pipeline_generator" \
+      "$simplemap_output" "$pipeline" "$generated_endpoint_pipeline" \
+      "$endpoint_window_percent" "$endpoint_loop_pairs"
+    effective_pipeline="$generated_endpoint_pipeline"
+  fi
+  export USE_GNSS=false
+  export SAVE_3D_SCENES=false
+  export SAVE_3D_SCENES_PER_ITER=false
+  export SAVE_TRAJECTORY_FILES="$save_trajectory_files"
+  export SAVE_TRAJECTORY_FILES_WITH_COV="$save_trajectory_files"
+  export USE_KISS_MATCHER=true
+  export LC_SUBMAP_HALF_WINDOW=5
+  export LC_REGISTRATION_REMOVE_GROUND=true
+  export MP2P_ICP_LOG_FILES_DECIMATION=20
+  run_cmd mola-sm-lc-cli \
+    -i "$simplemap_output" \
+    -o "$lc_unleveled_simplemap_output" \
+    -p "$effective_pipeline" \
+    -a mola::FrameToFrameLoopClosure
 
-if [[ "$skip_sm2mm" != true ]]; then
   echo
-  echo "2.16 Convert Loop-Closed Simplemap To Visualization MM"
-  require_file "$lc_simplemap_output" "Input loop-closed simplemap"
-  run_cmd sm2mm -i "$lc_simplemap_output" -o "$lc_mm_output"
+  echo "2.15b Level Loop-Closed Simplemap"
+  if [[ "$dry_run" != true ]]; then
+    require_file "$lc_unleveled_simplemap_output" "Unleveled loop-closed simplemap"
+  fi
+  run_cmd sm-cli level "$lc_unleveled_simplemap_output" "$lc_simplemap_output"
 fi
 
 if [[ "$skip_georef" != true ]]; then
   echo
-  echo "2.17 Compute Georeferencing Metadata"
+  echo "2.16 Compute Georeferencing Metadata"
   require_file "$lc_simplemap_output" "Input loop-closed simplemap"
   run_cmd mola-sm-georeferencing -i "$lc_simplemap_output" -o "$georef_output"
 fi
 
 if [[ "$skip_georef_mm" != true ]]; then
   echo
-  echo "2.18 Bake Georeferencing Into MM"
+  echo "2.17 Build Georeferenced GICP Localization MM"
   require_file "$lc_simplemap_output" "Input loop-closed simplemap"
   require_file "$georef_output" "Georeference metadata"
-  run_cmd sm2mm -i "$lc_simplemap_output" -g "$georef_output" -o "$georef_mm_output"
+  run_cmd sm2mm \
+    -i "$lc_simplemap_output" \
+    -o "$georef_mm_output" \
+    -p "$localization_pipeline" \
+    -l libmola_metric_maps.so \
+    -g "$georef_output"
 fi
 
 echo
-echo "2.19 Post-Processing Outputs"
+echo "2.18 Post-Processing Outputs"
 echo "Offline simplemap:       $simplemap_output"
-echo "Offline mm:              $mm_output"
-echo "Loop-closed simplemap:   $lc_simplemap_output"
-echo "Loop-closed visual mm:   $lc_mm_output"
-echo "Georef metadata:         $georef_output"
-echo "Georeferenced mm:        $georef_mm_output"
+if [[ "$save_unleveled_simplemap" == true ]]; then
+  echo "Unleveled LC simplemap:  $lc_unleveled_simplemap_output"
+else
+  echo "Unleveled LC simplemap:  not retained (temporary leveling input)"
+fi
+echo "Leveled LC simplemap:    $lc_simplemap_output"
+if [[ "$save_georef_file" == true ]]; then
+  echo "Georef metadata:         $georef_output"
+else
+  echo "Georef metadata:         not retained (baked into localization mm)"
+fi
+echo "Georef localization mm:  $georef_mm_output"
 echo
-echo "View commands:"
-echo "  mm-viewer $lc_mm_output"
-echo "  mm-viewer $georef_mm_output"
+echo "View command:"
+echo "  LD_PRELOAD=/opt/ros/jazzy/lib/x86_64-linux-gnu/libmola_metric_maps.so mm-viewer $georef_mm_output"

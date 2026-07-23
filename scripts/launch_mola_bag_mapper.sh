@@ -8,7 +8,7 @@ Usage:
   launch_mola_bag_mapper.sh james TEST_NAME [options]
   launch_mola_bag_mapper.sh madison TEST_NAME [options]
 
-Runs mapping_instruction_manual_v4 steps 2.1 through 2.11:
+Runs mapping_instruction_manual_v6 steps 2.1 through 2.11:
   2.1 source /root/dev_ws/install/setup.bash
   2.2 publish base_link -> velodyne
   2.3 launch Velodyne

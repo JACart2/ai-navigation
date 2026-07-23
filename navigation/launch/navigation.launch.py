@@ -22,17 +22,17 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="main_shift3.gml",
+                default_value="main_shift3_gps_final_candidate_v8.gml",
             ),
             # Declare whether the given graph is in GPS or ROS coordinates. 
             DeclareLaunchArgument(
                 "graph_coordinate_format",
-                default_value="ros", # Options: "ros" or "gps"
+                default_value="gps", # Options: "ros" or "gps"
             ),
             # Directory where the landmark calibration YAML file is located.
             DeclareLaunchArgument(
                 "calibration_config_dir",
-                default_value="/maps",
+                default_value="/root/dev_ws/src/ai-navigation/navigation/maps",
             ),
             # YAML file name for the landmark calibration
             DeclareLaunchArgument(
@@ -59,6 +59,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "calibration_config_file",
                 default_value="with_gps2.yaml",
+                default_value="with_gps2_route_calibration.yaml",
             ),
             DeclareLaunchArgument(
                 "enable_aad",

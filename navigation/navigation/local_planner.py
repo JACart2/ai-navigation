@@ -542,9 +542,6 @@ class LocalPlanner(rclpy.node.Node):
                 return
 
             distance_remaining = self.calc_trip_dist(self.local_points, current_node)
-            # Avoid division by zero when speed is zero or not yet initialized
-            if self.cur_speed <= 0:
-                return
 
             # # Remaining time in seconds
             remaining_time = distance_remaining / self.tar_speed # use target speed to avoid incorrect eta during speed up
@@ -555,7 +552,7 @@ class LocalPlanner(rclpy.node.Node):
 
             # # Convert the time to milliseconds
             # eta_msg.data = int(arrival_time * (1000))
-            eta_msg.data = 0
+            eta_msg.data = max(0, int(round(remaining_time)))
             self.eta_pub.publish(eta_msg)
 
             if not self.eta_initial_report_sent:

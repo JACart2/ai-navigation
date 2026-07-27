@@ -146,6 +146,14 @@ def generate_launch_description():
         executable="collision_avoidance_aad_log",
         name="collision_avoidance_aad_log",
         output="screen",
+        parameters=[
+            {
+                "enable_camera_capture": ParameterValue(
+                    LaunchConfiguration("enable_aad_camera_capture"),
+                    value_type=bool,
+                )
+            }
+        ],
         condition=IfCondition(enable_aad),
     )
 
@@ -343,6 +351,14 @@ def generate_launch_description():
                 description="Enable anomaly logging nodes.",
             ),
             DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Optionally subscribe to raw cameras for bounded AAD stop-event context. "
+                    "Enable together with AAD vision_enabled."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "launch_aad_node",
                 default_value="true",
                 description="Launch the anomaly_detection LLM/alert node.",
@@ -423,7 +439,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "start_cameras",
                 default_value="true",
-                description="Start the front and rear ZED camera nodes.",
+                description="Optionally start the front and rear ZED camera nodes.",
             ),
             DeclareLaunchArgument(
                 "lidar_pitch",

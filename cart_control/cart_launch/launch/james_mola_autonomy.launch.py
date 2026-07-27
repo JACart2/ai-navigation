@@ -25,6 +25,19 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Optionally subscribe to raw cameras for bounded AAD "
+                    "stop-event context."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Optionally start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
                 "enable_gps_recovery",
                 default_value="false",
                 description="Use GPS as a recovery hint after localization is lost.",
@@ -45,6 +58,10 @@ def generate_launch_description():
                     "enable_mola_auto_localization": LaunchConfiguration(
                         "enable_mola_auto_localization"
                     ),
+                    "enable_aad_camera_capture": LaunchConfiguration(
+                        "enable_aad_camera_capture"
+                    ),
+                    "start_cameras": LaunchConfiguration("start_cameras"),
                     "enable_gps_recovery": LaunchConfiguration(
                         "enable_gps_recovery"
                     ),

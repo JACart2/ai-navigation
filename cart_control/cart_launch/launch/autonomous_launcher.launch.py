@@ -40,6 +40,19 @@ def generate_launch_description():
                 description="Enable anomaly logging.",
             ),
             DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Optionally subscribe to raw cameras for bounded AAD "
+                    "stop-event context."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Optionally start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
                 "launch_aad_node",
                 default_value="false",
                 description=(
@@ -53,6 +66,10 @@ def generate_launch_description():
                     "cart": LaunchConfiguration("cart"),
                     "cart_config_path": LaunchConfiguration("cart_config_path"),
                     "enable_aad": LaunchConfiguration("enable_aad"),
+                    "enable_aad_camera_capture": LaunchConfiguration(
+                        "enable_aad_camera_capture"
+                    ),
+                    "start_cameras": LaunchConfiguration("start_cameras"),
                     "launch_aad_node": LaunchConfiguration("launch_aad_node"),
                 }.items(),
             ),

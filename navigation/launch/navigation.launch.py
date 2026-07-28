@@ -41,28 +41,6 @@ def generate_launch_description():
                 default_value="SpeedBoiMap.yaml",
             ),
             DeclareLaunchArgument(
-                "graph_file",
-                default_value="main_shift3.gml",
-            ),
-            # Declare whether the given graph is in GPS or ROS coordinates. 
-            DeclareLaunchArgument(
-                "graph_coordinate_format",
-                default_value="ros", # Options: "ros" or "gps"
-            ),
-            # Directory where the landmark calibration YAML file is located.
-            DeclareLaunchArgument(
-                "calibration_config_dir",
-                default_value=os.path.join(
-                    get_package_share_directory("navigation"), "maps"
-                ),
-            ),
-            # YAML file name for the landmark calibration
-            DeclareLaunchArgument(
-                "calibration_config_file",
-                default_value="with_gps2.yaml",
-                default_value="with_gps2_route_calibration.yaml",
-            ),
-            DeclareLaunchArgument(
                 "enable_aad",
                 default_value="true",
                 description="Enable collision avoidance anomaly logging node"

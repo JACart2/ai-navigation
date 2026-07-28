@@ -333,7 +333,7 @@ class CollisionDetector(rclpy.node.Node):
 
         cur_obstacle_list = self.cur_obstacles
         for obstacle in cur_obstacle_list:
-            obstacle_size = 2 * obstacle.radius
+            obstacle_size = obstacle.radius
 
             # The distance/radius of the circle center to the obstacle center
             circle_obstacle_dist = self.distance(

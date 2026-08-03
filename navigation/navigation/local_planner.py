@@ -50,17 +50,17 @@ class LocalPlanner(rclpy.node.Node):
     def __init__(self):
         super().__init__("local_planner")
 
-        self.declare_parameter("cruise_speed", 30.0)
-
-        # driving constants THIS USED TO BE 10 and 3.6 respectively
-        self.METERS = (
-            self.get_parameter("cruise_speed").get_parameter_value().double_value
-        )
-        self.SECONDS = 3.6
+        # Target-speed values are expressed in metres per second throughout the
+        # navigation and motor-control pipeline.
+        self.declare_parameter("cruise_speed_mps", 3.0)
 
         # driving variables
         self.cur_vel = 0.0  # current linear velocity from localization
-        self.tar_speed = self.METERS / self.SECONDS  # Target speed?
+        self.tar_speed = (
+            self.get_parameter("cruise_speed_mps")
+            .get_parameter_value()
+            .double_value
+        )
 
         self.cur_speed = 0  # Another estimate of speed used for eta calculations
 
@@ -200,8 +200,8 @@ class LocalPlanner(rclpy.node.Node):
         )
 
     def tar_speed_cb(self, msg):
-        self.tar_speed = msg.data / self.SECONDS
-        self.log(f"Speed changed to {str(self.tar_speed)}")
+        self.tar_speed = msg.data
+        self.log(f"Speed changed to {self.tar_speed:.2f} m/s")
 
     def speed_cb(self, msg):
         if msg.data < 1.0:

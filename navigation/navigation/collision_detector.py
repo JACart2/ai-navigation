@@ -124,7 +124,7 @@ class CollisionDetector(rclpy.node.Node):
         # self.declare_parameter("min_obstacle_time", 2.5)
         self.declare_parameter("safe_obstacle_dist", 6 * factor)
         self.declare_parameter("safe_obstacle_time", 2 * factor)
-        self.declare_parameter("cruise_speed", 30.0)
+        self.declare_parameter("cruise_speed_mps", 2.5)
 
         # self.MIN_OBSTACLE_DIST = (
         #     self.get_paramater("min_obstacle_dist").get_paramter_value().float_value
@@ -141,9 +141,11 @@ class CollisionDetector(rclpy.node.Node):
         self.SAFE_OBSTACLE_TIME = (
             self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
         )
-        # /speed uses km/h, matching the local planner's target-speed interface.
+        # /speed uses m/s, matching the rest of the motion-control pipeline.
         self.CRUISE_SPEED = (
-            self.get_parameter("cruise_speed").get_parameter_value().double_value
+            self.get_parameter("cruise_speed_mps")
+            .get_parameter_value()
+            .double_value
         )
 
         # Subscribes to the /obstacles topic where ObstacleArray msg types are sent
@@ -210,7 +212,7 @@ class CollisionDetector(rclpy.node.Node):
         speed_msg.data = float(speed)
         self.speed_pub.publish(speed_msg)
         self.anomaly_logging(
-            f"Collision detector requested planner speed: {float(speed):.2f} km/h",
+            f"Collision detector requested planner speed: {float(speed):.2f} m/s",
             AnomalyMsg.INFO,
         )
 

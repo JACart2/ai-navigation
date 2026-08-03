@@ -19,7 +19,7 @@ from anomaly_msg.msg import AnomalyMsg
 class CollisionAvoidanceAADLog(Node):
 
     def __init__(self):
-        super().__init__('collision_avoidance_aad_log')
+        super().__init__('general_aad_log')
 
         self.CAMERA_FRAME_MAX_AGE_SECONDS = 2.0
         self.CAMERA_SOURCES = ("front", "rear")
@@ -177,8 +177,13 @@ class CollisionAvoidanceAADLog(Node):
             event_header = Header()
             event_header.stamp = img_msg.header.stamp
             event_header.frame_id = f"camera:{source}"
+            camera_name = "passenger" if source == "rear" else source
+            if reason == "periodic context":
+                message = f"Periodic context Image; camera={camera_name}"
+            else:
+                message = f"Camera frame captured for {reason}; camera={camera_name}"
             self.anomaly_logging(
-                f"Camera frame captured for {reason}; camera={source}",
+                message,
                 AnomalyMsg.INFO,
                 header=event_header,
                 msg_type=AnomalyMsg.IMAGE,
@@ -197,7 +202,7 @@ class CollisionAvoidanceAADLog(Node):
         if new_stop_state:
             self._publish_stop_camera_snapshot()
             self.anomaly_logging(
-                f"Stop signal received from {sender}; distance={stop_msg.distance:.2f}",
+                f"Stop signal received, obstacle  distance={stop_msg.distance:.2f}m",
                 AnomalyMsg.ERROR,
                 header=stop_msg.header,
             )
@@ -323,13 +328,10 @@ class CollisionAvoidanceAADLog(Node):
             return f"MOLA localization health: source=mola_diagnostics, raw={raw}"
 
         summary_fields = [
-            "source=mola_diagnostics",
-            f"active={fields.get('active', 'unknown')}",
+            f"status={'unhealthy' if reasons else 'healthy'}",
             f"icp_quality={fields.get('icp_quality', 'unknown')}",
             f"icp_quality_threshold={self.MOLA_BAD_ICP_QUALITY_THRESHOLD}",
-            f"dropped_frames_ratio={fields.get('dropped_frames_ratio', 'unknown')}",
-            f"dropped_frames_threshold={self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD}",
-            f"status={'unhealthy' if reasons else 'healthy'}",
+            f"too_many_dropped_frames={any('dropped frame' in reason for reason in reasons)}",
         ]
         if reasons:
             summary_fields.append(f"reasons={'; '.join(reasons)}")

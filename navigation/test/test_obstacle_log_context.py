@@ -22,8 +22,9 @@ def test_dense_distant_field_explains_that_nothing_is_nearby():
     assert "within_1m=0" in context
     assert "within_2m=0" in context
     assert "within_4m=0" in context
-    assert "proximity=distant" in context
-    assert "frame=base_link" in context
+    assert "nearest_obstacle=(5.00,0.00)m" in context
+    assert "proximity=" not in context
+    assert "frame=" not in context
 
 
 def test_near_field_reports_counts_and_nearest_position():
@@ -39,11 +40,8 @@ def test_near_field_reports_counts_and_nearest_position():
     assert "within_1m=1" in context
     assert "within_2m=1" in context
     assert "within_4m=2" in context
-    assert "nearest_center=(1.50,0.00)m" in context
-    assert "proximity=immediate" in context
+    assert "nearest_obstacle=(1.50,0.00)m" in context
 
 
 def test_missing_positions_are_reported_without_crashing():
-    assert format_obstacle_context([object()], "velodyne") == (
-        "distance_context=unavailable, frame=velodyne"
-    )
+    assert format_obstacle_context([object()], "velodyne") == ""

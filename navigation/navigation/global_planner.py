@@ -245,8 +245,22 @@ class GlobalPlanner(rclpy.node.Node):
         # Allows other functions to not make critical decisions or modify data while calculating navigation
         self.calculating_nav = True
         self.total_distance = 0
+        destination_lat_long = "unavailable"
+        if self.gps_calibrated:
+            destination_lat, destination_lon = simple_gps_util.local_to_gps(
+                destination.x, destination.y,
+                self.ref_lat, self.ref_lon,
+                self.cx_local, self.cy_local,
+                self.cx_gps, self.cy_gps,
+                self.calibration_theta
+            )
+            destination_lat_long = (
+                f"({destination_lat:.6f}, {destination_lon:.6f})"
+            )
         self.anomaly_logging(
-            f"Navigation request received: destination=({destination.x:.2f}, {destination.y:.2f})",
+            f"Navigation request received: "
+            f"destination_ros=({destination.x:.2f}, {destination.y:.2f}), "
+            f"destination_lat_long={destination_lat_long}",
             AnomalyMsg.INFO,
         )
 
@@ -350,8 +364,14 @@ class GlobalPlanner(rclpy.node.Node):
             self.get_logger().info(
                 f"Publishing Path: {str(self.current_cart_node)} to {str(destination_point)}"
             )
+            start_waypoint = str(self.current_cart_node).rsplit(":", 1)[-1]
+            destination_waypoint = str(destination_point).rsplit(":", 1)[-1]
             self.anomaly_logging(
-                f"Published route: start_node={self.current_cart_node}, destination_node={destination_point}, waypoints={len(points_arr.localpoints)}",
+                f"Published route: start_waypoint={start_waypoint}, "
+                f"start_location=({current_cart_pos.x:.2f}, {current_cart_pos.y:.2f}), "
+                f"destination_waypoint={destination_waypoint}, "
+                f"destination_location=({destination.x:.2f}, {destination.y:.2f}), "
+                f"total_waypoints={len(points_arr.localpoints)}",
                 AnomalyMsg.INFO,
             )
 
@@ -635,7 +655,7 @@ class GlobalPlanner(rclpy.node.Node):
         """
         self.navigating = msg.is_navigating
         if msg.reached_destination:
-            self.anomaly_logging("Vehicle state reports destination reached", AnomalyMsg.INFO)
+            self.anomaly_logging("Destination reached", AnomalyMsg.INFO)
         elif msg.is_navigating and self.last_reported_navigating is not True:
             self.anomaly_logging(
                 "Vehicle state changed to navigating",

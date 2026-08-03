@@ -94,7 +94,7 @@ def test_periodic_snapshot_publishes_pre_event_context():
     assert len(calls) == 1
     assert calls[0][1]["image"] is front
     assert calls[0][0][0] == (
-        "Camera frame captured for periodic context; camera=front"
+        "Periodic context Image; camera=front"
     )
 
 

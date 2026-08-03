@@ -185,7 +185,7 @@ class MotorEndpoint(rclpy.node.Node):
                 self.log_aad(
                     AnomalyMsg.ERROR,
                     f"Collision avoidance braking active: "
-                    f"distance={self.obstacle_distance:.2f}m, "
+                    f"object distance={self.obstacle_distance:.2f}m, "
                     f"{self._speed_context_for_log()}",
                 )
         else:
@@ -591,12 +591,12 @@ class MotorEndpoint(rclpy.node.Node):
             anomaly.node_name = self.get_name()
             anomaly.importance = importance
             anomaly.type = AnomalyMsg.TEXT
-            anomaly.msg = f"Received Motor Endpoint Info: {motor_endpoint_msg}"
+            anomaly.msg = f"Motor Endpoint Info: {motor_endpoint_msg}"
         else:
             anomaly.stamp = self.get_clock().now().to_msg()
             anomaly.node_name = self.get_name()
             anomaly.source = "motor_control"
-            anomaly.description = f"{importance}: Received Motor Endpoint Info: {motor_endpoint_msg}"
+            anomaly.description = f"{importance}: Motor Endpoint Info: {motor_endpoint_msg}"
             anomaly.topic_name = "/motor_endpoint"
             anomaly.data_type = "text"
             anomaly.data = motor_endpoint_msg.encode("utf-8")

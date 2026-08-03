@@ -194,11 +194,13 @@ class LidarObjectToObstacle(rclpy.node.Node):
             spatial_context = format_obstacle_context(
                 self.obstacles.obstacles,
                 self.obstacles.header.frame_id,
+                directional_labels=True,
             )
             severity = AnomalyMsg.INFO
             message = (
                 f"LiDAR obstacle converter published obstacles: "
-                f"count={obstacle_count}, {spatial_context}"
+                f"total_obstacle_count={obstacle_count}"
+                f"{f', {spatial_context}' if spatial_context else ''}"
             )
             if obstacle_count >= 5:
                 severity = AnomalyMsg.WARNING

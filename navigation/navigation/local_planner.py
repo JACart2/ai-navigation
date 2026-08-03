@@ -201,13 +201,13 @@ class LocalPlanner(rclpy.node.Node):
         )
         if msg.stop:
             self.anomaly_logging(
-                f"Collision avoidance stop active from {sender}: "
-                f"distance={msg.distance:.2f}m",
+                f"Collision avoidance: cart stopping, "
+                f"obstacle distance={msg.distance:.2f}m",
                 AnomalyMsg.ERROR,
             )
         else:
             self.anomaly_logging(
-                f"Collision avoidance stop cleared by {sender}",
+                "Collision avoidance: stop signal cleared",
                 AnomalyMsg.INFO,
             )
 
@@ -557,7 +557,7 @@ class LocalPlanner(rclpy.node.Node):
 
             if not self.eta_initial_report_sent:
                 self.anomaly_logging(
-                    f"ETA: {eta_msg.data}s at 0% complete",
+                    f"ETA: {eta_msg.data}s, 0% complete",
                     AnomalyMsg.INFO,
                 )
                 self.eta_initial_report_sent = True

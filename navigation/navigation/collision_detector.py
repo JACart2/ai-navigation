@@ -228,7 +228,7 @@ class CollisionDetector(rclpy.node.Node):
         self.prev_obstacle_speed = 0
         self.publish_speed_request(self.CRUISE_SPEED)
         self.anomaly_logging(
-            "Obstacle following ended; restored normal cruise speed",
+            "Restored normal cruise speed",
             AnomalyMsg.INFO,
         )
 
@@ -506,7 +506,7 @@ class CollisionDetector(rclpy.node.Node):
                 stop_msg.distance = -1.0
                 self.stop_pub.publish(stop_msg)
                 self.anomaly_logging(
-                    "Collision detector cleared stop request; path has been clear for 15 cycles",
+                    "Collision detector cleared stop request; path is clear for 0.50s",
                     AnomalyMsg.INFO,
                 )
                 self.potential_collision_active = False
@@ -581,8 +581,12 @@ class CollisionDetector(rclpy.node.Node):
             )
             severity = AnomalyMsg.INFO
             message = (
-                f"Obstacle stream update: count={obstacle_count}, "
-                f"{spatial_context}"
+                "Obstacle stream update: count=0"
+                if obstacle_count == 0
+                else (
+                    f"Obstacle stream update: total_obstacle_count={obstacle_count}, "
+                    f"{spatial_context}"
+                )
             )
             if obstacle_count >= 5:
                 severity = AnomalyMsg.WARNING

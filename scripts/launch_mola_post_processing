@@ -6,10 +6,11 @@ usage() {
 Usage:
   launch_mola_post_processing TEST_NAME [options]
 
-Runs mapping_instruction_manual_v6 post-processing steps 2.14 through 2.18:
+Runs mapping_instruction_manual_v7 post-processing steps 2.14 through 2.18:
   2.14 replay the bag through MOLA to generate an offline .simplemap
-  2.15 run loop closure on the .simplemap
-  2.15b rigidly level the loop-closed .simplemap
+  2.15a seed loop closure from user-identified overlap waypoint ranges
+  2.15b run narrow automatic retroactive loop closure
+  2.15c rigidly level the loop-closed .simplemap
   2.16 compute georeferencing metadata from GNSS observations
   2.17 build a georeferenced GICP localization .mm
   2.18 print final artifact paths and an optional viewing command
@@ -39,6 +40,20 @@ Options:
   --base-frame FRAME                MOLA base frame. Default: base_link
   --pipeline PATH                   Loop-closure pipeline YAML. Defaults to the
                                     final1 non-ground KISS+ICP submap pipeline.
+  --loop-start-times SEC:SEC        Absolute ROS timestamp range for the first
+                                    traversal, recorded during bag replay.
+  --loop-end-times SEC:SEC          Absolute ROS timestamp range for the final
+                                    traversal, recorded during bag replay.
+  --loop-start-keyframes A:B        Expert alternative: inclusive OFFLINE
+                                    SimpleMap keyframes for the first traversal.
+  --loop-end-keyframes A:B          Expert alternative for the final traversal.
+  --loop-traversal same|reverse     Direction of the final traversal relative
+                                    to the first. Default: reverse.
+  --loop-waypoint-pairs N           Seed pairs sampled across both ranges.
+                                    Default: 6.
+  --save-seed-loop-simplemap        Retain TEST_NAME_lc_seed.simplemap.
+                                    Seed/retroactive logs are always retained.
+  --legacy-auto-endpoint-loop       Use the v6 first/last-percentage workflow.
   --endpoint-window-percent PCT     Use first/last PCT of poses for automatic
                                     endpoint hints. Range: (0,5]. Default: 5.
   --endpoint-loop-pairs N           Automatic endpoint hint count. Default: 3.
@@ -65,8 +80,9 @@ Options:
   -h, --help                        Show this help.
 
 Examples:
-  scripts/launch_mola_post_processing test1
-  scripts/launch_mola_post_processing test1 --bag /root/dev_ws/bagfiles/test1
+  scripts/launch_mola_post_processing test1 \
+    --loop-start-keyframes 0:97 --loop-end-keyframes 1639:1757 \
+    --loop-traversal reverse
   scripts/launch_mola_post_processing test1 --skip-offline-map --allow-existing-output
 USAGE
 }
@@ -85,12 +101,29 @@ use_imu_roll_pitch=true
 use_imu_deskew=true
 gnss_topic="/fix"
 base_frame="base_link"
-pipeline="$ws_dir/maps/final1_v8_nonground_submap.yaml"
+pipeline="$script_dir/loop_closure_waypoint_retroactive.yaml"
 endpoint_pipeline_generator="$script_dir/generate_endpoint_lc_pipeline.sh"
+waypoint_pipeline_generator="$script_dir/generate_waypoint_lc_pipelines.sh"
 endpoint_window_percent="5.0"
 endpoint_loop_pairs="3"
 auto_endpoint_loop=true
+legacy_auto_endpoint_loop=false
 generated_endpoint_pipeline=""
+generated_waypoint_seed_pipeline=""
+generated_retroactive_pipeline=""
+loop_start_keyframes=""
+loop_end_keyframes=""
+loop_start_times=""
+loop_end_times=""
+loop_range_mode=""
+loop_traversal="reverse"
+loop_waypoint_pairs="6"
+loop_waypoint_simplemap=""
+save_seed_loop_simplemap=false
+seed_loop_simplemap_output=""
+seed_loop_is_temporary=false
+seed_loop_log=""
+retroactive_loop_log=""
 localization_pipeline="$ws_dir/maps/sm2mm_gicp_localmap.yaml"
 simplemap_output=""
 lc_simplemap_output=""
@@ -158,6 +191,38 @@ while [[ $# -gt 0 ]]; do
     --pipeline)
       pipeline="${2:?--pipeline requires a YAML path}"
       shift 2
+      ;;
+    --loop-start-times)
+      loop_start_times="${2:?--loop-start-times requires FIRST:LAST absolute ROS seconds}"
+      shift 2
+      ;;
+    --loop-end-times)
+      loop_end_times="${2:?--loop-end-times requires FIRST:LAST absolute ROS seconds}"
+      shift 2
+      ;;
+    --loop-start-keyframes)
+      loop_start_keyframes="${2:?--loop-start-keyframes requires FIRST:LAST}"
+      shift 2
+      ;;
+    --loop-end-keyframes)
+      loop_end_keyframes="${2:?--loop-end-keyframes requires FIRST:LAST}"
+      shift 2
+      ;;
+    --loop-traversal)
+      loop_traversal="${2:?--loop-traversal requires same or reverse}"
+      shift 2
+      ;;
+    --loop-waypoint-pairs)
+      loop_waypoint_pairs="${2:?--loop-waypoint-pairs requires a count}"
+      shift 2
+      ;;
+    --save-seed-loop-simplemap)
+      save_seed_loop_simplemap=true
+      shift
+      ;;
+    --legacy-auto-endpoint-loop)
+      legacy_auto_endpoint_loop=true
+      shift
       ;;
     --endpoint-window-percent)
       endpoint_window_percent="${2:?--endpoint-window-percent requires a percentage}"
@@ -254,6 +319,15 @@ fi
 bag_path="${bag_path:-$bag_dir/$test_name}"
 simplemap_output="${simplemap_output:-$maps_dir/${test_name}_offline.simplemap}"
 lc_simplemap_output="${lc_simplemap_output:-$maps_dir/${test_name}_lc.simplemap}"
+if [[ "$save_seed_loop_simplemap" == true ]]; then
+  seed_loop_simplemap_output="$maps_dir/${test_name}_lc_seed.simplemap"
+elif [[ "$dry_run" == true ]]; then
+  seed_loop_simplemap_output="/tmp/${test_name}.lc_seed.TEMPORARY.simplemap"
+  seed_loop_is_temporary=true
+else
+  seed_loop_simplemap_output="$(mktemp --suffix=.simplemap "/tmp/${test_name}.lc_seed.XXXXXX")"
+  seed_loop_is_temporary=true
+fi
 if [[ "$save_unleveled_simplemap" == true ]]; then
   if [[ "$lc_simplemap_output" == *.simplemap ]]; then
     lc_unleveled_simplemap_output="${lc_simplemap_output%.simplemap}_unleveled.simplemap"
@@ -279,6 +353,8 @@ if [[ -z "$georef_output" ]]; then
   fi
 fi
 georef_mm_output="${georef_mm_output:-$maps_dir/${test_name}_georef_localization.mm}"
+seed_loop_log="$maps_dir/${test_name}_lc_seed.log"
+retroactive_loop_log="$maps_dir/${test_name}_lc_retroactive.log"
 
 cleanup_temporary_artifacts() {
   if [[ "$georef_is_temporary" == true && "$dry_run" != true ]]; then
@@ -289,6 +365,15 @@ cleanup_temporary_artifacts() {
   fi
   if [[ -n "$generated_endpoint_pipeline" && "$dry_run" != true ]]; then
     rm -f -- "$generated_endpoint_pipeline"
+  fi
+  if [[ -n "$generated_waypoint_seed_pipeline" && "$dry_run" != true ]]; then
+    rm -f -- "$generated_waypoint_seed_pipeline"
+  fi
+  if [[ -n "$generated_retroactive_pipeline" && "$dry_run" != true ]]; then
+    rm -f -- "$generated_retroactive_pipeline"
+  fi
+  if [[ "$seed_loop_is_temporary" == true && "$dry_run" != true ]]; then
+    rm -f -- "$seed_loop_simplemap_output"
   fi
 }
 trap cleanup_temporary_artifacts EXIT
@@ -337,20 +422,64 @@ run_cmd() {
   "$@"
 }
 
+run_logged_cmd() {
+  local log_file="$1"
+  shift
+  echo
+  printf '+ '
+  printf '%q ' "$@"
+  printf ' 2>&1 | tee %q\n' "$log_file"
+  if [[ "$dry_run" == true ]]; then
+    return 0
+  fi
+  set +e
+  "$@" 2>&1 | tee "$log_file"
+  local command_status="${PIPESTATUS[0]}"
+  set -e
+  return "$command_status"
+}
+
 mkdir -p "$maps_dir"
 source_ros_setup
 
 require_file "$bag_path" "Bag input"
 if [[ "$skip_loop_closure" != true ]]; then
   require_file "$pipeline" "Loop-closure pipeline"
-  if [[ "$auto_endpoint_loop" == true ]]; then
+  if [[ "$legacy_auto_endpoint_loop" == true && "$auto_endpoint_loop" == true ]]; then
     require_file "$endpoint_pipeline_generator" "Endpoint pipeline generator"
+  elif [[ "$legacy_auto_endpoint_loop" != true ]]; then
+    require_file "$waypoint_pipeline_generator" "Waypoint pipeline generator"
+    if [[ -n "$loop_start_times" || -n "$loop_end_times" ]]; then
+      if [[ -z "$loop_start_times" || -z "$loop_end_times" || -n "$loop_start_keyframes" || -n "$loop_end_keyframes" ]]; then
+        echo "Provide both --loop-start-times and --loop-end-times, without keyframe ranges." >&2
+        exit 2
+      fi
+      loop_start_keyframes="$loop_start_times"
+      loop_end_keyframes="$loop_end_times"
+      loop_range_mode="timestamps"
+    elif [[ -n "$loop_start_keyframes" && -n "$loop_end_keyframes" ]]; then
+      loop_range_mode="keyframes"
+    else
+      echo "Waypoint loop closure requires either both replay timestamp ranges:" >&2
+      echo "  --loop-start-times FIRST:LAST --loop-end-times FIRST:LAST" >&2
+      echo "or both expert offline keyframe ranges:" >&2
+      echo "  --loop-start-keyframes FIRST:LAST --loop-end-keyframes FIRST:LAST" >&2
+      exit 2
+    fi
+    if [[ "$loop_traversal" != same && "$loop_traversal" != reverse ]]; then
+      echo "--loop-traversal must be same or reverse: $loop_traversal" >&2
+      exit 2
+    fi
+    if [[ ! "$loop_waypoint_pairs" =~ ^[0-9]+$ ]] || (( loop_waypoint_pairs < 2 )); then
+      echo "--loop-waypoint-pairs must be an integer of at least 2: $loop_waypoint_pairs" >&2
+      exit 2
+    fi
   fi
   if ! grep -q 'Frame-to-Frame Loop Closure' "$pipeline"; then
     echo "Loop-closure pipeline appears incompatible with this mola-sm-lc-cli:" >&2
     echo "  $pipeline" >&2
     echo "Expected a mola::FrameToFrameLoopClosure configuration." >&2
-    echo "Use --pipeline $ws_dir/maps/final1_v8_nonground_submap.yaml" >&2
+    echo "Use --pipeline $script_dir/loop_closure_waypoint_retroactive.yaml" >&2
     exit 1
   fi
 fi
@@ -359,15 +488,23 @@ if [[ "$skip_georef_mm" != true ]]; then
 fi
 
 check_output_path "$simplemap_output" "$([[ "$skip_offline_map" != true ]] && echo true || echo false)"
+check_output_path "$seed_loop_simplemap_output" "$([[ "$skip_loop_closure" != true && "$seed_loop_is_temporary" != true ]] && echo true || echo false)"
 check_output_path "$lc_unleveled_simplemap_output" "$([[ "$skip_loop_closure" != true && "$lc_unleveled_is_temporary" != true ]] && echo true || echo false)"
 check_output_path "$lc_simplemap_output" "$([[ "$skip_loop_closure" != true ]] && echo true || echo false)"
 check_output_path "$georef_output" "$([[ "$skip_georef" != true && "$georef_is_temporary" != true ]] && echo true || echo false)"
 check_output_path "$georef_mm_output" "$([[ "$skip_georef_mm" != true ]] && echo true || echo false)"
+check_output_path "$seed_loop_log" "$([[ "$skip_loop_closure" != true && "$legacy_auto_endpoint_loop" != true ]] && echo true || echo false)"
+check_output_path "$retroactive_loop_log" "$([[ "$skip_loop_closure" != true && "$legacy_auto_endpoint_loop" != true ]] && echo true || echo false)"
 
 echo "MOLA post-processing for test: $test_name"
 echo "Bag input: $bag_path"
 echo "Maps dir: $maps_dir"
 echo "Offline simplemap: $simplemap_output"
+echo "Seed loop-closed simplemap: $seed_loop_simplemap_output"
+echo "Retain seed loop-closed simplemap: $save_seed_loop_simplemap"
+if [[ "$legacy_auto_endpoint_loop" != true ]]; then
+  echo "Seed/retroactive logs: $seed_loop_log / $retroactive_loop_log"
+fi
 echo "Unleveled loop-closed simplemap: $lc_unleveled_simplemap_output"
 echo "Retain unleveled simplemap: $save_unleveled_simplemap"
 echo "Leveled loop-closed simplemap: $lc_simplemap_output"
@@ -375,14 +512,21 @@ echo "Georef metadata: $georef_output"
 echo "Retain standalone georef file: $save_georef_file"
 echo "Georeferenced localization mm: $georef_mm_output"
 echo "Localization sm2mm pipeline: $localization_pipeline"
-echo "Automatic endpoint loop constraints: $auto_endpoint_loop"
-if [[ "$auto_endpoint_loop" == true ]]; then
-  echo "Endpoint window/pairs: ${endpoint_window_percent}% / $endpoint_loop_pairs"
+echo "Waypoint two-pass loop closure: $([[ "$legacy_auto_endpoint_loop" == true ]] && echo false || echo true)"
+if [[ "$legacy_auto_endpoint_loop" != true ]]; then
+  echo "Overlap ranges: $loop_start_keyframes / $loop_end_keyframes"
+  echo "Overlap traversal/pairs: $loop_traversal / $loop_waypoint_pairs"
+  echo "Overlap range mode: $loop_range_mode"
+else
+  echo "Legacy automatic endpoint loop constraints: $auto_endpoint_loop"
+  if [[ "$auto_endpoint_loop" == true ]]; then
+    echo "Endpoint window/pairs: ${endpoint_window_percent}% / $endpoint_loop_pairs"
+  fi
 fi
 echo "Save loop-closure TUM/COV diagnostics: $save_trajectory_files"
 echo "Use IMU roll/pitch initialization: $use_imu_roll_pitch"
 echo "Use IMU deskew: $use_imu_deskew"
-echo "Loop closure: KISS-Matcher + non-ground ±5-keyframe submaps + ICP/GNC (GNSS disabled)"
+echo "Loop closure: waypoint seed + narrow retroactive KISS/ICP/GNC (GNSS disabled)"
 
 if [[ "$skip_offline_map" != true ]]; then
   echo
@@ -437,37 +581,113 @@ fi
 
 if [[ "$skip_loop_closure" != true ]]; then
   echo
-  echo "2.15 Run Loop Closure"
+  echo "2.15 Loop Closure"
   require_file "$simplemap_output" "Input simplemap for loop closure"
-  effective_pipeline="$pipeline"
-  if [[ "$auto_endpoint_loop" == true ]]; then
-    if [[ "$dry_run" == true ]]; then
-      generated_endpoint_pipeline="/tmp/${test_name}.endpoint_lc.TEMPORARY.yaml"
-    else
-      generated_endpoint_pipeline="$(mktemp --suffix=.yaml "/tmp/${test_name}.endpoint_lc.XXXXXX")"
-    fi
-    run_cmd "$endpoint_pipeline_generator" \
-      "$simplemap_output" "$pipeline" "$generated_endpoint_pipeline" \
-      "$endpoint_window_percent" "$endpoint_loop_pairs"
-    effective_pipeline="$generated_endpoint_pipeline"
-  fi
+
   export USE_GNSS=false
   export SAVE_3D_SCENES=false
   export SAVE_3D_SCENES_PER_ITER=false
   export SAVE_TRAJECTORY_FILES="$save_trajectory_files"
   export SAVE_TRAJECTORY_FILES_WITH_COV="$save_trajectory_files"
   export USE_KISS_MATCHER=true
-  export LC_SUBMAP_HALF_WINDOW=5
   export LC_REGISTRATION_REMOVE_GROUND=true
   export MP2P_ICP_LOG_FILES_DECIMATION=20
-  run_cmd mola-sm-lc-cli \
-    -i "$simplemap_output" \
-    -o "$lc_unleveled_simplemap_output" \
-    -p "$effective_pipeline" \
-    -a mola::FrameToFrameLoopClosure
+
+  if [[ "$legacy_auto_endpoint_loop" == true ]]; then
+    effective_pipeline="$pipeline"
+    if [[ "$auto_endpoint_loop" == true ]]; then
+      if [[ "$dry_run" == true ]]; then
+        generated_endpoint_pipeline="/tmp/${test_name}.endpoint_lc.TEMPORARY.yaml"
+      else
+        generated_endpoint_pipeline="$(mktemp --suffix=.yaml "/tmp/${test_name}.endpoint_lc.XXXXXX")"
+      fi
+      run_cmd "$endpoint_pipeline_generator" \
+        "$simplemap_output" "$pipeline" "$generated_endpoint_pipeline" \
+        "$endpoint_window_percent" "$endpoint_loop_pairs"
+      effective_pipeline="$generated_endpoint_pipeline"
+    fi
+    export LC_SUBMAP_HALF_WINDOW=5
+    run_cmd mola-sm-lc-cli \
+      -i "$simplemap_output" \
+      -o "$lc_unleveled_simplemap_output" \
+      -p "$effective_pipeline" \
+      -a mola::FrameToFrameLoopClosure
+  else
+    if [[ "$dry_run" == true ]]; then
+      generated_waypoint_seed_pipeline="/tmp/${test_name}.waypoint_seed.TEMPORARY.yaml"
+      generated_retroactive_pipeline="/tmp/${test_name}.retroactive.TEMPORARY.yaml"
+    else
+      generated_waypoint_seed_pipeline="$(mktemp --suffix=.yaml "/tmp/${test_name}.waypoint_seed.XXXXXX")"
+      generated_retroactive_pipeline="$(mktemp --suffix=.yaml "/tmp/${test_name}.retroactive.XXXXXX")"
+    fi
+    run_cmd "$waypoint_pipeline_generator" \
+      "$simplemap_output" "$pipeline" \
+      "$generated_waypoint_seed_pipeline" "$generated_retroactive_pipeline" \
+      "$loop_start_keyframes" "$loop_end_keyframes" \
+      "$loop_waypoint_pairs" "$loop_traversal" "$loop_range_mode"
+
+    # Pass 1 reproduces the f1.1.3 seed: broad non-ground submaps and six
+    # mutually consistent user-bounded overlap constraints.
+    export LC_SUBMAP_HALF_WINDOW=15
+    export LC_SUBMAP_HALF_LENGTH_M=0
+    export LC_REGISTRATION_GROUND_BAND=0.30
+    export LC_REGISTRATION_VOXEL_SIZE=0.35
+    export MIN_ICP_QUALITY=0
+    export MAX_LC_OPTIMIZATION_ROUNDS=0
+    export ASSUME_PLANAR_WORLD=false
+    export INPUT_ODOMETRY_NOISE_XYZ_PER_M=0.04
+    export INPUT_ODOMETRY_NOISE_ANG_DEG_PER_M=0.10
+    export MANUAL_HYPOTHESIS_MIN_INLIERS=4
+    export MANUAL_HYPOTHESIS_MAX_TRANSLATION_SPREAD=3.0
+    export MANUAL_HYPOTHESIS_MAX_ROTATION_SPREAD_DEG=6.0
+
+    echo
+    echo "2.15a Seed Closure From User Waypoints"
+    run_logged_cmd "$seed_loop_log" mola-sm-lc-cli \
+      -i "$simplemap_output" \
+      -o "$seed_loop_simplemap_output" \
+      -p "$generated_waypoint_seed_pipeline" \
+      -a mola::FrameToFrameLoopClosure
+
+    if [[ "$dry_run" != true ]]; then
+      require_file "$seed_loop_simplemap_output" "Seed loop-closed simplemap"
+      if ! grep -q 'Manual LC hypothesis .* accepted atomically' "$seed_loop_log" ||
+        grep -q 'Added 0 manual loop closure factor' "$seed_loop_log"; then
+        echo "Waypoint seed closure was not accepted; refusing retroactive closure." >&2
+        echo "Inspect: $seed_loop_log" >&2
+        exit 1
+      fi
+    fi
+
+    # Pass 2 reproduces f1.1.10: only nearby retroactive candidates are
+    # considered after the seed graph has brought revisited geometry together.
+    export LC_SUBMAP_HALF_WINDOW=10
+    export MIN_ICP_QUALITY=0
+    export MAX_LC_OPTIMIZATION_ROUNDS=3
+    export MAX_LC_CANDIDATES=20
+    export MIN_FRAMES_BETWEEN_LC=30
+    export MIN_LC_DISTANCE=0.25
+    export MAX_LC_DISTANCE=2.5
+    export LC_OPTIMIZE_EVERY_N=0
+
+    echo
+    echo "2.15b Narrow Automatic Retroactive Closure"
+    run_logged_cmd "$retroactive_loop_log" mola-sm-lc-cli \
+      -i "$seed_loop_simplemap_output" \
+      -o "$lc_unleveled_simplemap_output" \
+      -p "$generated_retroactive_pipeline" \
+      -a mola::FrameToFrameLoopClosure
+
+    if [[ "$dry_run" != true ]] &&
+      ! grep -Eq 'Total accepted loop closures: [1-9][0-9]*' "$retroactive_loop_log"; then
+      echo "Retroactive closure accepted no loops; refusing to level/georeference." >&2
+      echo "Inspect: $retroactive_loop_log" >&2
+      exit 1
+    fi
+  fi
 
   echo
-  echo "2.15b Level Loop-Closed Simplemap"
+  echo "2.15c Level Loop-Closed Simplemap"
   if [[ "$dry_run" != true ]]; then
     require_file "$lc_unleveled_simplemap_output" "Unleveled loop-closed simplemap"
   fi
@@ -497,12 +717,21 @@ fi
 echo
 echo "2.18 Post-Processing Outputs"
 echo "Offline simplemap:       $simplemap_output"
+if [[ "$save_seed_loop_simplemap" == true ]]; then
+  echo "Seed LC simplemap:        $seed_loop_simplemap_output"
+else
+  echo "Seed LC simplemap:        not retained (temporary retroactive input)"
+fi
 if [[ "$save_unleveled_simplemap" == true ]]; then
   echo "Unleveled LC simplemap:  $lc_unleveled_simplemap_output"
 else
   echo "Unleveled LC simplemap:  not retained (temporary leveling input)"
 fi
 echo "Leveled LC simplemap:    $lc_simplemap_output"
+if [[ "$legacy_auto_endpoint_loop" != true ]]; then
+  echo "Seed LC log:              $seed_loop_log"
+  echo "Retroactive LC log:       $retroactive_loop_log"
+fi
 if [[ "$save_georef_file" == true ]]; then
   echo "Georef metadata:         $georef_output"
 else

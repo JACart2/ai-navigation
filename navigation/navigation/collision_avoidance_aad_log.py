@@ -2,7 +2,6 @@ import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 import threading
-from queue import Queue
 import json
 import re
 
@@ -22,7 +21,20 @@ class CollisionAvoidanceAADLog(Node):
     def __init__(self):
         super().__init__('collision_avoidance_aad_log')
 
-        self.IMG_PUBLISH_PERIOD = 5
+        self.CAMERA_FRAME_MAX_AGE_SECONDS = 2.0
+        self.CAMERA_SOURCES = ("front", "rear")
+        self.enable_camera_capture = bool(
+            self.declare_parameter("enable_camera_capture", True).value
+        )
+        self.camera_publish_period_seconds = max(
+            0.2,
+            float(
+                self.declare_parameter(
+                    "camera_publish_period_seconds",
+                    1.0,
+                ).value
+            ),
+        )
         self.MOVING_LOG_PERIOD = 5
         self.MOVING_SPEED_THRESHOLD_MPS = 0.1
         self.LOCALIZATION_HEALTH_LOG_PERIOD = 5
@@ -39,19 +51,22 @@ class CollisionAvoidanceAADLog(Node):
             depth=1  # Only keep latest frame
         )
 
-        self.camera_0_sub = self.create_subscription(
-            Image,
-            '/zed_front/zed_node_0/rgb/color/rect/image',
-            self.camera_callback,
-            camera_qos
-        )
+        self.camera_0_sub = None
+        self.camera_1_sub = None
+        if self.enable_camera_capture:
+            self.camera_0_sub = self.create_subscription(
+                Image,
+                '/zed_front/zed_node_0/rgb/color/rect/image',
+                lambda msg: self.camera_callback("front", msg),
+                camera_qos
+            )
 
-        self.camera_1_sub = self.create_subscription(
-            Image,
-            '/zed_rear/zed_node_1/rgb/color/rect/image',
-            self.camera_callback,
-            camera_qos
-        )
+            self.camera_1_sub = self.create_subscription(
+                Image,
+                '/zed_rear/zed_node_1/rgb/color/rect/image',
+                lambda msg: self.camera_callback("rear", msg),
+                camera_qos
+            )
 
         self.speed_sub = self.create_subscription(
             Float32,
@@ -91,13 +106,15 @@ class CollisionAvoidanceAADLog(Node):
         self.get_logger().info("Creating publishers")
 
         # --- Publisher ---
-        self.anomaly_camera_pub = self.create_publisher(
-            AnomalyMsg,
-            '/ai_anomaly_logging',
-            camera_qos
-        )
+        self.anomaly_camera_pub = None
+        if self.enable_camera_capture:
+            self.anomaly_camera_pub = self.create_publisher(
+                AnomalyMsg,
+                '/ai_anomaly_logging',
+                camera_qos
+            )
 
-                # --- Publisher ---
+        # Text anomaly publisher remains active when camera capture is off.
         self.anomaly_log_pub = self.create_publisher(
             AnomalyMsg,
             '/ai_anomaly_logging',
@@ -105,63 +122,88 @@ class CollisionAvoidanceAADLog(Node):
         )
         self.get_logger().info("Finished creating publishers")
 
-        self.last_pub_time = self.get_clock().now()
         self.last_moving_pub_time = self.get_clock().now()
         self.last_localization_health_pub_time = self.get_clock().now()
         self.last_localization_health_signature = ""
         self.last_speed = 0.0
-
-        # --- Async processing setup ---
-        self.image_queue = Queue(maxsize=1)  # Only keep latest image
-        self.processing_thread = threading.Thread(target=self._process_images, daemon=True)
-        self.processing_thread.start()
-
-    def _process_images(self):
-        """Background thread that processes images without blocking the callback"""
-        while rclpy.ok():
-            try:
-                # Block until an image is available
-                img_msg = self.image_queue.get(timeout=0.1)
-                
-                now = self.get_clock().now()
-                
-                # Only process if enough time has passed
-                if (now - self.last_pub_time).nanoseconds > self.IMG_PUBLISH_PERIOD * 1e9:
-                    self.anomaly_logging(
-                        "Camera frame received.",
-                        AnomalyMsg.INFO,
-                        header=img_msg.header,
-                        msg_type=AnomalyMsg.IMAGE,
-                        image=img_msg,
-                        publisher=self.anomaly_camera_pub,
-                    )
-                    self.last_pub_time = now
-                    
-            except:
-                # Queue timeout - continue waiting
-                pass
+        self._camera_lock = threading.Lock()
+        self._latest_camera_frames = {}
+        self._last_stop_state = False
+        self.camera_publish_timer = None
+        if self.enable_camera_capture:
+            self.camera_publish_timer = self.create_timer(
+                self.camera_publish_period_seconds,
+                self._publish_periodic_camera_snapshot,
+            )
+        self.get_logger().info(
+            "AAD camera capture is "
+            f"{'enabled' if self.enable_camera_capture else 'disabled'}; "
+            f"publish_period={self.camera_publish_period_seconds:.2f}s."
+        )
 
     # --- Callbacks ---
 
-    def camera_callback(self, img_msg: Image):
-        """Callback returns immediately - just queues the image"""
-        try:
-            # Non-blocking: put latest image, discard old one if queue full
-            self.image_queue.put_nowait(img_msg)
-        except:
-            # Queue full - that's okay, we'll process the next frame
-            pass
+    def camera_callback(self, source: str, img_msg: Image):
+        """Keep only the latest in-memory frame for each camera."""
+        received_ns = self.get_clock().now().nanoseconds
+        with self._camera_lock:
+            self._latest_camera_frames[source] = (received_ns, img_msg)
+
+    def _publish_stop_camera_snapshot(self):
+        """Publish at most one fresh frame per camera for a new stop event."""
+        CollisionAvoidanceAADLog._publish_camera_snapshot(self, "stop event")
+
+    def _publish_periodic_camera_snapshot(self):
+        """Refresh AAD's bounded pre-event camera history."""
+        CollisionAvoidanceAADLog._publish_camera_snapshot(self, "periodic context")
+
+    def _publish_camera_snapshot(self, reason):
+        """Publish at most one fresh frame per configured camera."""
+        if not self.enable_camera_capture or self.anomaly_camera_pub is None:
+            return
+
+        now_ns = self.get_clock().now().nanoseconds
+        max_age_ns = int(self.CAMERA_FRAME_MAX_AGE_SECONDS * 1e9)
+
+        with self._camera_lock:
+            snapshot = [
+                (source, cached)
+                for source in self.CAMERA_SOURCES
+                if (cached := self._latest_camera_frames.get(source)) is not None
+                and (now_ns - cached[0]) <= max_age_ns
+            ]
+
+        for source, (_, img_msg) in snapshot:
+            event_header = Header()
+            event_header.stamp = img_msg.header.stamp
+            event_header.frame_id = f"camera:{source}"
+            self.anomaly_logging(
+                f"Camera frame captured for {reason}; camera={source}",
+                AnomalyMsg.INFO,
+                header=event_header,
+                msg_type=AnomalyMsg.IMAGE,
+                image=img_msg,
+                publisher=self.anomaly_camera_pub,
+            )
 
     def stop_callback(self, stop_msg: Stop):
-        if stop_msg.stop:
+        new_stop_state = bool(stop_msg.stop)
+        if new_stop_state == self._last_stop_state:
+            return
+
+        self._last_stop_state = new_stop_state
+        sender = str(stop_msg.sender_id.data).strip()
+
+        if new_stop_state:
+            self._publish_stop_camera_snapshot()
             self.anomaly_logging(
-                f"Stop signal received from {stop_msg.sender_id.data}; distance={stop_msg.distance:.2f}",
-                AnomalyMsg.WARNING,
+                f"Stop signal received from {sender}; distance={stop_msg.distance:.2f}",
+                AnomalyMsg.ERROR,
                 header=stop_msg.header,
             )
         else:
             self.anomaly_logging(
-                f"Stop signal cleared by {stop_msg.sender_id.data}",
+                f"Stop signal cleared by {sender}",
                 AnomalyMsg.INFO,
                 header=stop_msg.header,
             )
@@ -260,7 +302,7 @@ class CollisionAvoidanceAADLog(Node):
 
     def _format_legacy_localization_health(self, status, values):
         fields = [
-            f"source=legacy_alignment_status",
+            "source=legacy_alignment_status",
             f"status={status.message}",
             f"level={status.level}",
             f"fitness={values.get('fitness_score', 'unknown')}",
@@ -434,7 +476,7 @@ def main(args=None):
     rclpy.init(args=args)
     node = CollisionAvoidanceAADLog()
     
-    # Use MultiThreadedExecutor to allow background thread to work
+    # Use multiple callbacks without allowing image processing to block logs.
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
     

@@ -38,6 +38,7 @@ import struct
 MOVING = 0
 BRAKING = 1
 STOPPED = 2
+DEFAULT_AUTONOMOUS_THROTTLE_DIVIDER = 1.8
 
 
 
@@ -73,6 +74,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.vel_planned = None
         self.angle_planned = None
         self.vel_curr = 0
+        self.last_vel_curr_received_monotonic = None
 
         # Serial vars
         self.serial_connected = False
@@ -83,6 +85,9 @@ class MotorEndpoint(rclpy.node.Node):
         self.last_reported_manual_control = None
         self.heartbeat_was_unhealthy = False
         self.serial_retry_reported = False
+        self.last_arduino_throttle_command = 0
+        self.last_arduino_brake_command = 0
+        self.collision_braking_active = False
 
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
@@ -155,11 +160,21 @@ class MotorEndpoint(rclpy.node.Node):
             # indicates an obstacle
             self.obstacle_distance = abs(self.vel_planned)
             self.vel_planned = 0
-            self.log_aad(
-                AnomalyMsg.WARNING,
-                f"Obstacle braking command received: distance={self.obstacle_distance:.2f}m",
-            )
+            if not self.collision_braking_active:
+                self.collision_braking_active = True
+                self.log_aad(
+                    AnomalyMsg.ERROR,
+                    f"Collision avoidance braking active: "
+                    f"distance={self.obstacle_distance:.2f}m, "
+                    f"{self._speed_context_for_log()}",
+                )
         else:
+            if self.collision_braking_active:
+                self.log_aad(
+                    AnomalyMsg.INFO,
+                    "Collision avoidance braking cleared",
+                )
+            self.collision_braking_active = False
             # reset obstacle distance and brake time
             self.obstacle_distance = -1
             self.brake_time_used = 0
@@ -186,6 +201,27 @@ class MotorEndpoint(rclpy.node.Node):
         estimate is coming from a ROS2 node called speed_node.py."""
         if vel_twist != None:
             self.vel_curr = vel_twist.twist.linear.x
+            self.last_vel_curr_received_monotonic = time.monotonic()
+
+    def _speed_context_for_log(self):
+        """Describe measured motion and the exact latest Arduino command."""
+        if self.last_vel_curr_received_monotonic is None:
+            measured_speed = "estimated_cart_speed=unavailable"
+        else:
+            measurement_age = max(
+                0.0,
+                time.monotonic() - self.last_vel_curr_received_monotonic,
+            )
+            measured_speed = (
+                f"estimated_cart_speed={self.vel_curr:.2f}m/s, "
+                f"speed_source=/estimate_twist, "
+                f"speed_measurement_age={measurement_age:.2f}s"
+            )
+        return (
+            f"{measured_speed}, "
+            f"last_arduino_throttle={self.last_arduino_throttle_command}/255, "
+            f"last_arduino_brake={self.last_arduino_brake_command}/255"
+        )
 
     def manual_callback(self, msg):
         """Callback that sets manual control bool to indicate teleop vs auto control."""
@@ -441,6 +477,17 @@ class MotorEndpoint(rclpy.node.Node):
 
     def send_packet(self, throttle, brake, steer_angle):
         """This method is used to send instructions to the arduino that was connected in init."""
+
+        # Preserve the exact effective values for diagnostics. Throttle is an
+        # unsigned controller command, not a physical speed or km/h value.
+        self.last_arduino_throttle_command = max(
+            0,
+            min(255, int(abs(throttle))),
+        )
+        self.last_arduino_brake_command = max(
+            0,
+            min(255, int(brake)),
+        )
 
         # This is a buffer used in pack_into essentially making 5 empty bytes
         data = bytearray(b"\x00" * 5)

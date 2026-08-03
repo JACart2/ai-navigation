@@ -49,6 +49,10 @@ def generate_launch_description():
         "motor_port": LaunchConfiguration("motor_port"),
         "motor_baudrate": LaunchConfiguration("motor_baudrate"),
         "enable_aad": LaunchConfiguration("enable_aad"),
+        "enable_aad_camera_capture": LaunchConfiguration(
+            "enable_aad_camera_capture"
+        ),
+        "start_cameras": LaunchConfiguration("start_cameras"),
         "graph_dir": LaunchConfiguration("graph_dir"),
         "graph_file": LaunchConfiguration("graph_file"),
         "graph_coordinate_format": LaunchConfiguration("graph_coordinate_format"),
@@ -133,13 +137,26 @@ def generate_launch_description():
                 description="Enable anomaly logging nodes.",
             ),
             DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Optionally subscribe to raw cameras for bounded AAD "
+                    "stop-event context."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Optionally start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
                 "graph_dir",
                 default_value=navigation_maps_dir,
                 description="Directory containing navigation graph files.",
             ),
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="main_shift3_gps.gml",
+                default_value="main_shift3_gps_final_candidate_v8.gml",
                 description="Navigation graph file.",
             ),
             DeclareLaunchArgument(
@@ -154,7 +171,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "calibration_config_file",
-                default_value="with_gps2_adjusted_route.yaml",
+                default_value="with_gps2_route_calibration.yaml",
                 description="Landmark calibration YAML file.",
             ),
             DeclareLaunchArgument(

@@ -7,7 +7,7 @@ This includes launching:
 
 ## MOLA auto-localization supervisor
 
-`mola_auto_localization_supervisor` is a conservative LiDAR-only helper for the
+`mola_auto_localization_supervisor` is a conservative LiDAR-first helper for the
 MOLA stack. It watches `/velodyne_points`, `/lidar_odometry/pose`, optional
 `/pcl_pose` visibility, and `/mola_diagnostics/lidar_odom/status`. When enabled,
 it can request `/relocalize_near_pose` after LiDAR is healthy on startup and
@@ -34,6 +34,56 @@ scripts/launch_james_mola_stack.sh enable_mola_auto_localization:=true
 ```
 
 Tune thresholds in:
+
+```text
+cart_control/localization_launch/param/mola_auto_localization_supervisor.yaml
+```
+
+### GPS-assisted recovery
+
+The supervisor can optionally use `/fix` as an independent recovery hint after
+MOLA localization is suspected lost. GPS is not fused continuously and does not
+override a healthy LiDAR localization; it only seeds `/relocalize_near_pose`
+with a broad map-frame pose so LiDAR can confirm the final alignment. When
+`enable_gps_recovery:=true`, the live autonomy launch also starts the Garmin
+GPS 18x driver so `/fix` is available during the run.
+
+By default, GPS recovery uses `enable_gps_auto_anchor:=true`. That means it
+does not require manually typing the map GPS origin. Instead, after MOLA is
+healthy, it averages several good GPS fixes, pairs them with the current MOLA
+pose, then waits for healthy motion to estimate `gps_map_yaw_from_enu`.
+
+```bash
+scripts/launch_james_mola_stack.sh \
+  enable_mola_auto_localization:=true \
+  enable_gps_recovery:=true
+```
+
+Manual origin/yaw inputs are still available as a fallback if auto-anchor is
+disabled or unavailable:
+
+```bash
+scripts/launch_james_mola_stack.sh \
+  enable_mola_auto_localization:=true \
+  enable_gps_recovery:=true \
+  enable_gps_auto_anchor:=false \
+  gps_map_origin_lat:=38.433825 \
+  gps_map_origin_lon:=-78.862175 \
+  gps_map_origin_alt:=422.1 \
+  gps_map_yaw_from_enu:=0.0
+```
+
+Optional GPS driver launch arguments are `gps_port:=/dev/ttyACM0`,
+`gps_baud:=4800`, and `gps_frame:=gps`.
+
+`gps_map_yaw_from_enu` is radians. It rotates local ENU GPS coordinates into the
+MOLA map frame. Auto-anchor learns this value after the cart drives far enough
+while MOLA localization is healthy.
+
+GPS recovery rejects stale fixes, no-fix statuses, and fixes whose estimated
+xy standard deviation is above `gps_max_xy_std`. Auto-anchor also requires
+`gps_auto_anchor_min_samples` recent good fixes and `gps_auto_anchor_min_move_m`
+of healthy motion before it can use GPS for recovery. Tune the GPS thresholds in:
 
 ```text
 cart_control/localization_launch/param/mola_auto_localization_supervisor.yaml

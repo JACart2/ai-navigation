@@ -49,6 +49,7 @@ motor_forwarded=false
 motor_port_forwarded=false
 motor_baudrate_forwarded=false
 cart_config_path=""
+cart_config_path_forwarded=false
 map_file=""
 launch_args=()
 
@@ -148,6 +149,7 @@ while [[ $# -gt 0 ]]; do
     cart_config_path:=*)
       cart_config_path="${1#cart_config_path:=}"
       launch_args+=("$1")
+      cart_config_path_forwarded=true
       shift
       ;;
     map_file:=*)
@@ -204,12 +206,69 @@ if [[ "$cart_forwarded" != true ]]; then
   launch_args=("cart:=$cart" "${launch_args[@]}")
 fi
 
+# Paths under the host workspace are mounted at /root/dev_ws inside the
+# backend container. Keep host paths for validation/config parsing, but
+# forward their container equivalents to ros2 launch.
+host_dev_ws="$(cd "$repo_root/../.." && pwd)"
+container_dev_ws="/root/dev_ws"
+
+to_host_path() {
+  local input_path="$1"
+
+  if [[ "$input_path" == "$container_dev_ws" ]]; then
+    printf '%s\n' "$host_dev_ws"
+  elif [[ "$input_path" == "$container_dev_ws/"* ]]; then
+    printf '%s/%s\n'       "$host_dev_ws"       "${input_path#"$container_dev_ws/"}"
+  else
+    printf '%s\n' "$input_path"
+  fi
+}
+
+to_container_path() {
+  local input_path="$1"
+
+  if [[ "$input_path" == "$container_dev_ws" ]] ||
+     [[ "$input_path" == "$container_dev_ws/"* ]]; then
+    printf '%s\n' "$input_path"
+  elif [[ "$input_path" == "$host_dev_ws" ]]; then
+    printf '%s\n' "$container_dev_ws"
+  elif [[ "$input_path" == "$host_dev_ws/"* ]]; then
+    printf '%s/%s\n'       "$container_dev_ws"       "${input_path#"$host_dev_ws/"}"
+  else
+    printf '%s\n' "$input_path"
+  fi
+}
+
+set_launch_arg() {
+  local key="$1"
+  local value="$2"
+  local index
+
+  for index in "${!launch_args[@]}"; do
+    if [[ "${launch_args[$index]}" == "$key:="* ]]; then
+      launch_args[$index]="$key:=$value"
+      return
+    fi
+  done
+
+  launch_args=("$key:=$value" "${launch_args[@]}")
+}
+
 if [[ -z "$cart_config_path" ]]; then
   cart_config_path="$repo_root/cart_control/cart_launch/config/cart_${cart}.yaml"
+else
+  cart_config_path="$(to_host_path "$cart_config_path")"
+fi
+
+if [[ ! -f "$cart_config_path" ]]; then
+  echo "Cart configuration not found: $cart_config_path" >&2
+  exit 1
 fi
 
 if [[ -z "$map_file" ]]; then
-  map_file="/root/dev_ws/maps/with_gps2.mm"
+  map_file="$host_dev_ws/maps/with_gps2.mm"
+else
+  map_file="$(to_host_path "$map_file")"
 fi
 
 if [[ ! -f "$map_file" ]]; then
@@ -219,11 +278,18 @@ MOLA map file not found: $map_file
 Provide a valid map with:
   scripts/launch_mola_stack.sh --cart $cart map_file:=/path/to/map.mm
 
-Or place the expected map at:
+Expected host map location:
+  $host_dev_ws/maps/with_gps2.mm
+
+Expected container map location:
   /root/dev_ws/maps/with_gps2.mm
 EOF
   exit 1
 fi
+
+set_launch_arg   "cart_config_path"   "$(to_container_path "$cart_config_path")"
+
+set_launch_arg   "map_file"   "$(to_container_path "$map_file")"
 
 if [[ -f "$cart_config_path" ]]; then
   if [[ "$motor_port_forwarded" != true ]]; then
@@ -326,7 +392,7 @@ cleanup_old_autolaunch_children() {
 
         if (pid == 1 || pid == shell_pid || ppid == shell_pid) next
 
-        if (cmd ~ /ros2 launch cart_launch mola_autonomy\.launch\.py/) print pid
+        if (cmd ~ /ros2 launch cart_launch (autonomous_launcher|mola_autonomy)\.launch\.py/) print pid
         else if (cmd ~ /ros2 launch rosbridge_server/) print pid
         else if (cmd ~ /mola-cli/) print pid
         else if (cmd ~ /mola_bridge_ros2/) print pid
@@ -419,7 +485,7 @@ run_mola_launch_with_cleanup() {
 
   trap cleanup_after_launch EXIT INT TERM
 
-  ros2 launch cart_launch mola_autonomy.launch.py "$@" &
+  ros2 launch cart_launch autonomous_launcher.launch.py "$@" &
   launch_pid=$!
   wait "$launch_pid"
   status=$?

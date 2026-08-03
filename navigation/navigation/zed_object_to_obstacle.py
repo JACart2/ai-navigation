@@ -14,6 +14,7 @@ import rclpy.node
 from std_msgs.msg import Header
 from zed_msgs.msg import ObjectsStamped
 from anomaly_msg.msg import AnomalyMsg
+from navigation.obstacle_log_context import format_obstacle_context
 
 # Display purposes
 from visualization_msgs.msg import Marker
@@ -86,11 +87,21 @@ class ZedObstacleConverter(rclpy.node.Node):
         self.obstacle_pub.publish(obstacles)
         object_count = len(obstacles.obstacles)
         if object_count != self.last_object_count:
+            spatial_context = format_obstacle_context(
+                obstacles.obstacles,
+                obstacles.header.frame_id,
+            )
             severity = AnomalyMsg.INFO
-            message = f"ZED obstacle converter published object obstacles: count={object_count}"
+            message = (
+                f"ZED obstacle converter published object obstacles: "
+                f"count={object_count}, {spatial_context}"
+            )
             if object_count >= 5:
                 severity = AnomalyMsg.WARNING
-                message = f"ZED obstacle converter sees dense object field: count={object_count}"
+                message = (
+                    f"ZED obstacle converter sees dense object field: "
+                    f"count={object_count}, {spatial_context}"
+                )
             self.anomaly_logging(message, severity)
             self.last_object_count = object_count
         self.get_logger().info("published the obstacles")

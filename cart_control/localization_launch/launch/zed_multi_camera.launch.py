@@ -94,8 +94,9 @@ def launch_setup(context, *args, **kwargs):
                 text='The `cam_serials` or `cam_ids` array argument must match the size of the `cam_names` array argument.'))
         ]
     
-    # ROS 2 Component Container
-    container_name = 'zed_multi_container'
+    # Each camera gets its own component container. A ZED component exits when its
+    # camera cannot be opened; sharing one process allowed a rear-camera failure to
+    # take down the healthy front camera as well.
     distro = os.environ['ROS_DISTRO']
     if distro == 'foxy':
         # Foxy does not support the isolated mode
@@ -103,23 +104,24 @@ def launch_setup(context, *args, **kwargs):
     else:
         container_exec='component_container_isolated'
     
-    info = '* Starting Composable node container: /' + namespace_val + '/' + container_name
-    actions.append(LogInfo(msg=TextSubstitution(text=info)))
-
-    zed_container = ComposableNodeContainer(
-        name=container_name,
-        namespace=namespace_val,
-        package='rclcpp_components',
-        executable=container_exec,
-        arguments=['--ros-args', '--log-level', 'info'],
-        output='screen',
-    )
-    actions.append(zed_container)
-
     # Set the first camera idx
     cam_idx = 0
 
     for name in names_arr:
+        container_name = name + '_container'
+        info = '* Starting Composable node container: /' + namespace_val + '/' + container_name
+        actions.append(LogInfo(msg=TextSubstitution(text=info)))
+        actions.append(
+            ComposableNodeContainer(
+                name=container_name,
+                namespace=namespace_val,
+                package='rclcpp_components',
+                executable=container_exec,
+                arguments=['--ros-args', '--log-level', 'info'],
+                output='screen',
+            )
+        )
+
         model = models_arr[cam_idx]
         if len(serials_arr) == num_cams:
             serial = serials_arr[cam_idx]
@@ -171,7 +173,9 @@ def launch_setup(context, *args, **kwargs):
                 'camera_id': id,
                 'publish_tf': publish_tf,
                 'publish_map_tf': publish_map_tf,
-                'publish_imu_tf': 'false',
+                # MOLA needs the camera IMU frame in TF, even though we still
+                # suppress ZED odom/map TF publication.
+                'publish_imu_tf': 'true',
                 'namespace': namespace_val,
                 'node_name': node_name,
                 "camera_flip": str(camera_flip).lower(),

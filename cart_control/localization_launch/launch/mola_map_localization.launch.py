@@ -109,35 +109,6 @@ def _make_lidar_static_tf(context, *args, **kwargs):
     ]
 
 
-def _make_rviz(context, *args, **kwargs):
-    use_rviz = LaunchConfiguration("use_rviz").perform(context).strip().lower()
-    if use_rviz not in ("1", "true", "yes", "on"):
-        return []
-
-    rviz_config = (
-        "/opt/ros/jazzy/share/mola_lidar_odometry/rviz2/lidar-odometry.rviz"
-    )
-    if not os.path.exists(rviz_config):
-        return [
-            LogInfo(
-                msg=(
-                    f"MOLA RViz config not found: {rviz_config}; "
-                    "skipping RViz."
-                )
-            )
-        ]
-
-    return [
-        Node(
-            package="rviz2",
-            executable="rviz2",
-            name="rviz2",
-            arguments=["-d", rviz_config],
-            output="screen",
-        )
-    ]
-
-
 def generate_launch_description():
     map_file = LaunchConfiguration("map_file")
     lidar_topic = LaunchConfiguration("lidar_topic")
@@ -155,6 +126,7 @@ def generate_launch_description():
             "start_active": "True",
             "publish_localization_following_rep105": "False",
             "start_mapping_enabled": "False",
+            "use_rviz": LaunchConfiguration("use_rviz"),
             "lidar_topic_name": lidar_topic,
             "mola_tf_base_link": base_frame,
             "lidar_scan_validity_minimum_point_count": "20",
@@ -246,6 +218,5 @@ def generate_launch_description():
             OpaqueFunction(function=_make_lidar_static_tf),
             mola_lidar_odometry_launch,
             odom_tf_node,
-            OpaqueFunction(function=_make_rviz),
         ]
     )

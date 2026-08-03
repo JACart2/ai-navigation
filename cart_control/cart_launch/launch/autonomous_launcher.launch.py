@@ -8,6 +8,10 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
+    default_cart = os.environ.get("CART_ID", "james").strip().lower()
+    if default_cart not in {"james", "madison"}:
+        default_cart = "james"
+
     mola_autonomy_launch = os.path.join(
         get_package_share_directory("cart_launch"),
         "launch",
@@ -17,11 +21,16 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument(
+                "cart",
+                default_value=default_cart,
+                description="Cart-specific sensor configuration: james or madison.",
+            ),
+            DeclareLaunchArgument(
                 "cart_config_path",
                 default_value=os.path.join(
                     get_package_share_directory("cart_launch"),
                     "config",
-                    "cart_james.yaml",
+                    f"cart_{default_cart}.yaml",
                 ),
                 description="Path to cart-specific YAML configuration.",
             ),
@@ -29,6 +38,19 @@ def generate_launch_description():
                 "enable_aad",
                 default_value="true",
                 description="Enable anomaly logging.",
+            ),
+            DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Optionally subscribe to raw cameras for bounded AAD "
+                    "stop-event context."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Optionally start the front and rear ZED camera nodes.",
             ),
             DeclareLaunchArgument(
                 "launch_aad_node",
@@ -41,9 +63,13 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(mola_autonomy_launch),
                 launch_arguments={
-                    "cart": "james",
+                    "cart": LaunchConfiguration("cart"),
                     "cart_config_path": LaunchConfiguration("cart_config_path"),
                     "enable_aad": LaunchConfiguration("enable_aad"),
+                    "enable_aad_camera_capture": LaunchConfiguration(
+                        "enable_aad_camera_capture"
+                    ),
+                    "start_cameras": LaunchConfiguration("start_cameras"),
                     "launch_aad_node": LaunchConfiguration("launch_aad_node"),
                 }.items(),
             ),

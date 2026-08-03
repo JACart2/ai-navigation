@@ -6,7 +6,9 @@ import json
 import re
 
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import TwistStamped
 from std_msgs.msg import Float32, String
+from motor_control_interface.msg import VelAngle
 from navigation_interface.msg import Stop
 from std_msgs.msg import Header
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, qos_profile_sensor_data
@@ -36,7 +38,6 @@ class CollisionAvoidanceAADLog(Node):
             ),
         )
         self.MOVING_LOG_PERIOD = 5
-        self.MOVING_SPEED_THRESHOLD_MPS = 0.1
         self.LOCALIZATION_HEALTH_LOG_PERIOD = 5
         self.MOLA_BAD_ICP_QUALITY_THRESHOLD = 0.2
         self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD = 0.4
@@ -76,9 +77,16 @@ class CollisionAvoidanceAADLog(Node):
         )
 
         self.estimated_speed_sub = self.create_subscription(
-            Float32,
-            '/estimated_vel_mps',
+            TwistStamped,
+            '/estimate_twist',
             self.estimated_speed_callback,
+            10
+        )
+
+        self.commanded_speed_sub = self.create_subscription(
+            VelAngle,
+            '/nav_cmd',
+            self.commanded_speed_callback,
             10
         )
 
@@ -126,6 +134,7 @@ class CollisionAvoidanceAADLog(Node):
         self.last_localization_health_pub_time = self.get_clock().now()
         self.last_localization_health_signature = ""
         self.last_speed = 0.0
+        self.last_commanded_speed_mps = None
         self._camera_lock = threading.Lock()
         self._latest_camera_frames = {}
         self._last_stop_state = False
@@ -218,18 +227,36 @@ class CollisionAvoidanceAADLog(Node):
                 frame_id="collision_avoidance_frame",
             )
 
-    def estimated_speed_callback(self, msg: Float32):
-        if abs(msg.data) < self.MOVING_SPEED_THRESHOLD_MPS:
-            return
+    def commanded_speed_callback(self, msg: VelAngle):
+        # Negative /nav_cmd velocities encode obstacle distance, not reverse speed.
+        commanded_speed_mps = max(0.0, msg.vel)
+        if (
+            self.last_commanded_speed_mps is None
+            or abs(self.last_commanded_speed_mps - commanded_speed_mps) > 0.1
+        ):
+            self.last_commanded_speed_mps = commanded_speed_mps
+            self.anomaly_logging(
+                f"Motor commanded speed changed to {commanded_speed_mps:.2f} m/s",
+                AnomalyMsg.INFO,
+                frame_id="collision_avoidance_frame",
+            )
 
+    def estimated_speed_callback(self, msg: TwistStamped):
+        speed_mps = msg.twist.linear.x
         now = self.get_clock().now()
         if (
             now - self.last_moving_pub_time
         ).nanoseconds <= self.MOVING_LOG_PERIOD * 1e9:
             return
 
+        commanded_speed = (
+            "unavailable"
+            if self.last_commanded_speed_mps is None
+            else f"{self.last_commanded_speed_mps:.2f} m/s"
+        )
         self.anomaly_logging(
-            f"The cart is moving at {msg.data:.2f} m/s",
+            f"Speed status: commanded={commanded_speed}, "
+            f"estimated={speed_mps:.2f} m/s",
             AnomalyMsg.INFO,
             frame_id="collision_avoidance_frame",
         )

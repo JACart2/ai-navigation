@@ -218,7 +218,7 @@ class CollisionAvoidanceAADLog(Node):
             self.last_speed = msg.data
 
             self.anomaly_logging(
-                f"Planner target speed changed to {msg.data:.2f} km/h",
+                f"Planner target speed changed to {msg.data:.2f} m/s",
                 AnomalyMsg.INFO,
                 frame_id="collision_avoidance_frame",
             )

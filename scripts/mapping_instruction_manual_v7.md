@@ -1,4 +1,4 @@
-# Mapping System Instruction Manual V6
+# Mapping System Instruction Manual V7
 
 This manual describes the map generation process, which has been simplified to two scripts:
 
@@ -61,7 +61,32 @@ During the run, confirm that the live map continues growing and that the map doe
 
 The live mapper is a quality monitor. The offline map rebuilt from the bag is the authoritative result because it uses full 6-DoF terrain motion, IMU roll/pitch initialization, IMU deskew, and gravity correction.
 
-Stop in the same place as you started, and make sure that the start and end of the route have predictable overlap, such as a long, straight corridor. For east_campus_mola_georef.mm, I used the astronomy park hedges as my area of overlap.  
+Stop in the same place as you started, and make sure that the start and end of the route have predictable overlap, such as a long, straight corridor. For east_campus_mola_georef.mm, I used the astronomy park hedges as my area of overlap.
+
+Do not use live-map keyframe IDs as loop-closure anchors. The live metric map
+and the offline SimpleMap create keyframes independently, and SimpleMap output
+is intentionally disabled during collection.
+
+After collection, replay the bag with ROS simulation time enabled and identify
+the overlap visually. In another terminal, monitor `/clock`:
+
+```bash
+ros2 topic echo /clock --field clock
+```
+
+Record four absolute ROS timestamps in decimal seconds:
+
+1. when the first traversal enters the overlap;
+2. when the first traversal leaves the overlap;
+3. when the final traversal enters the overlap;
+4. when the final traversal leaves the overlap.
+
+Convert a displayed `{sec, nanosec}` value to `sec.nanosec`, retaining nine
+digits after the decimal point. Also record whether the final traversal follows
+the overlap in the `same` or `reverse` direction. Use a long, distinctive area
+such as the astronomy-park hedges rather than a single pose. These timestamps
+come from the bag clock and therefore remain valid regardless of either
+mapper's keyframe creation rate.
 
 When finished, press `Ctrl+C` once (Pressing more than once will terminate the saving process) in the collection terminal. The bag file should be saved in:
 
@@ -79,21 +104,40 @@ It should contain `/velodyne_points`, `/zed_front/zed_node_0/imu/data`, `/tf`, `
 
 ### 4. Run Post-Processing
 
-Run the complete offline workflow:
+Run the complete offline workflow, substituting the four recorded ROS timestamps:
 
 ```bash
-./src/ai-navigation/scripts/launch_mola_post_processing "$TEST_NAME"
+./scripts/launch_mola_post_processing "$TEST_NAME" \
+  --loop-start-times START_ENTER:START_LEAVE \
+  --loop-end-times END_ENTER:END_LEAVE \
+  --loop-traversal reverse
 ```
+
+Use `--loop-traversal same` when both passes were driven in the same direction.
+For the final1 reproduction test, the known authoritative offline control ranges are:
+
+```bash
+./scripts/launch_mola_post_processing final1_v7 \
+  --bag /root/dev_ws/bagfiles/final1 \
+  --loop-start-keyframes 0:97 \
+  --loop-end-keyframes 1639:1757 \
+  --loop-traversal reverse
+```
+
+The `final1` command uses expert offline keyframe ranges only because those
+ranges have already been validated against the preserved authoritative offline
+map. New recordings should use replay timestamps.
 
 This performs, in order:
 
-1. Terrain-aware offline mapping from the recorded bag. This generates a non loop-closed simplemap.
-2. Generate endpoint loop candidates from the first and last 5% of keyframe poses.
-3. KISS-Matcher initialization using non-ground, 11-keyframe submaps. This creates a coarse relation between candidate submaps.
-4. ICP refines the matches, GNC rejects outliers, and GNSS remains disabled during loop closure.
-5. Rigid leveling of the loop-closed SimpleMap.
-6. Add GNSS georeferencing.
-7. Structured GICP localization `.mm` generation.
+1. Terrain-aware offline mapping from the recorded bag.
+2. Resolve the two bag-time overlap ranges to offline SimpleMap keyframes.
+3. Sample six ordered seed pairs across the overlap ranges.
+4. Run broad non-ground KISS+ICP registration on ±15-keyframe submaps; require at least four mutually consistent registrations and optimize with GNC.
+5. Run the f1.1.10 narrow retroactive pass: 0.25–2.5 m candidates, ±10-keyframe non-ground submaps, 20 candidates per round, and three rounds.
+6. Rigidly level the final loop-closed SimpleMap.
+7. Fit GNSS georeferencing.
+8. Generate the structured GICP localization `.mm`.
 
 Large bags can take significant time and memory. Messages saying the desired real-time rate was not achieved are expected during offline processing and do not mean the map failed.
 
@@ -111,8 +155,10 @@ The default outputs are:
 
 - The Bag: The raw data useful for producing all other outputs starting from step 4. 
 - `TEST_NAME_offline.simplemap`: The source map.
-- `TEST_NAME_lc.simplemap`: The loop-closed and leveled source map.
+- `TEST_NAME_lc.simplemap`: The two-pass loop-closed and rigidly leveled source map.
 - `TEST_NAME_georef_localization.mm`: The structured live-localization map with georeferencing.
+- `TEST_NAME_lc_seed.log`: Seed registration, atomic-consensus, and GNC record.
+- `TEST_NAME_lc_retroactive.log`: Automatic candidate and final GNC record.
 
 ### 6. Inspect The Result
 
@@ -256,8 +302,15 @@ Input, sensor, and pipeline selection:
 | `--imu-topic TOPIC` | `/zed_front/zed_node_0/imu/data` | IMU topic used for offline initialization and deskew. |
 | `--gnss-topic TOPIC` | `/fix` | GNSS observations retained for georeferencing. |
 | `--base-frame FRAME` | `base_link` | Offline MOLA vehicle frame. |
-| `--pipeline PATH` | `maps/final1_v8_nonground_submap.yaml` | Loop-closure configuration and manual overlap hints. Replace/review it for a different route. |
-| `--endpoint-window-percent PCT` | `5.0` | Restricts automatic hints to the first and last PCT of keyframe poses; maximum 5%. |
+| `--pipeline PATH` | `scripts/loop_closure_waypoint_retroactive.yaml` | Base KISS+ICP configuration. Waypoint and retroactive temporary pipelines are generated from it. |
+| `--loop-start-times SEC:SEC` | required for new bags | Absolute bag/ROS timestamps for entering and leaving the first overlap traversal. |
+| `--loop-end-times SEC:SEC` | required for new bags | Absolute bag/ROS timestamps for entering and leaving the final overlap traversal. |
+| `--loop-start-keyframes A:B` | expert alternative | Inclusive keyframes from the authoritative offline SimpleMap; never use live metric-map IDs. |
+| `--loop-end-keyframes A:B` | expert alternative | Corresponding final-traversal offline keyframe range. |
+| `--loop-traversal same|reverse` | `reverse` | Describes how the two ranges correspond in travel order. |
+| `--loop-waypoint-pairs N` | `6` | Number of ordered seed registrations sampled across the ranges. |
+| `--legacy-auto-endpoint-loop` | off | Explicitly selects the older v6 first/last-percentage workflow. |
+| `--endpoint-window-percent PCT` | `5.0` | Legacy mode only: first/last pose percentage. |
 | `--endpoint-loop-pairs N` | `3` | Number of early samples paired with their nearest late-window poses. |
 | `--no-auto-endpoint-loop` | off | Uses the manual constraints already present in `--pipeline`. |
 | `--localization-pipeline PATH` | `maps/sm2mm_gicp_localmap.yaml` | Converts the final SimpleMap into the structured localization map. Normally leave unchanged. |
@@ -276,7 +329,8 @@ Output-path and retention settings:
 | `--simplemap-output PATH` | `TEST_NAME_offline.simplemap` | Offline map before loop closure. |
 | `--lc-simplemap-output PATH` | `TEST_NAME_lc.simplemap` | Final loop-closed and leveled SimpleMap. |
 | `--georef-mm-output PATH` | `TEST_NAME_georef_localization.mm` | Final live-localization metric map with embedded georeferencing. |
-| `--save-unleveled-simplemap` | off | Retains the otherwise temporary pre-leveling SimpleMap. |
+| `--save-seed-loop-simplemap` | off | Retains the otherwise temporary output of the first waypoint-seed pass. Seed and retroactive text logs are always retained. |
+| `--save-unleveled-simplemap` | off | Retains the otherwise temporary output of the retroactive pass before leveling. |
 | `--save-georef-file` | off | Retains the otherwise temporary `.georef` sidecar. |
 | `--georef-output PATH` | temporary | Selects and retains an explicit `.georef` path. |
 | `--save-trajectory-files` | off | Enables diagnostic TUM trajectories and `.cov` sidecars. |
@@ -296,76 +350,58 @@ Stage controls:
 
 The script applies these mapping decisions automatically:
 
-- Offline keyframes are retained after approximately 1 meter or 20 degrees.
-- Local-map updates occur after approximately 0.25 meter or 5 degrees.
-- Offline mapping allows full 6-DoF terrain motion; planar enforcement is disabled.
-- IMU roll/pitch initialization, IMU deskew, and gravity correction are enabled by default.
-- Three endpoint hints are generated from the first/last 5% pose windows. They are candidates, never forced inliers.
-- Loop closure uses KISS-Matcher followed by ICP on non-ground submaps containing the center keyframe plus five neighboring keyframes on each side.
-- GNSS is disabled inside geometric loop closure so GPS does not distort scan registration; GNSS is fitted afterward for global placement.
-- GNC robust optimization decides which candidate loop constraints remain inliers.
-- Loop-closure logs are decimated by 20; large 3D scenes and TUM/COV files are disabled by default.
-- The loop-closed map is rigidly leveled before georeferencing and localization-map conversion.
-- Localization conversion keeps up to 10,000 points per 1 m keyframe with a 0.15 m adaptive voxel filter. Temporary point layers are cleared after every frame.
-- The standalone `.georef` and unleveled SimpleMap are temporary unless their retention flags are supplied.
-
-Use script options instead of manually exporting replacements unless deliberately
-testing a new configuration. Record overrides with the bag and resulting maps.
+- Offline mapping allows full 6-DoF terrain motion with IMU initialization, gravity correction, and IMU deskew.
+- Operator-selected bag timestamps are resolved to the nearest authoritative offline SimpleMap keyframes.
+- Six seed pairs are sampled in travel order across the user-bounded overlap; reverse traversal reverses the first range before pairing.
+- Seed registration uses KISS-Matcher plus ICP on non-ground ±15-keyframe submaps.
+- At least four seed registrations must succeed, and their corrections must agree within 3 m and 6 degrees before the hypothesis is accepted.
+- The seed graph uses 0.04 m/m translational and 0.10 degree/m angular odometry uncertainty.
+- The retroactive pass considers only 0.25–2.5 m candidates, evaluates 20 per round for three rounds, and uses ±10-keyframe non-ground submaps.
+- GNSS and planar-world constraints remain disabled during both geometric loop-closure passes.
+- The current loop-closure build reports zero ICP quality for otherwise converged KISS+ICP registrations, so the reproduced f1.1.10 workflow uses transform consensus and GNC instead of that broken scalar gate.
+- The final loop-closed map is rigidly leveled before GNSS fitting and localization-map conversion.
+- Temporary seed, unleveled, and georeference artifacts are removed unless their save options are supplied.
 
 
-### 4 Automatic endpoint loop-closure configuration
+### 4 Waypoint-guided two-pass loop closure
 
-The default base pipeline is:
+The default v7 workflow does not guess overlap from the first and last five
+percent of a drifted trajectory. The operator records bag timestamps at the start and end of both
+traversals of a recognizable overlap area. Post-processing samples ordered
+pairs inside those ranges and lets KISS+ICP estimate the actual six-degree-of-
+freedom transformations.
 
-```text
-/root/dev_ws/maps/final1_v8_nonground_submap.yaml
+Ranges must be written in the order each traversal was driven. For a reverse
+return through a hedge corridor, use `--loop-traversal reverse`; the first range
+is paired from its last keyframe toward its first while the final range is
+paired from first toward last.
+
+Before accepting the seed, verify the terminal reports:
+
+- six waypoint registrations attempted;
+- at least four succeeded;
+- the atomic hypothesis was accepted;
+- GNC retained a coherent set of seed factors.
+
+The second pass should report nearby automatic candidates and a final GNC
+inlier/outlier count. A zero-factor seed, rejected atomic hypothesis, or zero
+automatic candidates is not a successful reproduction. Post-processing now
+stops before leveling/georeferencing in each of those cases. Inspect
+`TEST_NAME_lc_seed.log` and `TEST_NAME_lc_retroactive.log`.
+
+To inspect intermediate maps, add:
+
+```bash
+--save-seed-loop-simplemap --save-unleveled-simplemap --save-trajectory-files
 ```
 
-The filename is historical; the hard-coded `final1` timestamps are not reused
-for new maps. During each run, post-processing exports the new SimpleMap's
-keyframe poses and creates a temporary pipeline configuration:
-
-1. It limits each endpoint search window to the first and last 5% of keyframes.
-2. It samples three early keyframes evenly across the first window.
-3. It pairs each one with the spatially nearest keyframe in the last window,
-   according to the preliminary trajectory.
-4. Around both keyframes it constructs non-ground submaps from the center frame
-   plus five adjacent frames on each side.
-5. KISS-Matcher estimates a coarse alignment, ICP refines it, and GNC rejects
-   inconsistent loop factors.
-
-Here, “5% of points” means 5% of the stored keyframe poses, not 5% of the
-individual LiDAR returns. Generated constraints use `trust_as_inlier: false`;
-they are candidates that registration must validate, not commands that force
-the selected poses to become equal.
-
-Change the endpoint window or number of pairs with:
+The older v6 endpoint-percentage workflow remains available for comparison:
 
 ```bash
 ./scripts/launch_mola_post_processing "$TEST_NAME" \
-  --endpoint-window-percent 3 \
-  --endpoint-loop-pairs 3
+  --legacy-auto-endpoint-loop
 ```
 
-The endpoint percentage must be greater than zero and no more than five. A
-smaller value narrows the search closer to the recording endpoints. This
-automation assumes that the final part of the route revisits geometry mapped
-near the beginning. It cannot manufacture a valid closure when the two windows
-do not contain overlapping, distinctive geometry.
+It is not recommended for production because nearest poses in a drifted
+trajectory are not reliable physical correspondences.
 
-For a route that does not return to its starting area—or when known overlap
-occurs elsewhere—disable automatic endpoint selection and supply deliberate
-manual constraints:
-
-```bash
-./scripts/launch_mola_post_processing "$TEST_NAME" \
-  --pipeline /path/to/loop_closure.yaml \
-  --no-auto-endpoint-loop
-```
-
-Inspect all available options or preview commands without running them:
-
-```bash
-./scripts/launch_mola_post_processing --help
-./scripts/launch_mola_post_processing "$TEST_NAME" --dry-run
-```

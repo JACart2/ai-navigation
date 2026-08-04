@@ -67,6 +67,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.state = STOPPED
         self.obstacle_distance = -1
         self.brake_time_used = 0
+        self.full_stop_count = 0
         self.brake = 0
         self.stopping_time = 0
         self.vel = 0
@@ -91,10 +92,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
         self.declare_parameter("manual_control", False)
-        self.declare_parameter(
-            "autonomous_throttle_divider",
-            DEFAULT_AUTONOMOUS_THROTTLE_DIVIDER,
-        )
+        self.declare_parameter("autonomous_mps_to_controller_units", 50.0)
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -105,13 +103,11 @@ class MotorEndpoint(rclpy.node.Node):
         self.manual_control = (
             self.get_parameter("manual_control").get_parameter_value().bool_value
         )  # Sets the cart to use teleop control logic instead of autonomous control
-        self.autonomous_throttle_divider = (
-            self.get_parameter("autonomous_throttle_divider")
+        self.autonomous_mps_to_controller_units = (
+            self.get_parameter("autonomous_mps_to_controller_units")
             .get_parameter_value()
             .double_value
         )
-
-
         # Sets up publishing to /ai_anomaly_logging
         if self.AAD_LOGGING_ENABLED:
             self.aad_pub = self.create_publisher(
@@ -119,23 +115,7 @@ class MotorEndpoint(rclpy.node.Node):
                 "/ai_anomaly_logging",
                 10)
 
-        # Need to sleep after first connection to let serial establish
-        try:
-            self.arduino_ser = sr.Serial(
-                self.ARDUINO_PORT, baudrate=self.BAUDRATE, write_timeout=0, timeout=0.01
-            )
-            time.sleep(2)
-            self.serial_connected = True
-            self.serial_retry_reported = False
-            self.log_header("CONNECTED TO ARDUINO")
-
-            self.log_aad(AnomalyMsg.INFO, "CONNECTED TO ARDUINO")
-                
-        except Exception as e:
-            self.log_header("MOTOR ENDPOINT: " + str(e))
-            self.serial_connected = False
-            
-            self.log_aad(AnomalyMsg.ERROR, "MOTOR ENDPOINT: " + str(e))
+        self.connect_arduino(initial_connection=True)
 
         # ROS2 SUBSCRIBERS
 
@@ -272,7 +252,7 @@ class MotorEndpoint(rclpy.node.Node):
         )
         self.last_reported_state = self.state
 
-    def connect_arduino(self):
+    def connect_arduino(self, initial_connection=False):
         """Simple method for retrying/trying serial connection."""
         was_connected = self.serial_connected
         try:
@@ -282,9 +262,15 @@ class MotorEndpoint(rclpy.node.Node):
                 write_timeout=0,
                 timeout=0.01,
             )
+            if initial_connection:
+                # Give the serial device time to finish its initial setup.
+                time.sleep(2)
             self.serial_connected = True
             self.serial_retry_reported = False
-            if not was_connected:
+            if initial_connection:
+                self.log_header("CONNECTED TO ARDUINO")
+                self.log_aad(AnomalyMsg.INFO, "CONNECTED TO ARDUINO")
+            elif not was_connected:
                 self.log_aad(AnomalyMsg.INFO, "Arduino serial connection restored")
         except Exception as e:
             self.log_header("MOTOR ENDPOINT: " + str(e))
@@ -295,6 +281,39 @@ class MotorEndpoint(rclpy.node.Node):
             )
             
             self.serial_connected = False
+
+    def speed_to_controller_units(self, speed_mps, multiplier):
+        """Convert an m/s request to the Arduino's signed controller range."""
+        controller_units = speed_mps * multiplier
+        controller_units = max(-254, min(254, controller_units))
+        if controller_units < 0:
+            message = "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!"
+            self.log_header(message)
+            self.log_aad(AnomalyMsg.ERROR, message)
+        return controller_units
+
+    def steering_to_controller_units(self, angle):
+        """Convert a steering request in degrees to the Arduino's 0-100 range."""
+        angle = max(-40, min(40, angle))
+        return 100 - int(((angle + self.STEERING_TOLERANCE) / 90) * 100)
+
+    def calculate_comfort_brake(self):
+        """Advance and return the comfortable-stop brake ramp."""
+        self.brake_time_used += 1.0 / self.NODE_RATE
+        brake_time = self.COMFORT_STOP_DIST - (1.0 / self.NODE_RATE)
+        return (0.1) * ((2550) ** (self.brake_time_used / brake_time))
+
+    def apply_brake_rate(self, brake_rate):
+        """Apply a brake ramp value and finish the stop once braking settles."""
+        if brake_rate >= 255:
+            self.full_stop_count += 1
+
+        self.brake = float(min(255, math.ceil(brake_rate)))
+        if self.brake >= 255 and self.full_stop_count > 10:
+            self.state = STOPPED
+            self.report_state_change()
+            self.brake_time_used = 0
+            self.full_stop_count = 0
             
     def timer_callback(self):
         """Main loop timer for updating motor's instructions."""
@@ -383,31 +402,14 @@ class MotorEndpoint(rclpy.node.Node):
         """
 
         if self.new_vel:
-            self.vel_cart_units = self.vel_planned
-            self.new_vel = False
-
-            # The first time we get a new target velocity we must convert it for the arduino.
-            # May need to get a better estimate later on.
-            self.vel_cart_units *= (
-                50  # Rough conversion from m/s to cart controller units
+            self.vel_cart_units = self.speed_to_controller_units(
+                self.vel_planned, 50
             )
-
-            if self.vel_cart_units > 254:
-                self.vel_cart_units = 254
-            if self.vel_cart_units < -254:
-                self.vel_cart_units = -254
-            if self.vel_cart_units < 0:
-                self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
-                
-                self.log_aad(AnomalyMsg.ERROR, "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
+            self.new_vel = False
 
         target_speed = int(self.vel_cart_units)  # float64
 
-        # Adjusts the target_angle range from (-40 <-> 40) to (0 <-> 100)
-        angle_planned = max(-40, min(40, self.angle_planned))
-        target_angle = 100 - int(
-            ((angle_planned + self.STEERING_TOLERANCE) / 90) * 100
-        )
+        target_angle = self.steering_to_controller_units(self.angle_planned)
 
         if self.state == STOPPED:
             self.brake = 0
@@ -415,26 +417,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         elif self.state == BRAKING:
 
-            # Comfortable stop, no obstacle/deadline given
-            self.brake_time_used += 1.0 / self.NODE_RATE  # 1 sec / rate per sec (10)
-            brake_time = self.COMFORT_STOP_DIST - (
-                1.0 / self.NODE_RATE
-            )  # Decrease by one node rate initially to account for rounding
-
-            brake_rate = (0.1) * ((2550) ** (self.brake_time_used / brake_time))
-
-            if brake_rate >= 255:
-                self.full_stop_count += 1
-
-            self.brake = float(min(255, math.ceil(brake_rate)))
-            if (
-                self.brake >= 255 and self.full_stop_count > 10
-            ):  # We have reached maximum braking!
-                self.state = STOPPED
-                self.report_state_change()
-                # Reset brake time used
-                self.brake_time_used = 0
-                self.full_stop_count = 0
+            self.apply_brake_rate(self.calculate_comfort_brake())
 
         # Should not be needed, accounts for invalid braking
         if self.brake < 0:
@@ -446,42 +429,19 @@ class MotorEndpoint(rclpy.node.Node):
         As opposed to manual endpoint this is used for autonomous driving"""
         if self.new_vel:
 
-            self.vel_cart_units = self.vel_planned
-            self.vel_curr_cart_units = self.vel_curr
+            self.vel_cart_units = self.speed_to_controller_units(
+                self.vel_planned, self.autonomous_mps_to_controller_units
+            )
+            self.vel_curr_cart_units = min(254, self.vel_curr * 50)
             self.new_vel = False
 
             # The first time we get a new target velocity we must convert it for the arduino.
             # May need to get a better estimate later on.
-            self.vel_cart_units *= (
-                50  # Rough conversion from m/s to cart controller units
-            )
-
-            self.vel_curr_cart_units *= (
-                50  # Rough conversion from m/s to cart controller units
-            )
-
-            # Planned velocity checks
-            if self.vel_cart_units > 254:
-                self.vel_cart_units = 254
-            if self.vel_cart_units < -254:
-                self.vel_cart_units = -254
-
-            # Current velocity checks
-            if self.vel_curr_cart_units > 254:
-                self.vel_curr_cart_units = 254
-            if self.vel_cart_units < 0:
-                self.log_header("NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
-                
-                self.log_aad(AnomalyMsg.ERROR, "NEGATIVE VELOCITY REQUESTED FOR THE MOTOR ENDPOINT!")
                     
         target_speed = int(self.vel_cart_units)  # float64
 
         # Adjust the target_angle range from (-40 <-> 40) to (0 <-> 100)
-        angle_planned = max(-40, min(40, self.angle_planned))
-
-        target_angle = 100 - int(
-            ((angle_planned + self.STEERING_TOLERANCE) / 90) * 100
-        )
+        target_angle = self.steering_to_controller_units(self.angle_planned)
 
         if self.state == STOPPED:
             self.brake = 0
@@ -507,37 +467,13 @@ class MotorEndpoint(rclpy.node.Node):
                     (2550) ** (self.brake_time_used / obstacle_brake_time)
                 )
 
-                if brake_rate >= 255:
-                    self.full_stop_count += 1
             else:
                 # Comfortable stop, no obstacle/deadline given
-                self.brake_time_used += (
-                    1.0 / self.NODE_RATE
-                )  # 1 sec / rate per sec (10)
-                brake_time = self.COMFORT_STOP_DIST - (
-                    1.0 / self.NODE_RATE
-                )  # We decrease by one node rate initially to account for rounding
+                brake_rate = self.calculate_comfort_brake()
 
-                brake_rate = (0.1) * ((2550) ** (self.brake_time_used / brake_time))
+            self.apply_brake_rate(brake_rate)
 
-                if brake_rate >= 255:
-                    self.full_stop_count += 1
-
-            self.brake = float(min(255, math.ceil(brake_rate)))
-            if (
-                self.brake >= 255 and self.full_stop_count > 10
-            ):  # We have reached maximum braking!
-                self.state = STOPPED
-                self.report_state_change()
-                # Reset brake time used
-                self.brake_time_used = 0
-                self.full_stop_count = 0
-
-        self.send_packet(
-            target_speed / self.autonomous_throttle_divider,
-            int(self.brake),
-            target_angle,
-        )
+        self.send_packet(target_speed, int(self.brake), target_angle)
 
     def send_packet(self, throttle, brake, steer_angle):
         """This method is used to send instructions to the arduino that was connected in init."""
@@ -582,6 +518,9 @@ class MotorEndpoint(rclpy.node.Node):
     # This is for publishing to anomaly logging
     def log_aad(self, importance: int, motor_endpoint_msg: str):
         """Publish motor endpoint info to anomaly logging."""
+        if not self.AAD_LOGGING_ENABLED:
+            return
+
         anomaly = AnomalyMsg()
 
         if LEGACY_ANOMALY_MSG:

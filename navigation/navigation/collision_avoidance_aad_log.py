@@ -179,7 +179,7 @@ class CollisionAvoidanceAADLog(Node):
             event_header.frame_id = f"camera:{source}"
             camera_name = "passenger" if source == "rear" else source
             if reason == "periodic context":
-                message = f"Periodic context Image; camera={camera_name}"
+                message = f"Periodic context image; camera={camera_name}"
             else:
                 message = f"Camera frame captured for {reason}; camera={camera_name}"
             self.anomaly_logging(

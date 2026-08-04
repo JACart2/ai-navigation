@@ -206,7 +206,7 @@ class LidarObjectToObstacle(rclpy.node.Node):
                 severity = AnomalyMsg.WARNING
                 message = (
                     f"LiDAR obstacle converter sees dense obstacle field: "
-                    f"count={obstacle_count}, {spatial_context}"
+                    f"total_obstacle_count={obstacle_count}, {spatial_context}"
                 )
             self.anomaly_logging(message, severity)
             self.last_obstacle_count = obstacle_count

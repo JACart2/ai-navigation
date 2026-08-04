@@ -6,7 +6,7 @@ import json
 import re
 
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32, String
+from std_msgs.msg import String
 from navigation_interface.msg import Stop
 from std_msgs.msg import Header
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, qos_profile_sensor_data
@@ -35,8 +35,6 @@ class CollisionAvoidanceAADLog(Node):
                 ).value
             ),
         )
-        self.MOVING_LOG_PERIOD = 5
-        self.MOVING_SPEED_THRESHOLD_MPS = 0.1
         self.LOCALIZATION_HEALTH_LOG_PERIOD = 5
         self.MOLA_BAD_ICP_QUALITY_THRESHOLD = 0.2
         self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD = 0.4
@@ -67,20 +65,6 @@ class CollisionAvoidanceAADLog(Node):
                 lambda msg: self.camera_callback("rear", msg),
                 camera_qos
             )
-
-        self.speed_sub = self.create_subscription(
-            Float32,
-            '/speed',
-            self.speed_callback,
-            10
-        )
-
-        self.estimated_speed_sub = self.create_subscription(
-            Float32,
-            '/estimated_vel_mps',
-            self.estimated_speed_callback,
-            10
-        )
 
         self.stop_sub = self.create_subscription(
             Stop,
@@ -122,10 +106,8 @@ class CollisionAvoidanceAADLog(Node):
         )
         self.get_logger().info("Finished creating publishers")
 
-        self.last_moving_pub_time = self.get_clock().now()
         self.last_localization_health_pub_time = self.get_clock().now()
         self.last_localization_health_signature = ""
-        self.last_speed = 0.0
         self._camera_lock = threading.Lock()
         self._latest_camera_frames = {}
         self._last_stop_state = False
@@ -212,33 +194,6 @@ class CollisionAvoidanceAADLog(Node):
                 AnomalyMsg.INFO,
                 header=stop_msg.header,
             )
-
-    def speed_callback(self, msg: Float32):
-        if abs(self.last_speed - msg.data) > 0.1:
-            self.last_speed = msg.data
-
-            self.anomaly_logging(
-                f"Planner target speed changed to {msg.data:.2f} m/s",
-                AnomalyMsg.INFO,
-                frame_id="collision_avoidance_frame",
-            )
-
-    def estimated_speed_callback(self, msg: Float32):
-        if abs(msg.data) < self.MOVING_SPEED_THRESHOLD_MPS:
-            return
-
-        now = self.get_clock().now()
-        if (
-            now - self.last_moving_pub_time
-        ).nanoseconds <= self.MOVING_LOG_PERIOD * 1e9:
-            return
-
-        self.anomaly_logging(
-            f"The cart is moving at {msg.data:.2f} m/s",
-            AnomalyMsg.INFO,
-            frame_id="collision_avoidance_frame",
-        )
-        self.last_moving_pub_time = now
 
     def localization_health_callback(self, msg: DiagnosticArray):
         if not msg.status:
@@ -452,6 +407,8 @@ class CollisionAvoidanceAADLog(Node):
         frame_id="collision_avoidance_frame",
         msg_type=AnomalyMsg.TEXT,
         image=None,
+        data_type="",
+        data=None,
         publisher=None,
     ):
         anomaly = AnomalyMsg()
@@ -470,6 +427,10 @@ class CollisionAvoidanceAADLog(Node):
         anomaly.msg = message
         if image is not None:
             anomaly.image = image
+        if data_type:
+            anomaly.data_type = data_type
+        if data is not None:
+            anomaly.data = list(data)
 
         (publisher or self.anomaly_log_pub).publish(anomaly)
     

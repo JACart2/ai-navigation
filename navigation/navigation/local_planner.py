@@ -63,6 +63,7 @@ class LocalPlanner(rclpy.node.Node):
         )
 
         self.cur_speed = 0  # Another estimate of speed used for eta calculations
+        self.estimated_speed_mps = None
 
         self.anomaly_detection_enabled = True
 
@@ -170,6 +171,11 @@ class LocalPlanner(rclpy.node.Node):
         # Calculate ETA
         self.eta_timer = self.create_timer(1, self.calc_eta)
 
+        # Periodic speed-status logging for anomaly detection.
+        self.speed_status_timer = self.create_timer(
+            10, self.publish_speed_status
+        )
+
         # Main loop
         self.timer = self.create_timer(0.05, self.timer_cb)
 
@@ -214,12 +220,28 @@ class LocalPlanner(rclpy.node.Node):
     def tar_speed_cb(self, msg):
         self.tar_speed = msg.data
         self.log(f"Speed changed to {self.tar_speed:.2f} m/s")
+        self.publish_speed_status()
 
     def speed_cb(self, msg):
+        self.estimated_speed_mps = msg.data
         if msg.data < 1.0:
             self.cur_speed = 1.8  # Magic number :)
         else:  # Rolling average for speed estimates, to smooth the changes
             self.cur_speed = 0.8 * self.cur_speed + 0.2 * msg.data
+
+    def publish_speed_status(self):
+        estimated_speed = (
+            self.estimated_speed_mps if self.estimated_speed_mps is not None else self.cur_speed
+        )
+        estimated_text = (
+            "unavailable"
+            if estimated_speed is None
+            else f"{estimated_speed:.2f} m/s"
+        )
+        self.anomaly_logging(
+            f"Speed status: set={self.tar_speed:.2f} m/s, estimated={estimated_text}",
+            AnomalyMsg.INFO,
+        )
 
     def global_path_cb(self, msg):
         """This gets the whole path from global planner

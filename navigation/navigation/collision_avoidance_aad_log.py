@@ -184,13 +184,14 @@ class CollisionAvoidanceAADLog(Node):
         if new_stop_state:
             self._publish_stop_camera_snapshot()
             self.anomaly_logging(
-                f"Stop signal received, obstacle  distance={stop_msg.distance:.2f}m",
+                "Stop signal received, obstacle  "
+                f"distance={self._format_number(stop_msg.distance)}m",
                 AnomalyMsg.ERROR,
                 header=stop_msg.header,
             )
         else:
             self.anomaly_logging(
-                f"Stop signal cleared by {sender}",
+                f"Collision detector: stop signal cleared",
                 AnomalyMsg.INFO,
                 header=stop_msg.header,
             )
@@ -261,17 +262,29 @@ class CollisionAvoidanceAADLog(Node):
         return AnomalyMsg.INFO
 
     def _format_legacy_localization_health(self, status, values):
+        fitness = self._format_maybe_numeric_value(
+            values.get('fitness_score', 'unknown'),
+            key='fitness_score',
+        )
+        threshold = self._format_maybe_numeric_value(
+            values.get('effective_score_threshold', values.get('score_threshold', 'unknown')),
+            key='effective_score_threshold',
+        )
+        consecutive_rejected = self._format_maybe_numeric_value(
+            values.get('consecutive_rejected_updates', 'unknown'),
+            key='consecutive_rejected_updates',
+        )
         fields = [
             "source=legacy_alignment_status",
             f"status={status.message}",
             f"level={status.level}",
-            f"fitness={values.get('fitness_score', 'unknown')}",
-            f"threshold={values.get('effective_score_threshold', values.get('score_threshold', 'unknown'))}",
+            f"fitness={fitness}",
+            f"threshold={threshold}",
             f"failure_category={values.get('failure_category', 'unknown')}",
             f"recovery_state={values.get('recovery_state', 'unknown')}",
             f"reinit_requested={values.get('reinitialization_requested', 'unknown')}",
             f"reinit_reason={values.get('reinitialization_request_reason', 'unknown')}",
-            f"consecutive_rejected={values.get('consecutive_rejected_updates', 'unknown')}",
+            f"consecutive_rejected={consecutive_rejected}",
         ]
         return "Localization health: " + ", ".join(fields)
 
@@ -284,8 +297,8 @@ class CollisionAvoidanceAADLog(Node):
 
         summary_fields = [
             f"status={'unhealthy' if reasons else 'healthy'}",
-            f"icp_quality={fields.get('icp_quality', 'unknown')}",
-            f"icp_quality_threshold={self.MOLA_BAD_ICP_QUALITY_THRESHOLD}",
+            f"icp_quality={self._format_field_value(fields, 'icp_quality', 'unknown')}",
+            f"icp_quality_threshold={self._format_number(self.MOLA_BAD_ICP_QUALITY_THRESHOLD)}",
             f"too_many_dropped_frames={any('dropped frame' in reason for reason in reasons)}",
         ]
         if reasons:
@@ -304,8 +317,8 @@ class CollisionAvoidanceAADLog(Node):
             and icp_quality < self.MOLA_BAD_ICP_QUALITY_THRESHOLD
         ):
             reasons.append(
-                f"ICP quality {icp_quality:.3f} below "
-                f"{self.MOLA_BAD_ICP_QUALITY_THRESHOLD:.3f}"
+                f"ICP quality {self._format_number(icp_quality)} below "
+                f"{self._format_number(self.MOLA_BAD_ICP_QUALITY_THRESHOLD)}"
             )
 
         dropped_frames_ratio = self._mola_float(fields, "dropped_frames_ratio")
@@ -314,8 +327,8 @@ class CollisionAvoidanceAADLog(Node):
             and dropped_frames_ratio > self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD
         ):
             reasons.append(
-                f"dropped frame ratio {dropped_frames_ratio:.3f} above "
-                f"{self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD:.3f}"
+                f"dropped frame ratio {self._format_number(dropped_frames_ratio)} above "
+                f"{self._format_number(self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD)}"
             )
 
         if active is False or active == 0.0:
@@ -398,6 +411,52 @@ class CollisionAvoidanceAADLog(Node):
             return float(text)
         except ValueError:
             return text
+
+    def _format_number(self, value, decimals=3):
+        formatted = f"{float(value):.{decimals}f}"
+        if "." in formatted:
+            formatted = formatted.rstrip("0").rstrip(".")
+        return formatted
+
+    def _is_gps_key(self, key):
+        normalized = str(key).strip().lower().replace("-", "_")
+        if "gps" in normalized:
+            return True
+
+        tokens = [token for token in re.split(r"[._]", normalized) if token]
+        gps_tokens = {
+            "lat",
+            "lon",
+            "lng",
+            "latitude",
+            "longitude",
+            "utm_easting",
+            "utm_northing",
+        }
+        return any(token in gps_tokens for token in tokens)
+
+    def _format_maybe_numeric_value(self, value, key=""):
+        if value is None:
+            return "unknown"
+        if isinstance(value, bool):
+            return value
+        if key and self._is_gps_key(key):
+            return value
+        if isinstance(value, (float, int)):
+            return self._format_number(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            try:
+                return self._format_number(float(stripped))
+            except ValueError:
+                return value
+        return value
+
+    def _format_field_value(self, fields, key, default="unknown"):
+        value = self._mola_field(fields, key)
+        if value is None:
+            return default
+        return self._format_maybe_numeric_value(value, key=key)
 
     def anomaly_logging(
         self,

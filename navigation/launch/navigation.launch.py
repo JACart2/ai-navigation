@@ -52,6 +52,11 @@ def generate_launch_description():
                     "Optionally subscribe to raw cameras for bounded AAD stop-event context"
                 ),
             ),
+            DeclareLaunchArgument(
+                "enable_camera_context",
+                default_value="true",
+                description="Publish periodic camera frames to the AAD logging topic",
+            ),
             Node(
                 package="navigation",
                 executable="global_planner",
@@ -121,6 +126,13 @@ def generate_launch_description():
                     }
                 ],
                 condition=IfCondition(LaunchConfiguration("enable_aad")),
+            ),
+            Node(
+                package="navigation",
+                executable="camera_context_publisher",
+                name="camera_context_publisher",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_camera_context")),
             ),
         ]
     )

@@ -1,6 +1,5 @@
 """Tests for accurate motor speed and Arduino-command log context."""
 
-import json
 from types import SimpleNamespace
 
 from motor_control.motor_endpoint import MotorEndpoint
@@ -35,43 +34,45 @@ def test_collision_braking_does_not_duplicate_upstream_anomaly():
     assert node.obstacle_distance == -1
 
 
-def test_anomaly_telemetry_contains_only_motor_specific_context(monkeypatch):
-    """Routine telemetry must omit fields already logged by upstream nodes."""
+def test_anomaly_telemetry_is_plain_text_with_only_motor_specific_context():
+    """Routine telemetry must use readable text and omit unwanted metadata."""
     node = SimpleNamespace(
         angle_planned=-12.5,
         last_arduino_steering_command=73,
         last_vel_curr_received_monotonic=98.0,
+        vel_curr=2.0,
+        wheel_base=2.4003,
         estimated_yaw_rate=-0.3,
         last_arduino_throttle_command=70,
         last_arduino_brake_command=4,
         last_heartbeat_time=197.0,
     )
-    monkeypatch.setattr("motor_control.motor_endpoint.time.monotonic", lambda: 100.0)
-    monkeypatch.setattr("motor_control.motor_endpoint.time.time", lambda: 200.0)
+    message = MotorEndpoint._anomaly_telemetry_message(node)
 
-    payload = MotorEndpoint._anomaly_telemetry_payload(node)
+    assert message == (
+        "Motor telemetry: requested_steering=12.50 deg right, "
+        "estimated_steering=19.80 deg right, arduino_steering_command=73, "
+        "arduino_throttle_command=70, arduino_brake_command=4"
+    )
+    assert not message.startswith("{")
+    assert "event" not in message
+    assert "heartbeat age" not in message
+    assert "motion measurement age" not in message
 
-    assert payload["requested_steering_deg"] == -12.5
-    assert payload["arduino_steering_command"] == 73
-    assert payload["estimated_yaw_rate_rad_s"] == -0.3
-    assert payload["motion_measurement_age_s"] == 2.0
-    assert payload["heartbeat_age_s"] == 3.0
-    assert "arduino_heartbeat" not in payload
-    assert "requested_speed_mps" not in payload
-    assert "estimated_speed_mps" not in payload
-    assert "obstacle_distance_m" not in payload
-    assert "drive_state" not in payload
-    assert "control_mode" not in payload
-    assert json.loads(json.dumps(payload))["event"] == "motor_steering_telemetry"
+
+def test_steering_angle_format_includes_direction():
+    assert MotorEndpoint._format_steering_angle(8.25) == "8.25 deg left"
+    assert MotorEndpoint._format_steering_angle(-8.25) == "8.25 deg right"
+    assert MotorEndpoint._format_steering_angle(0.0) == "0.00 deg straight"
 
 
 def test_publish_anomaly_telemetry_uses_separate_source():
     """Routine telemetry must not consume the motor event rate-limit bucket."""
     published = []
     node = SimpleNamespace(
-        _anomaly_telemetry_payload=lambda: {"event": "motor_steering_telemetry"},
+        _anomaly_telemetry_message=lambda: "Motor telemetry: test message",
         log_aad=lambda importance, message, node_name=None: published.append(
-            (importance, json.loads(message), node_name)
+            (importance, message, node_name)
         ),
     )
 
@@ -80,7 +81,7 @@ def test_publish_anomaly_telemetry_uses_separate_source():
     assert published == [
         (
             AnomalyMsg.INFO,
-            {"event": "motor_steering_telemetry"},
+            "Motor telemetry: test message",
             "motor_endpoint_telemetry",
         )
     ]

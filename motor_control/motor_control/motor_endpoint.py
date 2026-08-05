@@ -214,8 +214,8 @@ class MotorEndpoint(rclpy.node.Node):
             )
             measured_speed = (
                 f"estimated_cart_speed={self.vel_curr:.2f}m/s, "
-                f"speed_source=/estimate_twist, "
-                f"speed_measurement_age={measurement_age:.2f}s"
+                # f"speed_source=/estimate_twist, "
+                # f"speed_measurement_age={measurement_age:.2f}s"
             )
         return (
             f"{measured_speed}, "

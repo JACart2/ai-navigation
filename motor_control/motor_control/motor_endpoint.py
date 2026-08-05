@@ -5,11 +5,12 @@ It sends messages to the arduino controller based on information received from R
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
-# Python based imports
-import time
-import serial as sr
-import bitstruct
+import json
 import math
+import time
+
+import bitstruct
+import serial as sr
 
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
@@ -87,12 +88,14 @@ class MotorEndpoint(rclpy.node.Node):
         self.serial_retry_reported = False
         self.last_arduino_throttle_command = 0
         self.last_arduino_brake_command = 0
-        self.collision_braking_active = False
+        self.last_arduino_steering_command = None
+        self.estimated_yaw_rate = 0.0
 
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
         self.declare_parameter("manual_control", False)
         self.declare_parameter("autonomous_mps_to_controller_units", 50.0)
+        self.declare_parameter("anomaly_telemetry_period_seconds", 5.0)
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -107,6 +110,12 @@ class MotorEndpoint(rclpy.node.Node):
             self.get_parameter("autonomous_mps_to_controller_units")
             .get_parameter_value()
             .double_value
+        )
+        self.anomaly_telemetry_period_seconds = max(
+            0.0,
+            self.get_parameter("anomaly_telemetry_period_seconds")
+            .get_parameter_value()
+            .double_value,
         )
         # Sets up publishing to /ai_anomaly_logging
         if self.AAD_LOGGING_ENABLED:
@@ -139,6 +148,15 @@ class MotorEndpoint(rclpy.node.Node):
 
         # ROS2 TIMERS
         self.timer = self.create_timer(1.0 / self.NODE_RATE, self.timer_callback)
+        self.telemetry_timer = None
+        if (
+            self.AAD_LOGGING_ENABLED
+            and self.anomaly_telemetry_period_seconds > 0.0
+        ):
+            self.telemetry_timer = self.create_timer(
+                self.anomaly_telemetry_period_seconds,
+                self.publish_anomaly_telemetry,
+            )
 
     def vel_angle_planned_callback(self, planned_vel_angle):
         """
@@ -160,21 +178,7 @@ class MotorEndpoint(rclpy.node.Node):
             # indicates an obstacle
             self.obstacle_distance = abs(self.vel_planned)
             self.vel_planned = 0
-            if not self.collision_braking_active:
-                self.collision_braking_active = True
-                self.log_aad(
-                    AnomalyMsg.ERROR,
-                    f"Collision avoidance braking active: "
-                    f"object distance={self.obstacle_distance:.2f}m, "
-                    f"{self._speed_context_for_log()}",
-                )
         else:
-            if self.collision_braking_active:
-                self.log_aad(
-                    AnomalyMsg.INFO,
-                    "Collision avoidance braking cleared",
-                )
-            self.collision_braking_active = False
             # reset obstacle distance and brake time
             self.obstacle_distance = -1
             self.brake_time_used = 0
@@ -201,27 +205,8 @@ class MotorEndpoint(rclpy.node.Node):
         estimate is coming from a ROS2 node called speed_node.py."""
         if vel_twist != None:
             self.vel_curr = vel_twist.twist.linear.x
+            self.estimated_yaw_rate = vel_twist.twist.angular.z
             self.last_vel_curr_received_monotonic = time.monotonic()
-
-    def _speed_context_for_log(self):
-        """Describe measured motion and the exact latest Arduino command."""
-        if self.last_vel_curr_received_monotonic is None:
-            measured_speed = "estimated_cart_speed=unavailable"
-        else:
-            measurement_age = max(
-                0.0,
-                time.monotonic() - self.last_vel_curr_received_monotonic,
-            )
-            measured_speed = (
-                f"estimated_cart_speed={self.vel_curr:.2f}m/s, "
-                # f"speed_source=/estimate_twist, "
-                # f"speed_measurement_age={measurement_age:.2f}s"
-            )
-        return (
-            f"{measured_speed}, "
-            f"last_arduino_throttle={self.last_arduino_throttle_command}/255, "
-            f"last_arduino_brake={self.last_arduino_brake_command}/255"
-        )
 
     def manual_callback(self, msg):
         """Callback that sets manual control bool to indicate teleop vs auto control."""
@@ -488,6 +473,10 @@ class MotorEndpoint(rclpy.node.Node):
             0,
             min(255, int(brake)),
         )
+        self.last_arduino_steering_command = max(
+            0,
+            min(255, int(steer_angle + self.STEERING_CORRECTION)),
+        )
 
         # This is a buffer used in pack_into essentially making 5 empty bytes
         data = bytearray(b"\x00" * 5)
@@ -505,6 +494,45 @@ class MotorEndpoint(rclpy.node.Node):
         )
         self.arduino_ser.write(data)
 
+    def _anomaly_telemetry_payload(self):
+        """Return the motor and steering observations currently available here."""
+        now = time.monotonic()
+        motion_age = None
+        if self.last_vel_curr_received_monotonic is not None:
+            motion_age = max(0.0, now - self.last_vel_curr_received_monotonic)
+
+        heartbeat_age = None
+        if self.last_heartbeat_time is not None:
+            heartbeat_age = max(0.0, time.time() - self.last_heartbeat_time)
+
+        return {
+            "event": "motor_steering_telemetry",
+            "requested_steering_deg": self.angle_planned,
+            "arduino_steering_command": self.last_arduino_steering_command,
+            "motion_measurement_age_s": motion_age,
+            "estimated_yaw_rate_rad_s": (
+                self.estimated_yaw_rate
+                if self.last_vel_curr_received_monotonic is not None
+                else None
+            ),
+            "arduino_throttle_command": self.last_arduino_throttle_command,
+            "arduino_brake_command": self.last_arduino_brake_command,
+            "heartbeat_age_s": heartbeat_age,
+        }
+
+    def publish_anomaly_telemetry(self):
+        """Periodically provide structured motor context to anomaly detection."""
+        payload = json.dumps(
+            self._anomaly_telemetry_payload(),
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        self.log_aad(
+            AnomalyMsg.INFO,
+            payload,
+            node_name="motor_endpoint_telemetry",
+        )
+
     def log_header(self, msg):
         """Helper method to print noticeable log statements."""
         self.get_logger().info("=" * 50)
@@ -516,7 +544,12 @@ class MotorEndpoint(rclpy.node.Node):
         self.get_logger().info(f"{msg}")
 
     # This is for publishing to anomaly logging
-    def log_aad(self, importance: int, motor_endpoint_msg: str):
+    def log_aad(
+        self,
+        importance: int,
+        motor_endpoint_msg: str,
+        node_name=None,
+    ):
         """Publish motor endpoint info to anomaly logging."""
         if not self.AAD_LOGGING_ENABLED:
             return
@@ -527,13 +560,13 @@ class MotorEndpoint(rclpy.node.Node):
             anomaly.header = Header()
             anomaly.header.stamp = self.get_clock().now().to_msg()
             anomaly.header.frame_id = "motor_endpoint_frame"
-            anomaly.node_name = self.get_name()
+            anomaly.node_name = node_name or self.get_name()
             anomaly.importance = importance
             anomaly.type = AnomalyMsg.TEXT
             anomaly.msg = f"Motor Endpoint Info: {motor_endpoint_msg}"
         else:
             anomaly.stamp = self.get_clock().now().to_msg()
-            anomaly.node_name = self.get_name()
+            anomaly.node_name = node_name or self.get_name()
             anomaly.source = "motor_control"
             anomaly.description = f"{importance}: Motor Endpoint Info: {motor_endpoint_msg}"
             anomaly.topic_name = "/motor_endpoint"

@@ -4,11 +4,7 @@ This node handles the calculation of speed for the golf cart.
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
-# Python based imports
-import time
 import math
-
-# Should change this in main to some ROS based time system but for now it works fine.
 import time
 
 # ROS based imports
@@ -35,16 +31,45 @@ class SpeedNode(rclpy.node.Node):
         )
 
         self.prev_pose = None
-        self.prev_time = 0
+        self.prev_time = None
+        self.prev_yaw = None
         self.speed_estimate = 0
+        self.twist_estimate = None
         self.pose_stream_started = False
         self.speed_warning_active = False
 
         self.timer = self.create_timer(0.1, self.timer_cb)
 
     def timer_cb(self):
-        if self.speed_estimate != 0:
+        if self.twist_estimate is not None:
             self.twist_pub.publish(self.twist_estimate)
+
+    @staticmethod
+    def quaternion_to_yaw(orientation):
+        """Convert a geometry quaternion to a planar yaw angle in radians."""
+        sin_yaw = 2.0 * (
+            orientation.w * orientation.z
+            + orientation.x * orientation.y
+        )
+        cos_yaw = 1.0 - 2.0 * (
+            orientation.y * orientation.y
+            + orientation.z * orientation.z
+        )
+        return math.atan2(sin_yaw, cos_yaw)
+
+    @staticmethod
+    def shortest_angular_distance(previous_yaw, current_yaw):
+        """Return the signed wrapped rotation between two yaw angles."""
+        difference = current_yaw - previous_yaw
+        return math.atan2(math.sin(difference), math.cos(difference))
+
+    @staticmethod
+    def pose_time_seconds(msg, fallback):
+        """Use the pose timestamp when populated, otherwise use wall time."""
+        stamp = msg.header.stamp
+        if stamp.sec or stamp.nanosec:
+            return float(stamp.sec) + float(stamp.nanosec) / 1e9
+        return fallback
 
     def pose_cb(self, msg):
         """
@@ -55,13 +80,15 @@ class SpeedNode(rclpy.node.Node):
             self.anomaly_logging("Speed node received first localization pose", AnomalyMsg.INFO)
             self.pose_stream_started = True
 
+        sample_time = self.pose_time_seconds(msg, time.time())
+        current_yaw = self.quaternion_to_yaw(msg.pose.pose.orientation)
         if self.prev_pose != None:
             # Change this to np later
             distance = math.sqrt(
                 (msg.pose.pose.position.y - self.prev_pose.position.y) ** 2
                 + (msg.pose.pose.position.x - self.prev_pose.position.x) ** 2
             )
-            delta_time = time.time() - self.prev_time
+            delta_time = sample_time - self.prev_time
             if delta_time <= 0:
                 self.anomaly_logging(
                     f"Speed node received non-positive pose delta time: delta={delta_time}",
@@ -75,7 +102,13 @@ class SpeedNode(rclpy.node.Node):
                 self.speed_estimate * 0.8 + (distance / delta_time) * 0.2
             )
             self.twist_estimate = TwistStamped()
+            self.twist_estimate.header = msg.header
             self.twist_estimate.twist.linear.x = self.speed_estimate
+            yaw_delta = self.shortest_angular_distance(
+                self.prev_yaw,
+                current_yaw,
+            )
+            self.twist_estimate.twist.angular.z = yaw_delta / delta_time
 
             if self.speed_estimate > 15.0 and not self.speed_warning_active:
                 self.anomaly_logging(
@@ -91,7 +124,8 @@ class SpeedNode(rclpy.node.Node):
                 self.speed_warning_active = False
 
         self.prev_pose = msg.pose.pose
-        self.prev_time = time.time()
+        self.prev_yaw = current_yaw
+        self.prev_time = sample_time
 
         # def log_header(self, msg):
         """Helper method to print noticeable log statements."""

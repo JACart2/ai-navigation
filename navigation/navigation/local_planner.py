@@ -230,13 +230,10 @@ class LocalPlanner(rclpy.node.Node):
             self.cur_speed = 0.8 * self.cur_speed + 0.2 * msg.data
 
     def publish_speed_status(self):
-        estimated_speed = (
-            self.estimated_speed_mps if self.estimated_speed_mps is not None else self.cur_speed
-        )
         estimated_text = (
             "unavailable"
-            if estimated_speed is None
-            else f"{estimated_speed:.2f} m/s"
+            if self.cur_vel is None
+            else f"{self.cur_vel:.2f} m/s"
         )
         self.anomaly_logging(
             f"Speed status: set={self.tar_speed:.2f} m/s, estimated={estimated_text}",

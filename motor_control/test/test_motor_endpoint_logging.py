@@ -51,13 +51,14 @@ def test_anomaly_telemetry_is_plain_text_with_only_motor_specific_context():
 
     assert message == (
         "Motor telemetry: requested_steering=12.50 deg right, "
-        "estimated_steering=19.80 deg right, arduino_steering_command=73, "
-        "arduino_throttle_command=70, arduino_brake_command=4"
+        "estimated_steering=19.80 deg right, arduino_steering_command=73"
     )
     assert not message.startswith("{")
     assert "event" not in message
     assert "heartbeat age" not in message
     assert "motion measurement age" not in message
+    assert "arduino_throttle_command" not in message
+    assert "arduino_brake_command" not in message
 
 
 def test_steering_angle_format_includes_direction():

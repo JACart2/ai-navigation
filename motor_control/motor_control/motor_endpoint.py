@@ -515,9 +515,7 @@ class MotorEndpoint(rclpy.node.Node):
         return (
             f"Motor telemetry: requested_steering={requested_steering}, "
             f"estimated_steering={estimated_steering}, "
-            f"arduino_steering_command={self.last_arduino_steering_command}, "
-            f"arduino_throttle_command={self.last_arduino_throttle_command}, "
-            f"arduino_brake_command={self.last_arduino_brake_command}"
+            f"arduino_steering_command={self.last_arduino_steering_command}"
         )
 
     @staticmethod

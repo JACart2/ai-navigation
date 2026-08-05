@@ -94,7 +94,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
         self.declare_parameter("manual_control", False)
-        self.declare_parameter("autonomous_mps_to_controller_units", 50.0)
+        self.declare_parameter("autonomous_mps_to_controller_units", 75.0)
         self.declare_parameter("anomaly_telemetry_period_seconds", 5.0)
 
         self.BAUDRATE = (

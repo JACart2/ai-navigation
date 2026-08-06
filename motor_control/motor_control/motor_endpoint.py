@@ -5,7 +5,6 @@ It sends messages to the arduino controller based on information received from R
 
 Authors: Zane Metz, Lorenzo Ashurst, Zach Putz
 """
-import json
 import math
 import time
 
@@ -94,7 +93,8 @@ class MotorEndpoint(rclpy.node.Node):
         self.declare_parameter("baudrate", 57600)
         self.declare_parameter("arduino_port", "/dev/ttyUSB0")
         self.declare_parameter("manual_control", False)
-        self.declare_parameter("autonomous_mps_to_controller_units", 50.0)
+        self.declare_parameter("autonomous_mps_to_controller_units", 75.0)
+        self.declare_parameter("wheel_base", 2.4003)
         self.declare_parameter("anomaly_telemetry_period_seconds", 5.0)
 
         self.BAUDRATE = (
@@ -110,6 +110,9 @@ class MotorEndpoint(rclpy.node.Node):
             self.get_parameter("autonomous_mps_to_controller_units")
             .get_parameter_value()
             .double_value
+        )
+        self.wheel_base = (
+            self.get_parameter("wheel_base").get_parameter_value().double_value
         )
         self.anomaly_telemetry_period_seconds = max(
             0.0,
@@ -494,42 +497,45 @@ class MotorEndpoint(rclpy.node.Node):
         )
         self.arduino_ser.write(data)
 
-    def _anomaly_telemetry_payload(self):
-        """Return the motor and steering observations currently available here."""
-        now = time.monotonic()
-        motion_age = None
-        if self.last_vel_curr_received_monotonic is not None:
-            motion_age = max(0.0, now - self.last_vel_curr_received_monotonic)
+    def _anomaly_telemetry_message(self):
+        """Return the available motor and steering observations as plain text."""
+        requested_steering = MotorEndpoint._format_steering_angle(self.angle_planned)
+        estimated_steering = "unavailable"
+        if (
+            self.last_vel_curr_received_monotonic is not None
+            and abs(self.vel_curr) >= 0.1
+        ):
+            estimated_angle_deg = math.degrees(
+                math.atan(self.wheel_base * self.estimated_yaw_rate / self.vel_curr)
+            )
+            estimated_steering = MotorEndpoint._format_steering_angle(
+                estimated_angle_deg
+            )
 
-        heartbeat_age = None
-        if self.last_heartbeat_time is not None:
-            heartbeat_age = max(0.0, time.time() - self.last_heartbeat_time)
+        return (
+            f"Motor telemetry: requested_steering={requested_steering}, "
+            f"estimated_steering={estimated_steering}, "
+            f"arduino_steering_command={self.last_arduino_steering_command}"
+        )
 
-        return {
-            "event": "motor_steering_telemetry",
-            "requested_steering_deg": self.angle_planned,
-            "arduino_steering_command": self.last_arduino_steering_command,
-            "motion_measurement_age_s": motion_age,
-            "estimated_yaw_rate_rad_s": (
-                self.estimated_yaw_rate
-                if self.last_vel_curr_received_monotonic is not None
-                else None
-            ),
-            "arduino_throttle_command": self.last_arduino_throttle_command,
-            "arduino_brake_command": self.last_arduino_brake_command,
-            "heartbeat_age_s": heartbeat_age,
-        }
+    @staticmethod
+    def _format_steering_angle(angle_deg):
+        """Format a steering angle as a magnitude in degrees and a direction."""
+        if angle_deg is None:
+            return "unavailable"
+        if angle_deg > 0:
+            direction = "left"
+        elif angle_deg < 0:
+            direction = "right"
+        else:
+            direction = "straight"
+        return f"{abs(angle_deg):.2f} deg {direction}"
 
     def publish_anomaly_telemetry(self):
-        """Periodically provide structured motor context to anomaly detection."""
-        payload = json.dumps(
-            self._anomaly_telemetry_payload(),
-            separators=(",", ":"),
-            sort_keys=True,
-        )
+        """Periodically provide plain-text motor context to anomaly detection."""
         self.log_aad(
             AnomalyMsg.INFO,
-            payload,
+            self._anomaly_telemetry_message(),
             node_name="motor_endpoint_telemetry",
         )
 

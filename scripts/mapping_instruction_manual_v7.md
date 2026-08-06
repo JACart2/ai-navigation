@@ -61,32 +61,7 @@ During the run, confirm that the live map continues growing and that the map doe
 
 The live mapper is a quality monitor. The offline map rebuilt from the bag is the authoritative result because it uses full 6-DoF terrain motion, IMU roll/pitch initialization, IMU deskew, and gravity correction.
 
-Stop in the same place as you started, and make sure that the start and end of the route have predictable overlap, such as a long, straight corridor. For east_campus_mola_georef.mm, I used the astronomy park hedges as my area of overlap.
-
-Do not use live-map keyframe IDs as loop-closure anchors. The live metric map
-and the offline SimpleMap create keyframes independently, and SimpleMap output
-is intentionally disabled during collection.
-
-After collection, replay the bag with ROS simulation time enabled and identify
-the overlap visually. In another terminal, monitor `/clock`:
-
-```bash
-ros2 topic echo /clock --field clock
-```
-
-Record four absolute ROS timestamps in decimal seconds:
-
-1. when the first traversal enters the overlap;
-2. when the first traversal leaves the overlap;
-3. when the final traversal enters the overlap;
-4. when the final traversal leaves the overlap.
-
-Convert a displayed `{sec, nanosec}` value to `sec.nanosec`, retaining nine
-digits after the decimal point. Also record whether the final traversal follows
-the overlap in the `same` or `reverse` direction. Use a long, distinctive area
-such as the astronomy-park hedges rather than a single pose. These timestamps
-come from the bag clock and therefore remain valid regardless of either
-mapper's keyframe creation rate.
+It is very important that the start and end of the mapping run have predictable overlap, such as a long, straight corridor. In the next step, we will demarcate the overlapping segments using keyframes. For east_campus_mola_georef.mm, I used the astronomy park hedges as my area of overlap.
 
 When finished, press `Ctrl+C` once (Pressing more than once will terminate the saving process) in the collection terminal. The bag file should be saved in:
 
@@ -102,35 +77,11 @@ ros2 bag info "/root/dev_ws/bagfiles/$TEST_NAME"
 
 It should contain `/velodyne_points`, `/zed_front/zed_node_0/imu/data`, `/tf`, `/tf_static`, and `/fix`.
 
-### 4. Run Post-Processing
+### 4.1 Generate the Raw Simplemap With Post-Processing
 
-Run the complete offline workflow, substituting the four recorded ROS timestamps:
+post-processing is a stack of multiple operations, it preforms, in order:
 
-```bash
-./scripts/launch_mola_post_processing "$TEST_NAME" \
-  --loop-start-times START_ENTER:START_LEAVE \
-  --loop-end-times END_ENTER:END_LEAVE \
-  --loop-traversal reverse
-```
-
-Use `--loop-traversal same` when both passes were driven in the same direction.
-For the final1 reproduction test, the known authoritative offline control ranges are:
-
-```bash
-./scripts/launch_mola_post_processing final1_v7 \
-  --bag /root/dev_ws/bagfiles/final1 \
-  --loop-start-keyframes 0:97 \
-  --loop-end-keyframes 1639:1757 \
-  --loop-traversal reverse
-```
-
-The `final1` command uses expert offline keyframe ranges only because those
-ranges have already been validated against the preserved authoritative offline
-map. New recordings should use replay timestamps.
-
-This performs, in order:
-
-1. Terrain-aware offline mapping from the recorded bag.
+1. Terrain-aware offline mapping (simplemap generation) from the recorded bag.
 2. Resolve the two bag-time overlap ranges to offline SimpleMap keyframes.
 3. Sample six ordered seed pairs across the overlap ranges.
 4. Run broad non-ground KISS+ICP registration on ±15-keyframe submaps; require at least four mutually consistent registrations and optimize with GNC.
@@ -142,6 +93,38 @@ This performs, in order:
 Large bags can take significant time and memory. Messages saying the desired real-time rate was not achieved are expected during offline processing and do not mean the map failed.
 
 Do not interrupt the offline mapping stage after the bag reaches 100%. MOLA performs an automatic clean shutdown and then serializes the map.
+
+Run the simplemap generation component of post_processing. This should bring up a replay of the bag run. If you fullscreen the bag replay, you should see the current added keyframe in the bottom left corner, labeled "simplemap:" For the starting and ending components of the mapping run, record...
+
+1. when the first traversal enters the overlap; 
+2. when the first traversal leaves the overlap; 
+3. when the final traversal enters the overlap; 
+4. when the final traversal leaves the overlap. 
+
+```bash
+./scripts/launch_mola_post_processing "$TEST_NAME" \
+  --skip-loop-closure \
+  --skip-georef \
+  --skip-georef-mm
+```
+
+### 4.2 Generate the loop-closed Simplemap and Metric Map With Post-Processing
+
+With the keyframes recorded, 
+
+```bash
+./scripts/launch_mola_post_processing "$TEST_NAME" \
+  --skip-offline-map \
+  --loop-start-keyframes START_ENTER:START_LEAVE \
+  --loop-end-keyframes END_ENTER:END_LEAVE \
+  --loop-traversal reverse
+```
+
+This should finish generating the loop-closed simplemap and localization metric map.
+
+Use `--loop-traversal same` when both passes were driven in the same direction.
+An alternative to keyframes are `--loop-start-times SEC:SEC` and `--loop-end-times SEC:SEC`
+
 
 ### 5. Outputs
 

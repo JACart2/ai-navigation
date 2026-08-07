@@ -13,7 +13,7 @@ import rclpy
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 from motor_control_interface.msg import VelAngle
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TwistStamped
 from std_msgs.msg import Float32
 
 
@@ -43,6 +43,7 @@ class SimulatedMotor(rclpy.node.Node):
 
         self.pose_pub = self.create_publisher(PoseStamped, "/limited_pose", 10)
         self.vel_pub = self.create_publisher(Float32, "/estimated_vel_mps", 10)
+        self.twist_pub = self.create_publisher(TwistStamped, "/estimate_twist", 10)
         self.local_pose_pub = self.create_publisher(
             PoseWithCovarianceStamped, "/pcl_pose", 10
         )
@@ -120,6 +121,11 @@ class SimulatedMotor(rclpy.node.Node):
         vel = Float32()
         vel.data = self.vel
         self.vel_pub.publish(vel)
+
+        twist = TwistStamped()
+        twist.header = pose.header
+        twist.twist.linear.x = self.vel
+        self.twist_pub.publish(twist)
 
     def calculate_endpoint(self):
         """The endpoint for processing and sending instructions to the arduino controller."""

@@ -148,7 +148,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: CurrentNavPath
       Namespaces:
         {}
       Topic:
@@ -160,7 +160,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: RouteGraph
       Namespaces:
         "": true
         Path_NS: true
@@ -173,7 +173,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: CollisionCandidates
       Namespaces:
         "": true
       Topic:
@@ -246,7 +246,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
-      Name: Marker
+      Name: LocalPlannerTarget
       Namespaces:
         {}
       Topic:
@@ -259,7 +259,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
-      Name: Marker
+      Name: LocalPlannerTargetHeading
       Namespaces:
         {}
       Topic:
@@ -272,7 +272,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
-      Name: Marker
+      Name: DetectedObstacles
       Namespaces:
         {}
       Topic:
@@ -285,7 +285,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: CollisionBoundaries
       Namespaces:
         "": true
       Topic:
@@ -297,7 +297,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
-      Name: Marker
+      Name: ProjectedPath
       Namespaces:
         {}
       Topic:

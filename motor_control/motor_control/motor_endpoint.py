@@ -39,6 +39,7 @@ MOVING = 0
 BRAKING = 1
 STOPPED = 2
 DEFAULT_AUTONOMOUS_THROTTLE_DIVIDER = 1.8
+TELEMETRY_RATE_HZ = 1.0
 
 
 
@@ -50,7 +51,7 @@ class MotorEndpoint(rclpy.node.Node):
 
         # Class constants
         self.BRAKE_TIME = 3
-        self.NODE_RATE = 10
+        self.NODE_RATE = 10  # Hz
         self.STEERING_TOLERANCE = 50
         self.COMFORT_STOP_DIST = 4.0
         self.STEERING_CORRECTION = 10
@@ -95,7 +96,9 @@ class MotorEndpoint(rclpy.node.Node):
         self.declare_parameter("manual_control", False)
         self.declare_parameter("autonomous_mps_to_controller_units", 75.0)
         self.declare_parameter("wheel_base", 2.4003)
-        self.declare_parameter("anomaly_telemetry_period_seconds", 5.0)
+        self.declare_parameter(
+            "anomaly_telemetry_period_seconds", 1.0 / TELEMETRY_RATE_HZ
+        )
 
         self.BAUDRATE = (
             self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -536,7 +539,7 @@ class MotorEndpoint(rclpy.node.Node):
         self.log_aad(
             AnomalyMsg.INFO,
             self._anomaly_telemetry_message(),
-            node_name="motor_endpoint_telemetry",
+            node_name="motor_endpoint",
         )
 
     def log_header(self, msg):

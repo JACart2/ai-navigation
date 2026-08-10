@@ -52,7 +52,7 @@ class LocalPlanner(rclpy.node.Node):
 
         # Target-speed values are expressed in metres per second throughout the
         # navigation and motor-control pipeline.
-        self.declare_parameter("cruise_speed_mps", 3.0)
+        self.declare_parameter("cruise_speed_mps", 1.5)
 
         # driving variables
         self.cur_vel = 0.0  # current linear velocity from localization

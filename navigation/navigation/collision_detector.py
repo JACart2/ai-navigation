@@ -182,9 +182,10 @@ class CollisionDetector(rclpy.node.Node):
         self.stop_pub = self.create_publisher(Stop, "/stop", 10)
         # I don't see display_boundary_pub being used anywhere else in this file, so this looks useless...
         self.display_boundary_pub = self.create_publisher(Marker, "/boundaries", 10)
-        # change to 10 if 100 is breaking
+        # Shallow queue: these are 30 Hz visuals, so a backlog of stale arcs is
+        # worse than dropping one.
         self.display_array = self.create_publisher( # Used for visualizing points that indicate steering intensity.
-            MarkerArray, "/boundaries_array", 100
+            MarkerArray, "/boundaries_array", 10
         )
         # The MarkerArray msg published contains various "collision points" which are used by
         # the collision detector to determine what points are considered close enough to stop.
@@ -313,11 +314,13 @@ class CollisionDetector(rclpy.node.Node):
             ]
 
             # Create markers for RViz display
+            # Same ids as the left-turn arcs so a change of direction replaces
+            # them in place instead of leaving the old pair to time out.
             inner_arc = self.display_arc(
-                self.circle_center, self.inner_radius, id=15, right_turn=True
+                self.circle_center, self.inner_radius, id=10, right_turn=True
             )
             outer_arc = self.display_arc(
-                self.circle_center, self.outer_radius, id=18, right_turn=True
+                self.circle_center, self.outer_radius, id=11, right_turn=True
             )
             marker_array.markers.append(inner_arc)
             marker_array.markers.append(outer_arc)
@@ -601,6 +604,42 @@ class CollisionDetector(rclpy.node.Node):
     # def position_callback(self, msg):
     #     self.cur_pos = msg.pose
 
+    def arc_offset_to_front_axle(self):
+        """Angular advance about the turn center, rear axle to front axle.
+
+        The turn center always shares an x with the rear axle, so the rear axle
+        sits on the radial line at -/+ pi/2 and the front axle is this much
+        further along the arc.
+        """
+        return math.atan2(self.WHEEL_BASE, abs(self.circle_center[1]))
+
+    def arc_start_angle(self, right_turn):
+        """Angle about the turn center where the collision region begins.
+
+        This is the front axle, so the region leads the cart rather than
+        covering its own footprint. Takes the turn direction as an argument
+        because calc_arcs draws the arcs before it updates self.right_turn.
+        """
+        offset = self.arc_offset_to_front_axle()
+        if right_turn:
+            return (math.pi / 2) - offset
+
+        return -(math.pi / 2) + offset
+
+    def arc_angular_window(self):
+        """Angle about the turn center covered by the collision check.
+
+        Spans COLLISION_LOOKAHEAD of clear road ahead of the front axle. Both
+        the drawn arcs and the obstacle test use this one window, and both
+        start at arc_start_angle, so the markers show exactly the region that
+        is checked.
+        """
+        radius = abs(self.inner_radius)
+        if radius < 1e-6:
+            return 0.0
+
+        return self.COLLISION_LOOKAHEAD / radius
+
     def display_arc(self, circle, radius, id, right_turn=False):
         """Create and return an arc for RViz using a Line Strip Marker
 
@@ -613,7 +652,10 @@ class CollisionDetector(rclpy.node.Node):
         bound_display = Marker()
         bound_display.header = Header()
         bound_display.id = id
-        bound_display.lifetime = Duration(seconds=0.033).to_msg()
+        # Comfortably longer than the 30 Hz publish period so timing jitter
+        # cannot expire an arc before its replacement arrives, but short enough
+        # that the arcs clear promptly if this node stops.
+        bound_display.lifetime = Duration(seconds=0.2).to_msg()
         bound_display.type = Marker.LINE_STRIP
         bound_display.header.frame_id = "/base_link"
         bound_display.scale.x = 0.2
@@ -623,23 +665,22 @@ class CollisionDetector(rclpy.node.Node):
         bound_display.color.a = 1.0
         bound_display.action = Marker.ADD
 
-        # Build a fixed arc length (meters) and sample with a minimum number of points so
-        # the curve remains visible in RViz even when steering is near straight.
-        arc_length_m = self.COLLISION_LOOKAHEAD
         radius_abs = abs(radius)
         if radius_abs < 1e-6:
             return bound_display
 
-        # Central angle swept by the requested arc length.
-        ang = arc_length_m / radius_abs
+        # Sweep the window the obstacle test uses, from the same start angle.
+        # The window comes from the inner radius, so both edges share it and
+        # the corridor ends on a single radial line rather than a ragged one.
+        ang = self.arc_angular_window()
+        start = self.arc_start_angle(right_turn)
 
-        # Setup arc display range.
         if right_turn:
-            start_ang = (math.pi / 2) - ang
-            end_ang = math.pi / 2
+            start_ang = start - ang
+            end_ang = start
         else:
-            start_ang = -(math.pi / 2)
-            end_ang = (-(math.pi / 2)) + ang
+            start_ang = start
+            end_ang = start + ang
 
         # Use linspace so we always get points, regardless of turn direction and angular span.
         point_count = max(30, int(abs(end_ang - start_ang) / 0.02))
@@ -684,26 +725,25 @@ class CollisionDetector(rclpy.node.Node):
             obstacle_x - center_x,
         )
 
-        # At the cart's current position, the radius points approximately
-        # downward for a left turn and upward for a right turn.
-        if self.right_turn:
-            start_angle = math.pi / 2.0
+        # Measure from the front axle, where the drawn region begins. Anything
+        # behind that line, including the cart's own footprint, wraps to nearly
+        # a full turn and so falls outside the window.
+        start_angle = self.arc_start_angle(self.right_turn)
 
+        if self.right_turn:
             # Right turns travel clockwise, so measure clockwise progress.
             angular_progress = (
                 start_angle - obstacle_angle
             ) % (2.0 * math.pi)
         else:
-            start_angle = -math.pi / 2.0
-
             # Left turns travel counterclockwise.
             angular_progress = (
                 obstacle_angle - start_angle
             ) % (2.0 * math.pi)
 
-        arc_distance = angular_progress * radius
-
-        return arc_distance <= self.COLLISION_LOOKAHEAD
+        # Compare angles rather than arc lengths so the tested region is
+        # exactly the arc drawn by display_arc.
+        return angular_progress <= self.arc_angular_window()
 
     def anomaly_logging(
         self,

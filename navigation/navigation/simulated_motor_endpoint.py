@@ -12,8 +12,13 @@ from navigation import steering_position_calc
 import rclpy
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
+from tf2_ros import TransformBroadcaster
 from motor_control_interface.msg import VelAngle
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import (
+    PoseStamped,
+    PoseWithCovarianceStamped,
+    TransformStamped,
+)
 from std_msgs.msg import Float32
 
 
@@ -46,6 +51,7 @@ class SimulatedMotor(rclpy.node.Node):
         self.local_pose_pub = self.create_publisher(
             PoseWithCovarianceStamped, "/pcl_pose", 10
         )
+        self.tf_broadcaster = TransformBroadcaster(self)
 
         # ROS2 subscribers
 
@@ -102,6 +108,7 @@ class SimulatedMotor(rclpy.node.Node):
 
         pose = PoseWithCovarianceStamped()
         pose.header.frame_id = "map"
+        pose.header.stamp = self.get_clock().now().to_msg()
         pose.pose.pose.position.x = self.x
         pose.pose.pose.position.y = self.y
         x, y, z, w = quaternion_from_euler(0.0, 0.0, self.phi)
@@ -116,6 +123,14 @@ class SimulatedMotor(rclpy.node.Node):
 
         self.pose_pub.publish(rpose)
         self.local_pose_pub.publish(pose)
+
+        transform = TransformStamped()
+        transform.header = pose.header
+        transform.child_frame_id = "base_link"
+        transform.transform.translation.x = self.x
+        transform.transform.translation.y = self.y
+        transform.transform.rotation = pose.pose.pose.orientation
+        self.tf_broadcaster.sendTransform(transform)
 
         vel = Float32()
         vel.data = self.vel

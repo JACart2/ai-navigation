@@ -122,6 +122,18 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /projected_path
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Collision Bounds
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /boundaries_array
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 172; 172; 172

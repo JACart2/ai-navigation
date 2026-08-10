@@ -71,6 +71,11 @@ def generate_launch_description():
             ),
             Node(
                 package="navigation",
+                executable="collision_detector",
+                output="screen",
+            ),
+            Node(
+                package="navigation",
                 executable="motor_simulator",
             ),
             Node(

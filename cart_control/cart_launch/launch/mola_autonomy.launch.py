@@ -485,7 +485,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "calibration_config_dir",
-                default_value=navigation_maps_dir,
+                default_value="/maps",
                 description="Directory containing landmark calibration YAML.",
             ),
             DeclareLaunchArgument(
@@ -495,7 +495,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "map_file",
-                default_value="/root/dev_ws/maps/with_gps2.mm",
+                default_value="/maps/with_gps2.mm",
                 description="Georeferenced MOLA map file.",
             ),
             DeclareLaunchArgument(

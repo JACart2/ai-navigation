@@ -7,6 +7,9 @@ import re
 
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
+from geometry_msgs.msg import TwistStamped
+from std_msgs.msg import Float32, String
+from motor_control_interface.msg import VelAngle
 from navigation_interface.msg import Stop
 from std_msgs.msg import Header
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, qos_profile_sensor_data
@@ -35,6 +38,7 @@ class CollisionAvoidanceAADLog(Node):
                 ).value
             ),
         )
+        self.MOVING_LOG_PERIOD = 5
         self.LOCALIZATION_HEALTH_LOG_PERIOD = 5
         self.MOLA_BAD_ICP_QUALITY_THRESHOLD = 0.2
         self.MOLA_BAD_DROPPED_FRAMES_THRESHOLD = 0.4
@@ -108,6 +112,11 @@ class CollisionAvoidanceAADLog(Node):
 
         self.last_localization_health_pub_time = self.get_clock().now()
         self.last_localization_health_signature = ""
+<<<<<<< HEAD
+=======
+        self.last_speed = 0.0
+        self.last_commanded_speed_mps = None
+>>>>>>> mola_main_sum26
         self._camera_lock = threading.Lock()
         self._latest_camera_frames = {}
         self._last_stop_state = False
@@ -196,6 +205,54 @@ class CollisionAvoidanceAADLog(Node):
                 header=stop_msg.header,
             )
 
+<<<<<<< HEAD
+=======
+    def speed_callback(self, msg: Float32):
+        if abs(self.last_speed - msg.data) > 0.1:
+            self.last_speed = msg.data
+
+            self.anomaly_logging(
+                f"Planner target speed changed to {msg.data:.2f} m/s",
+                AnomalyMsg.INFO,
+                frame_id="collision_avoidance_frame",
+            )
+
+    def commanded_speed_callback(self, msg: VelAngle):
+        # Negative /nav_cmd velocities encode obstacle distance, not reverse speed.
+        commanded_speed_mps = max(0.0, msg.vel)
+        if (
+            self.last_commanded_speed_mps is None
+            or abs(self.last_commanded_speed_mps - commanded_speed_mps) > 0.1
+        ):
+            self.last_commanded_speed_mps = commanded_speed_mps
+            self.anomaly_logging(
+                f"Motor commanded speed changed to {commanded_speed_mps:.2f} m/s",
+                AnomalyMsg.INFO,
+                frame_id="collision_avoidance_frame",
+            )
+
+    def estimated_speed_callback(self, msg: TwistStamped):
+        speed_mps = msg.twist.linear.x
+        now = self.get_clock().now()
+        if (
+            now - self.last_moving_pub_time
+        ).nanoseconds <= self.MOVING_LOG_PERIOD * 1e9:
+            return
+
+        commanded_speed = (
+            "unavailable"
+            if self.last_commanded_speed_mps is None
+            else f"{self.last_commanded_speed_mps:.2f} m/s"
+        )
+        self.anomaly_logging(
+            f"Speed status: commanded={commanded_speed}, "
+            f"estimated={speed_mps:.2f} m/s",
+            AnomalyMsg.INFO,
+            frame_id="collision_avoidance_frame",
+        )
+        self.last_moving_pub_time = now
+
+>>>>>>> mola_main_sum26
     def localization_health_callback(self, msg: DiagnosticArray):
         if not msg.status:
             return

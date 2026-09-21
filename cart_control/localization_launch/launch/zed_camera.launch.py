@@ -34,9 +34,9 @@ from launch_ros.descriptions import ComposableNode
 
 # ZED Configurations to be loaded by ZED Node
 default_config_common = os.path.join(
-    get_package_share_directory('zed_wrapper'),
+    get_package_share_directory('localization_launch'),
     'config',
-    'common_stereo.yaml'
+    'common.yaml'
 )
 
 # URDF/xacro file to be loaded by the Robot State Publisher node
@@ -91,12 +91,14 @@ def launch_setup(context, *args, **kwargs):
 
     serial_number = LaunchConfiguration('serial_number')
     camera_id = LaunchConfiguration('camera_id')
+    camera_flip = LaunchConfiguration('camera_flip')
 
     publish_urdf = LaunchConfiguration('publish_urdf')
     publish_tf = LaunchConfiguration('publish_tf')
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     publish_imu_tf = LaunchConfiguration('publish_imu_tf')
     transform_time_offset = LaunchConfiguration('transform_time_offset')
+    camera_flip = LaunchConfiguration('camera_flip')
     xacro_path = LaunchConfiguration('xacro_path')
 
     ros_params_override_path = LaunchConfiguration('ros_params_override_path')
@@ -117,13 +119,12 @@ def launch_setup(context, *args, **kwargs):
     publish_tf_val = as_bool(publish_tf.perform(context))
     publish_map_tf_val = as_bool(publish_map_tf.perform(context))
     publish_imu_tf_val = as_bool(publish_imu_tf.perform(context))
-    transform_time_offset_val = as_float(transform_time_offset.perform(context), 0.0)
 
     if (camera_name_val == ''):
         camera_name_val = 'zed'
 
     config_camera_path = os.path.join(
-        get_package_share_directory('zed_wrapper'),
+        get_package_share_directory('localization_launch'),
         'config',
         camera_model_val + '.yaml'
     )
@@ -169,7 +170,7 @@ def launch_setup(context, *args, **kwargs):
                 'simulation.sim_port': sim_port_val,
                 'general.camera_name': camera_name_val,
                 'general.camera_model': camera_model_val,
-                'general.camera_flip': True,
+                'general.camera_flip': camera_flip,
                 'general.pub_frame_rate': 15.0,
                 'general.svo_file': svo_path,
                 'general.serial_number': serial_number_val,
@@ -177,15 +178,17 @@ def launch_setup(context, *args, **kwargs):
                 'depth.depth_mode': 'PERFORMANCE',
                 'depth.point_cloud_freq': 15.0,
                 'depth.point_cloud_res': 'REDUCED',
+                'object_detection.od_enabled': False,
+                'object_detection.detection_model': 'MULTI_CLASS_BOX_FAST',
+                'object_detection.filtering_mode': 'NMS3D',
                 'pos_tracking.publish_tf': publish_tf_val,
                 'pos_tracking.publish_map_tf': publish_map_tf_val,
-                'pos_tracking.transform_time_offset': transform_time_offset_val,
                 'sensors.publish_imu_tf': publish_imu_tf_val,
             },
             *extra_param_files,
         ],
     )
-
+    
     load_zed_component = LoadComposableNodes(
         target_container=[namespace, '/', container_name],
         composable_node_descriptions=[zed_component],
@@ -245,13 +248,14 @@ def generate_launch_description():
                 description='Enable publication of the `map -> odom` TF. Note: Ignored if `publish_tf` is False.',
                 choices=['true', 'false']),
             DeclareLaunchArgument(
-                'transform_time_offset',
-                default_value='0.15',
-                description='Time offset added to ZED TF timestamps.'),
-            DeclareLaunchArgument(
                 'publish_imu_tf',
                 default_value='true',
                 description='Enable publication of the IMU TF. Note: Ignored if `publish_tf` is False.',
+                choices=['true', 'false']),
+            DeclareLaunchArgument(
+                'camera_flip',
+                default_value='false',
+                description='Enable upside-down camera mounting compensation in ZED SDK.',
                 choices=['true', 'false']),
             DeclareLaunchArgument(
                 'xacro_path',

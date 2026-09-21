@@ -1,0 +1,317 @@
+# -----------------------------------------------------------------------------
+#   A Modular Optimization framework for Localization and mApping  (MOLA)
+#
+# Copyright (C) 2018-2026 Jose Luis Blanco, University of Almeria
+# Licensed under the GNU GPL v3.
+# -----------------------------------------------------------------------------
+
+# Configuration file for Frame-to-Frame Loop Closure (mola::FrameToFrameLoopClosure)
+
+params:
+  # ===== GNSS Optimization Parameters =====
+  use_gnss: "${USE_GNSS|true}"
+  gnss_minimum_uncertainty_xyz: ${LC_GNSS_MINIMUM_XYZ_SIGMA|0.10} # [m] Minimum GPS uncertainty (floor)
+  gnss_max_uncertainty_horiz: ${LC_GNSS_MAX_UNCERTAINTY_HORIZ|20.0} # [m] Reject reading if horizontal uncertainty > this
+  gnss_max_uncertainty_vert: ${LC_GNSS_MAX_UNCERTAINTY_VERT|40.0} # [m] Reject reading if vertical uncertainty > this
+  gnss_add_horizontality: false # Add constraints for flat terrain
+  gnss_horizontality_sigma_rpy: 0.10 # [rad] roll/pitch constraint if enabled
+  gnss_edges_uncertainty_multiplier: "${GNSS_EDGES_UNCERTAINTY_MULTIPLIER|1.0}"
+
+  # ===== Loop Closure Candidate Selection =====
+  min_distance_between_frames: "${MIN_LC_DISTANCE|2.0}" # [m] Min spatial separation
+  max_distance_for_lc_candidate: "${MAX_LC_DISTANCE|50.0}" # [m] Max distance to consider
+  max_lc_candidates: "${MAX_LC_CANDIDATES|20}" # Maximum candidates per iteration
+  min_frames_between_lc: "${MIN_FRAMES_BETWEEN_LC|20}" # Minimum frame index separation
+  max_lc_optimization_rounds: "${MAX_LC_OPTIMIZATION_ROUNDS|5}" # Maximum LC+optimization rounds to run
+  lc_optimize_every_n: "${LC_OPTIMIZE_EVERY_N|5}" # Re-optimize after N accepted LCs (0=disable, closes inner loops first)
+
+  lc_candidate_strategy: "${LC_SELECTION_METHOD|MULTI_OBJECTIVE}" # or PROXIMITY_ONLY, MULTI_OBJECTIVE
+  lc_verbose_candidate_selection: "${LC_SELECTION_VERBOSE|0}"
+
+  # For DISTANCE_STRATIFIED:
+  lc_distance_bins: 5 # Number of bins to divide the valid distance range
+
+  # For MULTI_OBJECTIVE:
+  lc_weight_proximity: 0.40 # Favor spatially close candidates
+  lc_weight_frame_separation: 0.25 # Favor temporally distant candidates
+  lc_weight_diversity: 0.20 # Penalize similar distances
+  lc_weight_coverage: 0.15 # Favor distributed trajectory coverage
+
+  # ===== ICP Parameters =====
+  min_icp_goodness: "${MIN_ICP_QUALITY|0.65}" # [0-1] Minimum ICP quality to accept
+  icp_edge_robust_param: "${ICP_ROBUST_PARAM|5.0}" # Robust kernel parameter
+  icp_edge_additional_noise_xyz: 0.02 # [m] Additional edge uncertainty
+  icp_edge_additional_noise_ang: 0.1 # [deg] Additional angular uncertainty
+  threshold_sigma_initial: "${LC_ICP_INITIAL_SIGMA|1.0}"
+  threshold_sigma_final: "${LC_ICP_FINAL_SIGMA|0.05}"
+
+  # ===== Odometry Edge Parameters =====
+  input_odometry_noise_xyz: "${INPUT_ODOMETRY_NOISE_XYZ_PER_M|0.04}" # [m] Odometry translational noise (per meter of travel if scaled)
+  input_odometry_noise_ang: "${INPUT_ODOMETRY_NOISE_ANG_DEG_PER_M|0.05}" # [deg] Odometry angular noise (per meter of travel if scaled)
+  scale_odometry_noise_by_distance: true # Scale noise proportionally to inter-frame distance
+
+  # ===== Optimization Control =====
+  largest_delta_for_reconsider: "${RECONSIDER_THRESHOLD|5.0}" # [m] Re-check all if change > this
+
+  # ===== Output and Profiling =====
+  profiler_enabled: true
+  save_trajectory_files: "${SAVE_TRAJECTORY_FILES|false}"
+  save_trajectory_files_with_cov: "${SAVE_TRAJECTORY_FILES_WITH_COV|false}"
+  debug_files_prefix: "f2f_lc_"
+  min_icp_goodness_to_save_icplog: ${MIN_ICP_QUALITY_TO_SAVE_ICPLOG|0.50}
+
+  # ===== 3D Scene Visualization Output =====
+  save_3d_scene_files: "${SAVE_3D_SCENES|false}"
+  save_3d_scene_files_per_iteration: "${SAVE_3D_SCENES_PER_ITER|false}"
+  # Live preview: single .3Dscene file overwritten each LC iteration for use with
+  # the SceneViewer3D auto-reload feature. Shows the current trajectory (blue),
+  # candidate LC edges being evaluated (orange), and accepted good edges (green).
+  save_3d_scene_live_preview: "${SAVE_3D_SCENE_LIVE_PREVIEW|false}"
+  scene_path_line_width: 2.0
+  scene_lc_line_width: 4.0
+  scene_path_color_r: 0.0 # blue path
+  scene_path_color_g: 0.0
+  scene_path_color_b: 1.0
+  scene_path_color_a: 0.7
+  scene_lc_color_r: 0.0 # green: accepted LC edges
+  scene_lc_color_g: 0.9
+  scene_lc_color_b: 0.0
+  scene_lc_color_a: 0.9
+  scene_lc_candidate_color_r: 1.0 # orange: pending candidate LC edges
+  scene_lc_candidate_color_g: 0.5
+  scene_lc_candidate_color_b: 0.0
+  scene_lc_candidate_color_a: 0.7
+  scene_keyframe_point_size: 7.0
+
+  # ===== KISS-Matcher initial guess =====
+  # When enabled, KISS-Matcher runs a global registration between each LC
+  # candidate pair before mp2p_icp::ICP, providing a better initial guess.
+  # Requires the kiss-matcher git submodule and rebuilding with it populated.
+  use_kiss_matcher: "${USE_KISS_MATCHER|false}"
+  kiss_matcher_resolution: "${KISS_MATCHER_RESOLUTION|1.0}" # [m] voxel size for feature extraction
+  kiss_matcher_layer: "${KISS_MATCHER_LAYER|points_to_register_points}" # metric-map layer to feed KISS-Matcher
+  loop_submap_half_window: "${LC_SUBMAP_HALF_WINDOW|5}" # ±5 keyframes, approximately ±5 m
+  loop_submap_half_length_m: "${LC_SUBMAP_HALF_LENGTH_M|7.5}" # ±7.5 m travelled distance; supersedes frame window
+  registration_remove_ground: "${LC_REGISTRATION_REMOVE_GROUND|true}"
+  registration_ground_band: "${LC_REGISTRATION_GROUND_BAND|0.30}" # remove dominant Z band and below
+  registration_voxel_size: "${LC_REGISTRATION_VOXEL_SIZE|0.35}" # one retained point per voxel
+  manual_lc_identity_fallback: false
+  manual_hypothesis_min_inliers: "${MANUAL_HYPOTHESIS_MIN_INLIERS|1}"
+  manual_hypothesis_max_translation_spread: "${MANUAL_HYPOTHESIS_MAX_TRANSLATION_SPREAD|2.5}"
+  manual_hypothesis_max_rotation_spread_deg: "${MANUAL_HYPOTHESIS_MAX_ROTATION_SPREAD_DEG|5.0}"
+  scan_context_endpoint_search: "${SCAN_CONTEXT_ENDPOINT_SEARCH|false}"
+  scan_context_start_window_percent: "${SCAN_CONTEXT_START_WINDOW_PERCENT|5.0}"
+  scan_context_end_window_percent: "${SCAN_CONTEXT_END_WINDOW_PERCENT|15.0}"
+  scan_context_num_rings: "${SCAN_CONTEXT_NUM_RINGS|20}"
+  scan_context_num_sectors: "${SCAN_CONTEXT_NUM_SECTORS|60}"
+  scan_context_max_radius: "${SCAN_CONTEXT_MAX_RADIUS|80.0}"
+  scan_context_ringkey_candidates: "${SCAN_CONTEXT_RINGKEY_CANDIDATES|20}"
+  scan_context_max_hypotheses: "${SCAN_CONTEXT_MAX_HYPOTHESES|12}"
+  scan_context_pairs_per_hypothesis: "${SCAN_CONTEXT_PAIRS_PER_HYPOTHESIS|3}"
+  scan_context_pair_frame_stride: "${SCAN_CONTEXT_PAIR_FRAME_STRIDE|6}"
+
+  # ===== Planar World Annealing =====
+  # When enabled, a planarity constraint (z≈0, roll≈0, pitch≈0) is added for
+  # each keyframe. It starts strong at LC round 0 and is exponentially relaxed
+  # over `planar_world_annealing_rounds` rounds, then removed entirely.
+  # Useful for robots that operate on flat ground but may have slight
+  # sensor-tilt or slope-induced drift in z/roll/pitch.
+  assume_planar_world: "${ASSUME_PLANAR_WORLD|false}"
+  planar_world_initial_sigma_z: "${PLANAR_WORLD_SIGMA_Z|0.10}"       # [m]   sigma at round 0
+  planar_world_initial_sigma_ang: "${PLANAR_WORLD_SIGMA_ANG|0.02}"   # [rad] sigma at round 0 (~1 deg)
+  planar_world_annealing_rounds: "${PLANAR_WORLD_ANNEALING_ROUNDS|2}" # rounds until constraint vanishes
+
+  # ===== Manual Loop Closure Constraints =====
+  manual_loop_constraints:
+    - timestamp_i: 1784560478.245809
+      timestamp_j: 1784561642.976665
+      sigma_xyz: 0.10
+      trust_as_inlier: false
+    - timestamp_i: 1784560483.187909
+      timestamp_j: 1784561647.616238
+      sigma_xyz: 0.10
+      trust_as_inlier: false
+    - timestamp_i: 1784560488.029207
+      timestamp_j: 1784561651.953205
+      sigma_xyz: 0.20
+      trust_as_inlier: false
+
+  # Optional: force loop closure edges between specific keyframes identified by
+  # their UNIX timestamp (as a double, compatible with mrpt::Clock::toDouble()).
+  # The nearest frame in the simplemap to each timestamp is used.
+  # sigma_xyz [m] sets the positional uncertainty; rotation is left unconstrained.
+  #
+  # manual_loop_constraints:
+  # - timestamp_i: 1700000100.250   # UNIX time of first keyframe
+  #   timestamp_j: 1700000345.875   # UNIX time of second keyframe
+  #   sigma_xyz: 0.10               # [m] positional sigma (fallback if KISS-Matcher+ICP fails)
+  #   trust_as_inlier: false        # if true, bypass GNC outlier rejection for this constraint
+  # - timestamp_i: 1700000210.500
+  #   timestamp_j: 1700000512.000
+  #   sigma_xyz: 0.20
+  #   trust_as_inlier: true         # mark as known inlier: always accepted by GNC optimizer
+  #
+  # When use_kiss_matcher=true, each manual hint is fed through KISS-Matcher+ICP
+  # to compute the actual relative transform instead of assuming identity.
+  # sigma_xyz is only used as a fallback if ICP quality is below min_icp_goodness.
+  # trust_as_inlier (default: false): when true, the constraint is added to the set
+  # of known GNC inliers and will not be downweighted by the robust optimizer.
+
+# ===== ICP Settings =====
+# (Your existing ICP pipeline configuration goes here)
+# The observations_generator and observations_filter sections will process
+# individual frames to create point clouds for ICP matching.
+
+icp_settings:
+  # mp2p_icp ICP pipeline configuration file, for use in ICP
+  # odometry and SLAM packages.
+  #
+  # YAML configuration file for use with the CLI tool mp2p-icp-run or
+  # programmatically from function mp2p_icp::icp_pipeline_from_yaml()
+  #
+  class_name: mp2p_icp::ICP
+
+  # See: mp2p_icp::Parameter
+  params:
+    maxIterations: ${MOLA_MAX_ICP_ITERATIONS|100}
+    minAbsStep_trans: 1e-3
+    minAbsStep_rot: 1e-4
+
+    quality_checkpoints:
+      - iteration: 80
+        minimum_quality: 0.03
+
+    # Important: Evaluate quality as ratio of matched pairs using the FINAL annealing-like adaptive threshold.
+    force_final_pairings_for_quality: true
+
+    #debugPrintIterationProgress: true  # Print iteration progress
+    #generateDebugFiles: true  # Can be override with env var "MP2P_ICP_GENERATE_DEBUG_FILES=1"
+    saveIterationDetails: true # Store partial solutions and pairings for each ICP iteration
+    decimationIterationDetails: 3
+    debugFileNameFormat: "./icp-logs/lc-$UNIQUE_ID-local_$LOCAL_ID$LOCAL_LABEL-to-global_$GLOBAL_ID$GLOBAL_LABEL.icplog"
+    decimationDebugFiles: ${MP2P_ICP_LOG_FILES_DECIMATION|1}
+
+  solvers:
+    - class: mp2p_icp::Solver_GaussNewton
+      params:
+        maxIterations: 2
+        robustKernel: "${MOLA_LC_ROBUST_KERNEL|RobustKernel::GemanMcClure}"
+        robustKernelParam: "${MOLA_LO_ROBUST_KERNEL_PARAM|6.0}" # In GICP, errors are normalized by covariance
+        #innerLoopVerbose: true
+
+  # Sequence of one or more pairs (class, params) defining mp2p_icp::Matcher
+  # instances to pair geometric entities between pointclouds.
+  matchers:
+    # Matcher_Cov2Cov requires exactly one keyframe on the local side. Refine
+    # accumulated KISS submaps on their merged ordinary point layers instead.
+    - class: mp2p_icp::Matcher_Points_DistanceThreshold
+      params:
+        threshold: "2.0*max(SIGMA_FINAL, SIGMA_INIT-(SIGMA_INIT-SIGMA_FINAL)*ICP_ITERATION/100)"
+        thresholdAngularDeg: 0
+        pairingsPerPoint: 1
+        allowMatchAlreadyMatchedGlobalPoints: true
+        pointLayerMatches:
+          - {
+              global: "points_to_register_points",
+              local: "points_to_register_points",
+              weight: 1.0,
+            }
+
+  quality:
+    - class: mp2p_icp::QualityEvaluator_PairedRatio
+      params:
+        absolute_minimum_pairing_ratio: 0.10
+        reuse_icp_pairings: true
+        #threshold: "2*2.0*SIGMA_FINAL" # [m]
+        #thresholdAngularDeg: 0 # deg
+        #pairingsPerPoint: 1
+        #allowMatchAlreadyMatchedGlobalPoints: true # faster
+        #pointLayerMatches:
+        #- {
+        #global: "points_to_register_points",
+        #local: "points_to_register_points",
+        #weight: 1.0,
+        #}
+
+observations_generator:
+  # Generators:
+  #
+  # One filter object will be created for each entry, instancing the given class,
+  # and with the given parameters. Filters are run in definition order on the
+  # incoming raw CObservation objects.
+  #
+  - class_name: mp2p_icp_filters::Generator
+    params:
+      target_layer: "raw"
+      throw_on_unhandled_observation_class: true
+      process_class_names_regex: "(mrpt::obs::CObservationPointCloud|mrpt::obs::CObservation2DRangeScan|mrpt::obs::CObservationVelodyneScan)"
+      process_sensor_labels_regex: ".*"
+
+  # This just creates an empty layer of the custom class 'mola::KeyframePointCloudMap'
+  - class_name: mp2p_icp_filters::Generator
+    params:
+      target_layer: "points_to_register"
+      throw_on_unhandled_observation_class: true
+      process_class_names_regex: "" # NONE: don't process observations in the generator.
+      #process_sensor_labels_regex: '.*'
+      # metric_map_definition_ini_file: '${CURRENT_YAML_FILE_PATH}/localmap_definition_voxelmap.ini'
+
+      metric_map_definition:
+        # Any class derived from mrpt::maps::CMetricMap https://docs.mrpt.org/reference/stable/group_mrpt_maps_grp.html
+        class: mola::KeyframePointCloudMap
+        plugin: "libmola_metric_maps.so" # Import additional custom user-defined map classes (search in LD_LIBRARY_PATH)
+        creationOpts: ~ # none required
+        insertOpts: ~
+        likelihoodOpts: ~ # none required
+        renderOpts: ~
+
+observations_filter:
+  # Filters:
+  #
+  # One filter object will be created for each entry, instancing the given class,
+  # and with the given parameters. Filters are run in definition order on the
+  # input metric_map_t object.
+  #
+  #- class_name: mp2p_icp_filters::FilterAdjustTimestamps
+  #  params:
+  #    pointcloud_layer: "raw"
+  #    silently_ignore_no_timestamps: false
+  #    method: "TimestampAdjustMethod::MiddleIsZero"
+
+  - class_name: mp2p_icp_filters::FilterDeskew
+    params:
+      input_pointcloud_layer: "raw"
+      output_pointcloud_layer: "deskewed"
+      method: "${MOLA_DESKEW_METHOD|MotionCompensationMethod::IMU}"
+      ignore_accelerometer: "${MOLA_DESKEW_IGNORE_ACCELEROMETER|false}"
+      silently_ignore_no_timestamps: "${MOLA_DESKEW_IGNORE_NO_TIMESTAMPS|false}" # To handle more dataset types
+      output_layer_class: "mrpt::maps::CGenericPointsMap" # Keep intensity & ring channels
+
+      # These (vx,...wz) are variable names that must be defined via the
+      # mp2p_icp::Parameterizable API to update them dynamically.
+      # Only required for the "Linear" deskew method
+      #twist: [vx, vy, vz, wx, wy, wz]
+
+      points_already_global: false # In the loop-closure module we first deskew in local, then convert to global coordinates
+
+  # Remove points too close, to prevent "noise" from the vehicle,
+  # the person next to the robot, etc. Remove too distant points since
+  # the tiniest angular error projects to a large translational error.
+  - class_name: mp2p_icp_filters::FilterByRange
+    params:
+      input_pointcloud_layer: "deskewed"
+      output_layer_between: "points_to_register_points"
+      range_min: ${MOLA_LC_SENSOR_FILTER_MIN_RANGE|max(1.0, 0.03*ESTIMATED_SENSOR_MAX_RANGE)}
+      range_max: ${MOLA_LC_SENSOR_FILTER_MAX_RANGE|1.2*ESTIMATED_SENSOR_MAX_RANGE}
+
+  - class_name: mp2p_icp_filters::FilterMerge
+    params:
+      input_pointcloud_layer: "points_to_register_points"
+      target_layer: "points_to_register"
+      input_layer_in_local_coordinates: false
+
+  # Remove layers to save memory and log file storage
+  - class_name: mp2p_icp_filters::FilterDeleteLayer
+    params:
+      pointcloud_layer_to_remove:
+        ["raw", "deskewed"] # "points_to_register_points"

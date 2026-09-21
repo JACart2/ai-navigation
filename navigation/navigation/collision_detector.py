@@ -41,6 +41,8 @@ import tf_transformations as tf
 # Custom-made libraries.
 from navigation_interface.msg import ObstacleArray, Obstacle, Stop
 from motor_control_interface.msg import VelAngle
+from anomaly_msg.msg import AnomalyMsg
+from navigation.obstacle_log_context import format_obstacle_context
 
 
 ARC_DISPLAY_LENGTH_M = 5.0
@@ -61,6 +63,8 @@ class CollisionDetector(rclpy.node.Node):
         self.prev_time = None
         self.prev_obstacle_speed = 0
         self.obstacle_detected = False
+        self.last_obstacle_count = None
+        self.potential_collision_active = False
 
         self.resume_confid = 0
 
@@ -76,6 +80,7 @@ class CollisionDetector(rclpy.node.Node):
         self.declare_parameter("front_axle_track", 0.9017)
         self.declare_parameter("rear_axle_track", 0.9652)
         self.declare_parameter("tire_width", 0.2159)
+        self.declare_parameter("collision_lookahead", 5.0)
 
         # Defining constants used in the code.
         self.VEHICLE_WIDTH = (
@@ -95,6 +100,9 @@ class CollisionDetector(rclpy.node.Node):
         )
         self.TIRE_WIDTH = (
             self.get_parameter("tire_width").get_parameter_value().double_value
+        )
+        self.COLLISION_LOOKAHEAD = (
+            self.get_parameter("collision_lookahead").get_parameter_value().double_value
         )
 
         self.cur_speed = 0.1
@@ -121,7 +129,7 @@ class CollisionDetector(rclpy.node.Node):
         # self.declare_parameter("min_obstacle_time", 2.5)
         self.declare_parameter("safe_obstacle_dist", 6 * factor)
         self.declare_parameter("safe_obstacle_time", 2 * factor)
-        self.declare_parameter("cruise_speed", 30.0)
+        self.declare_parameter("cruise_speed_mps", 1.5)
 
         # self.MIN_OBSTACLE_DIST = (
         #     self.get_paramater("min_obstacle_dist").get_paramter_value().float_value
@@ -138,9 +146,11 @@ class CollisionDetector(rclpy.node.Node):
         self.SAFE_OBSTACLE_TIME = (
             self.get_parameter("safe_obstacle_time").get_parameter_value().double_value
         )
-        # /speed uses km/h, matching the local planner's target-speed interface.
+        # /speed uses m/s, matching the rest of the motion-control pipeline.
         self.CRUISE_SPEED = (
-            self.get_parameter("cruise_speed").get_parameter_value().double_value
+            self.get_parameter("cruise_speed_mps")
+            .get_parameter_value()
+            .double_value
         )
 
         # Subscribes to the /obstacles topic where ObstacleArray msg types are sent
@@ -185,6 +195,7 @@ class CollisionDetector(rclpy.node.Node):
         # cart in the event an obstacle is moving in front of the cart,
         # allowing the cart to "follow" the obstacle.
         self.speed_pub = self.create_publisher(Float32, "/speed", 10)
+        self.anomaly_pub = self.create_publisher(AnomalyMsg, "/ai_anomaly_logging", 10)
 
         # Pretty sure this is just used to get the physical corners of the cart.
         # Zane, the previous student who worked on this file, made suggestions
@@ -205,6 +216,10 @@ class CollisionDetector(rclpy.node.Node):
         speed_msg = Float32()
         speed_msg.data = float(speed)
         self.speed_pub.publish(speed_msg)
+        self.anomaly_logging(
+            f"Collision detector requested planner speed: {float(speed):.2f} m/s",
+            AnomalyMsg.INFO,
+        )
 
     def clear_follow_speed_override(self):
         """Restore the planner's normal cruise speed after obstacle following ends."""
@@ -214,6 +229,10 @@ class CollisionDetector(rclpy.node.Node):
         self.prev_time = None
         self.prev_obstacle_speed = 0
         self.publish_speed_request(self.CRUISE_SPEED)
+        self.anomaly_logging(
+            "Restored normal cruise speed",
+            AnomalyMsg.INFO,
+        )
 
     def angle_callback(self, msg):
         self.requested_steering_angle = msg.angle
@@ -316,10 +335,11 @@ class CollisionDetector(rclpy.node.Node):
         # Control for undoing a stop
         clear_path = True
         follow_speed_active = False
+        saw_potential_collision = False
 
         cur_obstacle_list = self.cur_obstacles
         for obstacle in cur_obstacle_list:
-            obstacle_size = 2 * obstacle.radius
+            obstacle_size = obstacle.radius
 
             # The distance/radius of the circle center to the obstacle center
             circle_obstacle_dist = self.distance(
@@ -329,10 +349,19 @@ class CollisionDetector(rclpy.node.Node):
                 self.circle_center[1],
             )
             # Determine if the obstacle is within bounds of the inner and outer arc
-            potential_collision = (
+            obstacle_inside_turning_corridor = (
                 (abs(self.inner_radius) - obstacle_size)
                 < circle_obstacle_dist
                 < (abs(self.outer_radius) + obstacle_size)
+            )
+
+            obstacle_within_lookahead = self.is_obstacle_within_arc_lookahead(
+                obstacle
+            )
+
+            potential_collision = (
+                obstacle_inside_turning_corridor
+                and obstacle_within_lookahead
             )
             obstacle_in_front = self.is_obstacle_in_front(obstacle)
 
@@ -344,7 +373,10 @@ class CollisionDetector(rclpy.node.Node):
                     # Keep visualizing rear obstacles that intersect the turning annulus,
                     # but do not let them affect the cart's stop/follow decisions.
                     display = self.show_colliding_obstacle(
-                        obstacle.pos.point.x, obstacle.pos.point.y, color=0.6
+                        obstacle.pos.point.x,
+                        obstacle.pos.point.y,
+                        obstacle.radius,
+                        color=0.6,
                     )
                     if display is not None:
                         collision_array.markers.append(display)
@@ -413,10 +445,17 @@ class CollisionDetector(rclpy.node.Node):
                         self.stopped = True
                         stop_msg.distance = distance
                         self.stop_pub.publish(stop_msg)
+                        self.anomaly_logging(
+                            f"Emergency stop requested for obstacle: distance={distance:.2f}m, impact_time={impact_time:.2f}s, speed={self.cur_speed:.2f}m/s",
+                            AnomalyMsg.ERROR,
+                        )
 
                     # Show a red obstacle, an obstacle worth stopping for
                     display = self.show_colliding_obstacle(
-                        obstacle.pos.point.x, obstacle.pos.point.y, color=0.0
+                        obstacle.pos.point.x,
+                        obstacle.pos.point.y,
+                        obstacle.radius,
+                        color=0.0,
                     )
                 # elif distance < self.safe_obstacle_dist or impact_time < self.safe_obstacle_time:
                 #     #Temporay code duplication
@@ -431,8 +470,18 @@ class CollisionDetector(rclpy.node.Node):
                 else:
                     # Show a yellow obstacle, obstacle that has potential
                     display = self.show_colliding_obstacle(
-                        obstacle.pos.point.x, obstacle.pos.point.y
+                        obstacle.pos.point.x,
+                        obstacle.pos.point.y,
+                        obstacle.radius,
+                        color=0.0,
                     )
+                    saw_potential_collision = True
+                    if not self.potential_collision_active:
+                        self.anomaly_logging(
+                            f"Potential collision obstacle in path: distance={distance:.2f}m, impact_time={impact_time:.2f}s",
+                            AnomalyMsg.WARNING,
+                        )
+                        self.potential_collision_active = True
 
             if display is not None:
                 collision_array.markers.append(display)
@@ -448,6 +497,8 @@ class CollisionDetector(rclpy.node.Node):
         # If a run detects a clear path, but we are still stopped. allow nav to continue, and we have confidence is clear (15 spins/3 seconds given rate of 5 hz)
         if clear_path:
             self.cleared_confidence += 1
+            if not saw_potential_collision:
+                self.potential_collision_active = False
             if self.stopped and self.cleared_confidence >= 15:
                 self.cleared_confidence = 0
                 self.stopped = False
@@ -456,10 +507,15 @@ class CollisionDetector(rclpy.node.Node):
                 stop_msg.sender_id.data = "collision_detector"
                 stop_msg.distance = -1.0
                 self.stop_pub.publish(stop_msg)
+                self.anomaly_logging(
+                    "Collision detector cleared stop request; path is clear for 0.50s",
+                    AnomalyMsg.INFO,
+                )
+                self.potential_collision_active = False
 
         self.collision_pub.publish(collision_array)
 
-    def show_colliding_obstacle(self, x, y, color=1.0):
+    def show_colliding_obstacle(self, x, y, radius, color=1.0):
         marker = Marker()
         marker.header = Header()
         marker.header.frame_id = "/base_link"
@@ -478,8 +534,10 @@ class CollisionDetector(rclpy.node.Node):
         marker.pose.position.y = y
         marker.pose.position.z = 0.0
 
-        marker.scale.x = 1.0
-        marker.scale.y = 1.0
+        diameter = max(0.1, 2.0 * radius)
+
+        marker.scale.x = diameter
+        marker.scale.y = diameter
         marker.scale.z = 0.2
 
         return marker
@@ -517,6 +575,32 @@ class CollisionDetector(rclpy.node.Node):
 
     def obstacle_callback(self, msg):
         self.cur_obstacles = msg.obstacles
+        obstacle_count = len(msg.obstacles)
+        if obstacle_count != self.last_obstacle_count:
+            spatial_context = format_obstacle_context(
+                msg.obstacles,
+                msg.header.frame_id,
+            )
+            severity = AnomalyMsg.INFO
+            message = (
+                "Obstacle stream update: count=0"
+                if obstacle_count == 0
+                else (
+                    f"Obstacle stream update: total_obstacle_count={obstacle_count}, "
+                    f"{spatial_context}"
+                )
+            )
+            if obstacle_count >= 5:
+                severity = AnomalyMsg.WARNING
+                message = (
+                    f"Obstacle stream is busy: count={obstacle_count}, "
+                    f"{spatial_context}"
+                )
+            self.anomaly_logging(
+                message,
+                severity,
+            )
+            self.last_obstacle_count = obstacle_count
 
     # def position_callback(self, msg):
     #     self.cur_pos = msg.pose
@@ -545,7 +629,7 @@ class CollisionDetector(rclpy.node.Node):
 
         # Build a fixed arc length (meters) and sample with a minimum number of points so
         # the curve remains visible in RViz even when steering is near straight.
-        arc_length_m = ARC_DISPLAY_LENGTH_M
+        arc_length_m = self.COLLISION_LOOKAHEAD
         radius_abs = abs(radius)
         if radius_abs < 1e-6:
             return bound_display
@@ -578,6 +662,67 @@ class CollisionDetector(rclpy.node.Node):
             bound_display.points.append(arc_point)
 
         return bound_display
+
+
+    def is_obstacle_within_arc_lookahead(self, obstacle):
+        """
+        Return True when an obstacle lies within the forward section of the
+        cart's current turning arc.
+
+        Obstacle and circle-center coordinates must be in base_link.
+        """
+        obstacle_x = obstacle.pos.point.x
+        obstacle_y = obstacle.pos.point.y
+
+        center_x = self.circle_center[0]
+        center_y = self.circle_center[1]
+
+        radius = abs(self.inner_radius)
+
+        if radius < 1e-6:
+            return False
+
+        # Angle from the turning center to the obstacle.
+        obstacle_angle = math.atan2(
+            obstacle_y - center_y,
+            obstacle_x - center_x,
+        )
+
+        # At the cart's current position, the radius points approximately
+        # downward for a left turn and upward for a right turn.
+        if self.right_turn:
+            start_angle = math.pi / 2.0
+
+            # Right turns travel clockwise, so measure clockwise progress.
+            angular_progress = (
+                start_angle - obstacle_angle
+            ) % (2.0 * math.pi)
+        else:
+            start_angle = -math.pi / 2.0
+
+            # Left turns travel counterclockwise.
+            angular_progress = (
+                obstacle_angle - start_angle
+            ) % (2.0 * math.pi)
+
+        arc_distance = angular_progress * radius
+
+        return arc_distance <= self.COLLISION_LOOKAHEAD
+
+    def anomaly_logging(
+        self,
+        message: str,
+        severity: int,
+    ):
+        anomaly_msg = AnomalyMsg()
+        anomaly_msg.header = Header()
+        anomaly_msg.header.stamp = self.get_clock().now().to_msg()
+        anomaly_msg.header.frame_id = "collision_detector"
+        anomaly_msg.node_name = self.get_name()
+        anomaly_msg.importance = severity
+        anomaly_msg.type = AnomalyMsg.TEXT
+        anomaly_msg.msg = message
+        self.anomaly_pub.publish(anomaly_msg)
 
     def distance(self, x1, y1, x2, y2):
         dX = (x2 - x1) ** 2

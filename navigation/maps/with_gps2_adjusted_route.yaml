@@ -1,0 +1,29 @@
+landmarks:
+- name: '1'
+  local:
+    x: -1.707
+    y: 27.8
+  gps:
+    latitude: 38.433670249899826
+    longitude: -78.86197008564233
+- name: '2'
+  local:
+    x: -27.3
+    y: 76.1
+  gps:
+    latitude: 38.433615431295344
+    longitude: -78.861342273652
+- name: '3'
+  local:
+    x: 162.0
+    y: 88.9
+  gps:
+    latitude: 38.43215920318181
+    longitude: -78.86256096392927
+- name: '4'
+  local:
+    x: 47.7
+    y: 194.6
+  gps:
+    latitude: 38.432412604628254
+    longitude: -78.86082917906154

@@ -3,6 +3,7 @@
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -22,17 +23,17 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "graph_file",
-                default_value="main_shift3.gml",
+                default_value="main_shift3_gps_final_candidate_v8.gml",
             ),
             # Declare whether the given graph is in GPS or ROS coordinates. 
             DeclareLaunchArgument(
                 "graph_coordinate_format",
-                default_value="ros", # Options: "ros" or "gps"
+                default_value="gps", # Options: "ros" or "gps"
             ),
             # Directory where the landmark calibration YAML file is located.
             DeclareLaunchArgument(
                 "calibration_config_dir",
-                default_value="/maps",
+                default_value="/root/dev_ws/src/ai-navigation/navigation/maps",
             ),
             # YAML file name for the landmark calibration
             DeclareLaunchArgument(
@@ -43,6 +44,18 @@ def generate_launch_description():
                 "enable_aad",
                 default_value="true",
                 description="Enable collision avoidance anomaly logging node"
+            ),
+            DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Optionally subscribe to raw cameras for bounded AAD stop-event context"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "enable_camera_context",
+                default_value="true",
+                description="Publish periodic camera frames to the AAD logging topic",
             ),
             Node(
                 package="navigation",
@@ -104,7 +117,22 @@ def generate_launch_description():
                 executable="collision_avoidance_aad_log",
                 name="collision_avoidance_aad_log",
                 output="screen",
+                parameters=[
+                    {
+                        "enable_camera_capture": ParameterValue(
+                            LaunchConfiguration("enable_aad_camera_capture"),
+                            value_type=bool,
+                        )
+                    }
+                ],
                 condition=IfCondition(LaunchConfiguration("enable_aad")),
+            ),
+            Node(
+                package="navigation",
+                executable="camera_context_publisher",
+                name="camera_context_publisher",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_camera_context")),
             ),
         ]
     )

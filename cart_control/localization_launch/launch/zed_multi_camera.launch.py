@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
@@ -43,6 +43,16 @@ def parse_array_param(param):
     return arr
 
 def launch_setup(context, *args, **kwargs):
+    front_flip = LaunchConfiguration("zed_front_flip").perform(context)
+    rear_flip = LaunchConfiguration("zed_rear_flip").perform(context)
+
+    front_camera_parameters = {
+        "general.camera_flip": front_flip.lower() == "true",
+    }
+
+    rear_camera_parameters = {
+        "general.camera_flip": rear_flip.lower() == "true",
+    }
 
     # List of actions to be launched
     actions = []
@@ -84,8 +94,9 @@ def launch_setup(context, *args, **kwargs):
                 text='The `cam_serials` or `cam_ids` array argument must match the size of the `cam_names` array argument.'))
         ]
     
-    # ROS 2 Component Container
-    container_name = 'zed_multi_container'
+    # Each camera gets its own component container. A ZED component exits when its
+    # camera cannot be opened; sharing one process allowed a rear-camera failure to
+    # take down the healthy front camera as well.
     distro = os.environ['ROS_DISTRO']
     if distro == 'foxy':
         # Foxy does not support the isolated mode
@@ -93,23 +104,24 @@ def launch_setup(context, *args, **kwargs):
     else:
         container_exec='component_container_isolated'
     
-    info = '* Starting Composable node container: /' + namespace_val + '/' + container_name
-    actions.append(LogInfo(msg=TextSubstitution(text=info)))
-
-    zed_container = ComposableNodeContainer(
-        name=container_name,
-        namespace=namespace_val,
-        package='rclcpp_components',
-        executable=container_exec,
-        arguments=['--ros-args', '--log-level', 'info'],
-        output='screen',
-    )
-    actions.append(zed_container)
-
     # Set the first camera idx
     cam_idx = 0
 
     for name in names_arr:
+        container_name = name + '_container'
+        info = '* Starting Composable node container: /' + namespace_val + '/' + container_name
+        actions.append(LogInfo(msg=TextSubstitution(text=info)))
+        actions.append(
+            ComposableNodeContainer(
+                name=container_name,
+                namespace=namespace_val,
+                package='rclcpp_components',
+                executable=container_exec,
+                arguments=['--ros-args', '--log-level', 'info'],
+                output='screen',
+            )
+        )
+
         model = models_arr[cam_idx]
         if len(serials_arr) == num_cams:
             serial = serials_arr[cam_idx]
@@ -138,6 +150,13 @@ def launch_setup(context, *args, **kwargs):
 
         # A different node name is required by the Diagnostic Updated
         node_name = 'zed_node_' + str(cam_idx)
+        
+        camera_parameters = (
+            front_camera_parameters
+            if cam_idx == 0
+            else rear_camera_parameters
+        )   
+        camera_flip = camera_parameters["general.camera_flip"]
 
         # Add the node
         # ZED Wrapper launch file
@@ -154,9 +173,12 @@ def launch_setup(context, *args, **kwargs):
                 'camera_id': id,
                 'publish_tf': publish_tf,
                 'publish_map_tf': publish_map_tf,
-                'publish_imu_tf': 'false',
+                # MOLA needs the camera IMU frame in TF, even though we still
+                # suppress ZED odom/map TF publication.
+                'publish_imu_tf': 'true',
                 'namespace': namespace_val,
                 'node_name': node_name,
+                "camera_flip": str(camera_flip).lower(),
                 # Ensure this is a file path (empty string is fine); passing '.' will crash launch.
                 'ros_params_override_path': ''
             }.items()
@@ -222,6 +244,11 @@ def generate_launch_description():
                 'disable_tf',
                 default_value='False',
                 description='If `True` disable TF broadcasting for all the cameras in order to fuse visual odometry information externally.'),
-            OpaqueFunction(function=launch_setup)
+            DeclareLaunchArgument(
+                "camera_flip",
+                default_value="false",
+                description="Flip the camera image for upside-down mounting."),
+            OpaqueFunction(function=launch_setup),
+            
         ]
     )

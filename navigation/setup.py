@@ -46,6 +46,7 @@ setup(
             "zed_object_to_obstacle = navigation.zed_object_to_obstacle:main",
             "lidar_object_to_obstacle = navigation.lidar_object_to_obstacle:main",
             "collision_avoidance_aad_log = navigation.collision_avoidance_aad_log:main",
+            "camera_context_publisher = navigation.camera_context_publisher:main",
         ],
     },
 )

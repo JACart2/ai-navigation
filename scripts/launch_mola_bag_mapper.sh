@@ -630,6 +630,8 @@ if [[ "$start_mapper" == true ]]; then
   echo
   echo "2.9 Configure The Mapper With Export Commands"
   echo "---------------------------------------------"
+  # Direct mola-cli startup bypasses the ROS launch wrapper that sets this path.
+  export MOLA_STATE_ESTIMATOR_YAML="${MOLA_STATE_ESTIMATOR_YAML:-/opt/ros/jazzy/share/mola_lidar_odometry/state-estimator-params/state-estimation-simple.yaml}"
   export MOLA_LIDAR_TOPIC="$lidar_topic"
   export MOLA_LIDAR_TOPIC_TYPE=PointCloud2
   export MOLA_START_ACTIVE=True
@@ -677,6 +679,7 @@ if [[ "$start_mapper" == true ]]; then
 
   echo "MOLA_SIMPLEMAP_OUTPUT=$MOLA_SIMPLEMAP_OUTPUT"
   echo "MOLA_SAVE_MM=$MOLA_SAVE_MM"
+  echo "MOLA_STATE_ESTIMATOR_YAML=$MOLA_STATE_ESTIMATOR_YAML"
   echo "MOLA_LO_INITIAL_LOCALIZATION_METHOD=$MOLA_LO_INITIAL_LOCALIZATION_METHOD"
   echo "MOLA_DESKEW_METHOD=$MOLA_DESKEW_METHOD"
   echo "MOLA_IMU_GRAVITY_CORRECTION=$MOLA_IMU_GRAVITY_CORRECTION"

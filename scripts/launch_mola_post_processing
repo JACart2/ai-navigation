@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# V8 is implemented by the run-local E08 orchestrator. The original v7/v6
+# implementation below remains available through --workflow v7 / legacy mode.
+if [[ "${MOLA_POST_PROCESSING_LEGACY:-0}" != 1 ]]; then
+  post_processing_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/post_processing"
+  if [[ " $* " != *" --help "* && " $* " != *" -h "* ]]; then
+    post_processing_setup="${DEV_WS:-/root/dev_ws}/install/setup.bash"
+    [[ -f "$post_processing_setup" ]] || { echo "Workspace setup not found: $post_processing_setup" >&2; exit 1; }
+    set +u
+    source "$post_processing_setup"
+    set -u
+  fi
+  exec python3 "$post_processing_dir/run.py" "$@"
+fi
+
 usage() {
   cat <<'USAGE'
 Usage:

@@ -1,0 +1,167 @@
+params:
+  use_gnss: false
+  gnss_minimum_uncertainty_xyz: ${LC_GNSS_MINIMUM_XYZ_SIGMA|0.10}
+  gnss_max_uncertainty_horiz: ${LC_GNSS_MAX_UNCERTAINTY_HORIZ|20.0}
+  gnss_max_uncertainty_vert: ${LC_GNSS_MAX_UNCERTAINTY_VERT|40.0}
+  gnss_add_horizontality: false
+  gnss_horizontality_sigma_rpy: 0.1
+  gnss_edges_uncertainty_multiplier: ${GNSS_EDGES_UNCERTAINTY_MULTIPLIER|1.0}
+  min_distance_between_frames: 0.0
+  max_distance_for_lc_candidate: 12.0
+  max_lc_candidates: 30
+  min_frames_between_lc: 25
+  max_lc_optimization_rounds: 3
+  lc_optimize_every_n: 4
+  lc_candidate_strategy: MULTI_OBJECTIVE
+  lc_verbose_candidate_selection: true
+  lc_distance_bins: 5
+  lc_weight_proximity: 0.4
+  lc_weight_frame_separation: 0.25
+  lc_weight_diversity: 0.2
+  lc_weight_coverage: 0.15
+  min_icp_goodness: 0.35
+  icp_edge_robust_param: ${ICP_ROBUST_PARAM|5.0}
+  icp_edge_additional_noise_xyz: 0.02
+  icp_edge_additional_noise_ang: 0.1
+  threshold_sigma_initial: 1.5
+  threshold_sigma_final: 0.15
+  input_odometry_noise_xyz: 0.04
+  input_odometry_noise_ang: 0.1
+  scale_odometry_noise_by_distance: true
+  largest_delta_for_reconsider: ${RECONSIDER_THRESHOLD|5.0}
+  profiler_enabled: true
+  save_trajectory_files: true
+  save_trajectory_files_with_cov: ${SAVE_TRAJECTORY_FILES_WITH_COV|false}
+  debug_files_prefix: f2f_lc_
+  min_icp_goodness_to_save_icplog: 2.0
+  save_3d_scene_files: ${SAVE_3D_SCENES|false}
+  save_3d_scene_files_per_iteration: ${SAVE_3D_SCENES_PER_ITER|false}
+  save_3d_scene_live_preview: ${SAVE_3D_SCENE_LIVE_PREVIEW|false}
+  scene_path_line_width: 2.0
+  scene_lc_line_width: 4.0
+  scene_path_color_r: 0.0
+  scene_path_color_g: 0.0
+  scene_path_color_b: 1.0
+  scene_path_color_a: 0.7
+  scene_lc_color_r: 0.0
+  scene_lc_color_g: 0.9
+  scene_lc_color_b: 0.0
+  scene_lc_color_a: 0.9
+  scene_lc_candidate_color_r: 1.0
+  scene_lc_candidate_color_g: 0.5
+  scene_lc_candidate_color_b: 0.0
+  scene_lc_candidate_color_a: 0.7
+  scene_keyframe_point_size: 7.0
+  use_kiss_matcher: true
+  kiss_matcher_resolution: 0.7
+  kiss_matcher_layer: points_to_register_points
+  loop_submap_half_window: 5
+  loop_submap_half_length_m: 2.5
+  registration_remove_ground: true
+  registration_ground_band: 0.3
+  registration_voxel_size: 0.15
+  manual_lc_identity_fallback: false
+  manual_hypothesis_min_inliers: 1
+  manual_hypothesis_max_translation_spread: ${MANUAL_HYPOTHESIS_MAX_TRANSLATION_SPREAD|2.5}
+  manual_hypothesis_max_rotation_spread_deg: ${MANUAL_HYPOTHESIS_MAX_ROTATION_SPREAD_DEG|5.0}
+  scan_context_endpoint_search: false
+  scan_context_start_window_percent: ${SCAN_CONTEXT_START_WINDOW_PERCENT|5.0}
+  scan_context_end_window_percent: ${SCAN_CONTEXT_END_WINDOW_PERCENT|15.0}
+  scan_context_num_rings: ${SCAN_CONTEXT_NUM_RINGS|20}
+  scan_context_num_sectors: ${SCAN_CONTEXT_NUM_SECTORS|60}
+  scan_context_max_radius: ${SCAN_CONTEXT_MAX_RADIUS|80.0}
+  scan_context_ringkey_candidates: ${SCAN_CONTEXT_RINGKEY_CANDIDATES|20}
+  scan_context_max_hypotheses: ${SCAN_CONTEXT_MAX_HYPOTHESES|12}
+  scan_context_pairs_per_hypothesis: ${SCAN_CONTEXT_PAIRS_PER_HYPOTHESIS|3}
+  scan_context_pair_frame_stride: ${SCAN_CONTEXT_PAIR_FRAME_STRIDE|6}
+  assume_planar_world: false
+  planar_world_initial_sigma_z: ${PLANAR_WORLD_SIGMA_Z|0.10}
+  planar_world_initial_sigma_ang: ${PLANAR_WORLD_SIGMA_ANG|0.02}
+  planar_world_annealing_rounds: ${PLANAR_WORLD_ANNEALING_ROUNDS|2}
+  candidate_frame_stride: 3
+icp_settings:
+  class_name: mp2p_icp::ICP
+  params:
+    maxIterations: ${MOLA_MAX_ICP_ITERATIONS|100}
+    minAbsStep_trans: 1e-3
+    minAbsStep_rot: 1e-4
+    force_final_pairings_for_quality: true
+    saveIterationDetails: false
+    decimationIterationDetails: 3
+    debugFileNameFormat: ./icp-logs/lc-$UNIQUE_ID-local_$LOCAL_ID$LOCAL_LABEL-to-global_$GLOBAL_ID$GLOBAL_LABEL.icplog
+    decimationDebugFiles: ${MP2P_ICP_LOG_FILES_DECIMATION|1}
+  solvers:
+  - class: mp2p_icp::Solver_GaussNewton
+    params:
+      maxIterations: 2
+      robustKernel: ${MOLA_LC_ROBUST_KERNEL|RobustKernel::GemanMcClure}
+      robustKernelParam: ${MOLA_LO_ROBUST_KERNEL_PARAM|6.0}
+  matchers:
+  - class: mp2p_icp::Matcher_Points_DistanceThreshold
+    params:
+      threshold: 2.0*max(SIGMA_FINAL, SIGMA_INIT-(SIGMA_INIT-SIGMA_FINAL)*ICP_ITERATION/100)
+      thresholdAngularDeg: 0
+      pairingsPerPoint: 1
+      allowMatchAlreadyMatchedGlobalPoints: true
+      pointLayerMatches:
+      - global: points_to_register_points
+        local: points_to_register_points
+        weight: 1.0
+  quality:
+  - class: mp2p_icp::QualityEvaluator_PairedRatio
+    params:
+      reuse_icp_pairings: false
+      absolute_minimum_pairing_ratio: 0.1
+      threshold: 0.3
+      thresholdAngularDeg: 0.0
+      pairingsPerPoint: 1
+      allowMatchAlreadyMatchedGlobalPoints: true
+      pointLayerMatches:
+      - global: points_to_register_points
+        local: points_to_register_points
+        weight: 1.0
+observations_generator:
+- class_name: mp2p_icp_filters::Generator
+  params:
+    target_layer: raw
+    throw_on_unhandled_observation_class: true
+    process_class_names_regex: (mrpt::obs::CObservationPointCloud|mrpt::obs::CObservation2DRangeScan|mrpt::obs::CObservationVelodyneScan)
+    process_sensor_labels_regex: .*
+- class_name: mp2p_icp_filters::Generator
+  params:
+    target_layer: points_to_register
+    throw_on_unhandled_observation_class: true
+    process_class_names_regex: ''
+    metric_map_definition:
+      class: mola::KeyframePointCloudMap
+      plugin: libmola_metric_maps.so
+      creationOpts: null
+      insertOpts: null
+      likelihoodOpts: null
+      renderOpts: null
+observations_filter:
+- class_name: mp2p_icp_filters::FilterDeskew
+  params:
+    input_pointcloud_layer: raw
+    output_pointcloud_layer: deskewed
+    method: ${MOLA_DESKEW_METHOD|MotionCompensationMethod::IMU}
+    ignore_accelerometer: ${MOLA_DESKEW_IGNORE_ACCELEROMETER|false}
+    silently_ignore_no_timestamps: ${MOLA_DESKEW_IGNORE_NO_TIMESTAMPS|false}
+    output_layer_class: mrpt::maps::CGenericPointsMap
+    points_already_global: false
+- class_name: mp2p_icp_filters::FilterByRange
+  params:
+    input_pointcloud_layer: deskewed
+    output_layer_between: points_to_register_points
+    range_min: ${MOLA_LC_SENSOR_FILTER_MIN_RANGE|max(1.0, 0.03*ESTIMATED_SENSOR_MAX_RANGE)}
+    range_max: ${MOLA_LC_SENSOR_FILTER_MAX_RANGE|1.2*ESTIMATED_SENSOR_MAX_RANGE}
+- class_name: mp2p_icp_filters::FilterMerge
+  params:
+    input_pointcloud_layer: points_to_register_points
+    target_layer: points_to_register
+    input_layer_in_local_coordinates: false
+- class_name: mp2p_icp_filters::FilterDeleteLayer
+  params:
+    pointcloud_layer_to_remove:
+    - raw
+    - deskewed

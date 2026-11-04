@@ -1,0 +1,847 @@
+diff --git a/module/include/mola_sm_loop_closure/FrameToFrameLoopClosure.h b/module/include/mola_sm_loop_closure/FrameToFrameLoopClosure.h
+index 6092293..80c7969 100644
+--- a/module/include/mola_sm_loop_closure/FrameToFrameLoopClosure.h
++++ b/module/include/mola_sm_loop_closure/FrameToFrameLoopClosure.h
+@@ -14,6 +14,7 @@
+ 
+ #pragma once
+ 
++#include <gtsam/geometry/Pose3.h>
+ #include <gtsam/nonlinear/Marginals.h>
+ #include <gtsam/nonlinear/NonlinearFactorGraph.h>
+ #include <gtsam/nonlinear/Values.h>
+@@ -82,6 +83,7 @@ class FrameToFrameLoopClosure : public mola::LoopClosureInterface
+         double max_distance_for_lc_candidate = 50.0;  // [m] maximum distance to consider
+         size_t max_lc_candidates             = 100;  // maximum candidates to check
+         size_t min_frames_between_lc         = 50;  // minimum frame separation
++        size_t candidate_frame_stride       = 1;  // compare every Nth frame
+         size_t max_lc_optimization_rounds    = 5;  // maximum LC+optimization rounds to run
+ 
+         /** Number of accepted LCs between intermediate graph optimizations.
+@@ -227,11 +229,56 @@ class FrameToFrameLoopClosure : public mola::LoopClosureInterface
+          *  an mrpt::maps::CPointsMap-derived object. */
+         std::string kiss_matcher_layer = "points_to_register_points";
+ 
++        /** Number of neighbouring keyframes on either side of each loop-closure
++         *  center to accumulate before KISS-Matcher and ICP. Zero preserves
++         *  frame-to-frame behavior. With 1 m simplemap spacing, 5 gives an
++         *  approximately 10 m-long local submap. */
++        size_t loop_submap_half_window = 0;
++
++        /** Accumulate each registration submap by travelled distance on each
++         *  side of its center. When positive this supersedes the keyframe
++         *  window, making registration independent of keyframe cadence. */
++        double loop_submap_half_length_m = 0.0;
++
++        /** Registration-cloud preprocessing for accumulated submaps. */
++        bool   registration_remove_ground       = false;
++        double registration_ground_band         = 0.30;
++        double registration_voxel_size          = 0.0;
++
++        /** If false, a failed manual KISS+ICP hint is skipped instead of
++         *  becoming an identity constraint. */
++        bool manual_lc_identity_fallback = true;
++
++        /** Minimum accepted registrations required from one manual hypothesis.
++         *  Failed hypothesis factors are rolled back atomically. */
++        size_t manual_hypothesis_min_inliers = 1;
++
++        /** All registrations in an endpoint hypothesis must imply nearly the
++         *  same rigid correction before any of them enter optimization. */
++        double manual_hypothesis_max_translation_spread = 2.5;  // [m]
++        double manual_hypothesis_max_rotation_spread_deg = 5.0;  // [deg]
++
++        // ===== Scan Context endpoint place recognition =====
++        /** Generate endpoint hypotheses from lidar appearance before passing
++         *  them to KISS-Matcher+ICP. The descriptor is built in each sensor
++         *  frame, so accumulated map roll/pitch drift does not affect it. */
++        bool   scan_context_endpoint_search = false;
++        double scan_context_start_window_percent = 5.0;
++        double scan_context_end_window_percent = 15.0;
++        size_t scan_context_num_rings = 20;
++        size_t scan_context_num_sectors = 60;
++        double scan_context_max_radius = 80.0;
++        size_t scan_context_ringkey_candidates = 20;
++        size_t scan_context_max_hypotheses = 12;
++        size_t scan_context_pairs_per_hypothesis = 3;
++        size_t scan_context_pair_frame_stride = 6;
++
+         // ===== Manual Loop Closure Hints =====
+         struct ManualLoopConstraint
+         {
+             double timestamp_i = 0.0;  ///< UNIX timestamp (mrpt::Clock::toDouble()) for frame i
+             double timestamp_j = 0.0;  ///< UNIX timestamp (mrpt::Clock::toDouble()) for frame j
++            int hypothesis_id = 0;  ///< Constraints with the same ID form one atomic hypothesis.
+             double sigma_xyz = 0.10;  ///< [m] sigma for X, Y, Z; angles are left free (large sigma)
+             /** If true, mark this constraint as a known GNC inlier, bypassing
+              *  outlier rejection.  Use only when the constraint is highly trusted. */
+@@ -328,6 +375,10 @@ class FrameToFrameLoopClosure : public mola::LoopClosureInterface
+     /** Get point cloud for a frame, using the LRU cache */
+     mp2p_icp::metric_map_t::Ptr get_cached_pointcloud(frame_id_t frameId, size_t threadIdx);
+ 
++    /** Accumulate [center-halfWindow, center+halfWindow] into center coordinates. */
++    mp2p_icp::metric_map_t::Ptr build_loop_submap(frame_id_t centerId, size_t threadIdx);
++    void generate_scan_context_endpoint_hypotheses();
++
+     /** Evict oldest entries from the PC cache until under the size limit */
+     void evict_pc_cache();
+ 
+@@ -352,7 +403,12 @@ class FrameToFrameLoopClosure : public mola::LoopClosureInterface
+ 
+     /** Process a single loop closure candidate with ICP.
+      *  Returns the factor index in graphFG on success, or nullopt on failure. */
+-    std::optional<size_t> process_loop_candidate(const LoopCandidate& lc);
++    struct LoopClosureResult
++    {
++        size_t       factor_index = 0;
++        gtsam::Pose3 global_correction;
++    };
++    std::optional<LoopClosureResult> process_loop_candidate(const LoopCandidate& lc);
+ 
+     /** Optimize the graph and return the largest pose change */
+     struct OptGraphResult
+diff --git a/module/src/FrameToFrameLoopClosure.cpp b/module/src/FrameToFrameLoopClosure.cpp
+index e9be63a..3869704 100644
+--- a/module/src/FrameToFrameLoopClosure.cpp
++++ b/module/src/FrameToFrameLoopClosure.cpp
+@@ -34,6 +34,7 @@
+ #include <mrpt/maps/CPointsMap.h>
+ #include <mrpt/obs/CObservation2DRangeScan.h>
+ #include <mrpt/obs/CObservation3DRangeScan.h>
++#include <mrpt/maps/CSimplePointsMap.h>
+ #include <mrpt/obs/CObservationComment.h>
+ #include <mrpt/obs/CObservationGPS.h>
+ #include <mrpt/obs/CObservationPointCloud.h>
+@@ -62,6 +63,7 @@ using namespace mola;
+ 
+ IMPLEMENTS_SERIALIZABLE(FrameToFrameLoopClosure, LoopClosureInterface, mola)
+ 
++#include <unordered_set>
+ namespace
+ {
+ // Convenience shortcuts to the shared debug-flag singleton.
+@@ -229,6 +231,7 @@ void FrameToFrameLoopClosure::initialize(const mrpt::containers::yaml& c)
+     YAML_LOAD_OPT(params_, max_distance_for_lc_candidate, double);
+     YAML_LOAD_OPT(params_, max_lc_candidates, size_t);
+     YAML_LOAD_OPT(params_, min_frames_between_lc, size_t);
++    YAML_LOAD_OPT(params_, candidate_frame_stride, size_t);
+     YAML_LOAD_OPT(params_, max_lc_optimization_rounds, size_t);
+     YAML_LOAD_OPT(params_, lc_optimize_every_n, size_t);
+ 
+@@ -238,6 +241,12 @@ void FrameToFrameLoopClosure::initialize(const mrpt::containers::yaml& c)
+         params_.min_frames_between_lc = 1;
+     }
+ 
++    if (params_.candidate_frame_stride == 0)
++    {
++        MRPT_LOG_WARN("candidate_frame_stride=0 is invalid; clamping to 1.");
++        params_.candidate_frame_stride = 1;
++    }
++
+     YAML_LOAD_OPT(params_, lc_distance_bins, size_t);
+     YAML_LOAD_OPT(params_, lc_weight_proximity, double);
+     YAML_LOAD_OPT(params_, lc_weight_frame_separation, double);
+@@ -283,6 +292,25 @@ void FrameToFrameLoopClosure::initialize(const mrpt::containers::yaml& c)
+     YAML_LOAD_OPT(params_, use_kiss_matcher, bool);
+     YAML_LOAD_OPT(params_, kiss_matcher_resolution, double);
+     YAML_LOAD_OPT(params_, kiss_matcher_layer, std::string);
++    YAML_LOAD_OPT(params_, loop_submap_half_window, size_t);
++    YAML_LOAD_OPT(params_, loop_submap_half_length_m, double);
++    YAML_LOAD_OPT(params_, registration_remove_ground, bool);
++    YAML_LOAD_OPT(params_, registration_ground_band, double);
++    YAML_LOAD_OPT(params_, registration_voxel_size, double);
++    YAML_LOAD_OPT(params_, manual_lc_identity_fallback, bool);
++    YAML_LOAD_OPT(params_, manual_hypothesis_min_inliers, size_t);
++    YAML_LOAD_OPT(params_, manual_hypothesis_max_translation_spread, double);
++    YAML_LOAD_OPT(params_, manual_hypothesis_max_rotation_spread_deg, double);
++    YAML_LOAD_OPT(params_, scan_context_endpoint_search, bool);
++    YAML_LOAD_OPT(params_, scan_context_start_window_percent, double);
++    YAML_LOAD_OPT(params_, scan_context_end_window_percent, double);
++    YAML_LOAD_OPT(params_, scan_context_num_rings, size_t);
++    YAML_LOAD_OPT(params_, scan_context_num_sectors, size_t);
++    YAML_LOAD_OPT(params_, scan_context_max_radius, double);
++    YAML_LOAD_OPT(params_, scan_context_ringkey_candidates, size_t);
++    YAML_LOAD_OPT(params_, scan_context_max_hypotheses, size_t);
++    YAML_LOAD_OPT(params_, scan_context_pairs_per_hypothesis, size_t);
++    YAML_LOAD_OPT(params_, scan_context_pair_frame_stride, size_t);
+ 
+     YAML_LOAD_OPT(params_, largest_delta_for_reconsider, double);
+     YAML_LOAD_OPT(params_, max_sensor_range, double);
+@@ -328,6 +356,8 @@ void FrameToFrameLoopClosure::initialize(const mrpt::containers::yaml& c)
+ 
+             mlc.timestamp_i = entry.at("timestamp_i").as<double>();
+             mlc.timestamp_j = entry.at("timestamp_j").as<double>();
++            if (entry.count("hypothesis_id") != 0)
++                mlc.hypothesis_id = entry.at("hypothesis_id").as<int>();
+             mlc.sigma_xyz   = entry.at("sigma_xyz").as<double>();
+             if (entry.count("trust_as_inlier") != 0)
+                 mlc.trust_as_inlier = entry.at("trust_as_inlier").as<bool>();
+@@ -454,6 +484,11 @@ void FrameToFrameLoopClosure::process(mrpt::maps::CSimpleMap& sm)  // NOLINT
+         }
+     }
+ 
++    if (params_.scan_context_endpoint_search)
++    {
++        generate_scan_context_endpoint_hypotheses();
++    }
++
+     // Add manual loop closure constraints, if any
+     if (!params_.manual_loop_constraints.empty())
+     {
+@@ -794,6 +829,238 @@ void FrameToFrameLoopClosure::add_gnss_factors()
+         state_.graphFG, *state_.sm, state_.globalGeoRef, p, state_.knownInlierFactorIndices, this);
+ }
+ 
++void FrameToFrameLoopClosure::generate_scan_context_endpoint_hypotheses()
++{
++    ASSERT_(state_.sm);
++    const auto& sm = *state_.sm;
++    const size_t n = sm.size();
++    if (n < 10 || params_.scan_context_num_rings == 0 ||
++        params_.scan_context_num_sectors == 0)
++    {
++        MRPT_LOG_WARN("Scan Context endpoint search skipped: invalid map or descriptor dimensions.");
++        return;
++    }
++
++    const size_t startCount = std::max<size_t>(
++        1, static_cast<size_t>(
++               std::floor(n * params_.scan_context_start_window_percent / 100.0)));
++    const size_t endCount = std::max<size_t>(
++        1,
++        static_cast<size_t>(std::floor(n * params_.scan_context_end_window_percent / 100.0)));
++    const size_t endFirst = n > endCount ? n - endCount : 0;
++    const size_t rings = params_.scan_context_num_rings;
++    const size_t sectors = params_.scan_context_num_sectors;
++
++    struct Descriptor
++    {
++        frame_id_t id = 0;
++        std::vector<float> context;
++        std::vector<float> ringKey;
++    };
++
++    auto makeDescriptor = [&](frame_id_t id) -> std::optional<Descriptor>
++    {
++        auto pc = get_cached_pointcloud(id, 0);
++        if (!pc) return std::nullopt;
++
++        std::shared_ptr<mrpt::maps::CPointsMap> points;
++        if (const auto it = pc->layers.find(params_.kiss_matcher_layer);
++            it != pc->layers.end())
++            points = std::dynamic_pointer_cast<mrpt::maps::CPointsMap>(it->second);
++        if (!points)
++        {
++            size_t largest = 0;
++            for (const auto& [name, layer] : pc->layers)
++            {
++                const auto p = std::dynamic_pointer_cast<mrpt::maps::CPointsMap>(layer);
++                if (p && p->size() > largest)
++                {
++                    points = p;
++                    largest = p->size();
++                }
++            }
++        }
++        if (!points || points->empty()) return std::nullopt;
++
++        Descriptor d;
++        d.id = id;
++        d.context.assign(rings * sectors, 0.0f);
++        d.ringKey.assign(rings, 0.0f);
++        const auto& xs = points->getPointsBufferRef_x();
++        const auto& ys = points->getPointsBufferRef_y();
++        const auto& zs = points->getPointsBufferRef_z();
++        for (size_t k = 0; k < points->size(); k++)
++        {
++            const double r = std::hypot(xs[k], ys[k]);
++            if (r <= 0.1 || r > params_.scan_context_max_radius) continue;
++            double a = std::atan2(ys[k], xs[k]);
++            if (a < 0) a += 2.0 * M_PI;
++            const size_t ri = std::min(
++                rings - 1,
++                static_cast<size_t>(r / params_.scan_context_max_radius * rings));
++            const size_t si = std::min(
++                sectors - 1, static_cast<size_t>(a / (2.0 * M_PI) * sectors));
++            // A positive offset preserves below-sensor terrain while max-height
++            // pooling retains the characteristic vertical structures.
++            d.context[ri * sectors + si] =
++                std::max(d.context[ri * sectors + si], static_cast<float>(zs[k] + 3.0));
++        }
++        for (size_t r = 0; r < rings; r++)
++        {
++            double sum = 0;
++            for (size_t s = 0; s < sectors; s++) sum += d.context[r * sectors + s];
++            d.ringKey[r] = static_cast<float>(sum / sectors);
++        }
++        return d;
++    };
++
++    std::vector<Descriptor> starts, ends;
++    MRPT_LOG_INFO_STREAM(
++        "Scan Context: building descriptors for frames [0," << startCount - 1 << "] and ["
++                                                             << endFirst << "," << n - 1 << "]");
++    for (size_t i = 0; i < startCount; i++)
++        if (auto d = makeDescriptor(static_cast<frame_id_t>(i)); d) starts.push_back(std::move(*d));
++    for (size_t i = endFirst; i < n; i++)
++        if (auto d = makeDescriptor(static_cast<frame_id_t>(i)); d) ends.push_back(std::move(*d));
++
++    auto ringDistance = [&](const Descriptor& a, const Descriptor& b)
++    {
++        double sum = 0;
++        for (size_t r = 0; r < rings; r++)
++        {
++            const double e = a.ringKey[r] - b.ringKey[r];
++            sum += e * e;
++        }
++        return std::sqrt(sum);
++    };
++    auto contextDistance = [&](const Descriptor& a, const Descriptor& b)
++    {
++        double best = 1.0;
++        size_t bestShift = 0;
++        for (size_t shift = 0; shift < sectors; shift++)
++        {
++            double similarity = 0;
++            size_t validColumns = 0;
++            for (size_t s = 0; s < sectors; s++)
++            {
++                double dot = 0, na = 0, nb = 0;
++                const size_t bs = (s + shift) % sectors;
++                for (size_t r = 0; r < rings; r++)
++                {
++                    const double va = a.context[r * sectors + s];
++                    const double vb = b.context[r * sectors + bs];
++                    dot += va * vb;
++                    na += va * va;
++                    nb += vb * vb;
++                }
++                if (na > 1e-9 && nb > 1e-9)
++                {
++                    similarity += dot / std::sqrt(na * nb);
++                    validColumns++;
++                }
++            }
++            const double distance =
++                validColumns == 0 ? 1.0 : 1.0 - similarity / validColumns;
++            if (distance < best)
++            {
++                best = distance;
++                bestShift = shift;
++            }
++        }
++        return std::make_pair(best, bestShift);
++    };
++
++    struct Match
++    {
++        double distance = 1.0;
++        frame_id_t early = 0, late = 0;
++        size_t yawShift = 0;
++    };
++    std::vector<Match> matches;
++    for (const auto& a : starts)
++    {
++        std::vector<std::pair<double, size_t>> shortlist;
++        shortlist.reserve(ends.size());
++        for (size_t j = 0; j < ends.size(); j++)
++            shortlist.emplace_back(ringDistance(a, ends[j]), j);
++        const size_t keep = std::min(params_.scan_context_ringkey_candidates, shortlist.size());
++        std::partial_sort(
++            shortlist.begin(), shortlist.begin() + keep, shortlist.end(),
++            [](const auto& x, const auto& y) { return x.first < y.first; });
++        for (size_t k = 0; k < keep; k++)
++        {
++            const auto& b = ends[shortlist[k].second];
++            const auto [distance, shift] = contextDistance(a, b);
++            matches.push_back({distance, a.id, b.id, shift});
++        }
++    }
++    std::sort(
++        matches.begin(), matches.end(),
++        [](const auto& a, const auto& b) { return a.distance < b.distance; });
++
++    params_.manual_loop_constraints.clear();
++    int hypothesisId = 0;
++    std::vector<std::pair<frame_id_t, frame_id_t>> selectedAnchors;
++    for (const auto& m : matches)
++    {
++        bool diverse = true;
++        for (const auto& [a, b] : selectedAnchors)
++            if (std::abs(static_cast<int>(m.early) - static_cast<int>(a)) <
++                    static_cast<int>(params_.scan_context_pair_frame_stride) &&
++                std::abs(static_cast<int>(m.late) - static_cast<int>(b)) <
++                    static_cast<int>(params_.scan_context_pair_frame_stride))
++                diverse = false;
++        if (!diverse) continue;
++
++        for (const int lateDirection : {1, -1})
++        {
++            std::vector<std::pair<frame_id_t, frame_id_t>> pairs;
++            for (size_t p = 0; p < params_.scan_context_pairs_per_hypothesis; p++)
++            {
++                const int ei = static_cast<int>(m.early) +
++                               static_cast<int>(p * params_.scan_context_pair_frame_stride);
++                const int lj = static_cast<int>(m.late) +
++                               lateDirection *
++                                   static_cast<int>(p * params_.scan_context_pair_frame_stride);
++                if (ei < 0 || lj < 0 || ei >= static_cast<int>(startCount) ||
++                    lj < static_cast<int>(endFirst) || lj >= static_cast<int>(n))
++                {
++                    pairs.clear();
++                    break;
++                }
++                pairs.emplace_back(static_cast<frame_id_t>(ei), static_cast<frame_id_t>(lj));
++            }
++            if (pairs.empty()) continue;
++            hypothesisId++;
++            for (const auto& [ei, lj] : pairs)
++            {
++                const auto oi = sm.get(ei).sf->getObservationByIndex(0);
++                const auto oj = sm.get(lj).sf->getObservationByIndex(0);
++                Parameters::ManualLoopConstraint c;
++                c.timestamp_i = mrpt::Clock::toDouble(oi->timestamp);
++                c.timestamp_j = mrpt::Clock::toDouble(oj->timestamp);
++                c.hypothesis_id = hypothesisId;
++                c.sigma_xyz = 0.20;
++                params_.manual_loop_constraints.push_back(c);
++            }
++            MRPT_LOG_INFO_STREAM(
++                "Scan Context candidate " << hypothesisId << ": anchor " << m.early << "<->"
++                                          << m.late << ", distance=" << m.distance
++                                          << ", yaw=" << 360.0 * m.yawShift / sectors
++                                          << " deg, traversal="
++                                          << (lateDirection > 0 ? "same" : "reverse"));
++            if (static_cast<size_t>(hypothesisId) >= params_.scan_context_max_hypotheses)
++                break;
++        }
++        selectedAnchors.emplace_back(m.early, m.late);
++        if (static_cast<size_t>(hypothesisId) >= params_.scan_context_max_hypotheses) break;
++    }
++    MRPT_LOG_INFO_STREAM(
++        "Scan Context generated " << hypothesisId << " endpoint hypotheses ("
++                                  << params_.manual_loop_constraints.size()
++                                  << " KISS/ICP constraints).");
++}
++
+ void FrameToFrameLoopClosure::add_manual_loop_closure_factors()
+ {
+     using gtsam::symbol_shorthand::X;
+@@ -853,9 +1120,80 @@ void FrameToFrameLoopClosure::add_manual_loop_closure_factors()
+     };
+ 
+     size_t addedCount = 0;
++    int    currentHypothesis =
++        params_.manual_loop_constraints.empty() ? 0
++                                                : params_.manual_loop_constraints.front().hypothesis_id;
++    size_t hypothesisGraphStart   = state_.graphFG.size();
++    size_t hypothesisEdgesStart   = accepted_lc_edges_.size();
++    size_t hypothesisKnownStart   = state_.knownInlierFactorIndices.size();
++    size_t hypothesisAddedCount   = 0;
++    bool   selectedHypothesis     = false;
++    std::vector<gtsam::Pose3> hypothesisCorrections;
++
++    auto finishHypothesis = [&]() -> bool
++    {
++        bool transformsConsistent = true;
++        double maxTranslationSpread = 0.0;
++        double maxRotationSpreadDeg = 0.0;
++        if (!hypothesisCorrections.empty())
++        {
++            const auto& reference = hypothesisCorrections.front();
++            for (size_t k = 1; k < hypothesisCorrections.size(); k++)
++            {
++                const auto residual = reference.between(hypothesisCorrections[k]);
++                maxTranslationSpread =
++                    std::max(maxTranslationSpread, residual.translation().norm());
++                maxRotationSpreadDeg = std::max(
++                    maxRotationSpreadDeg,
++                    mrpt::RAD2DEG(gtsam::Rot3::Logmap(residual.rotation()).norm()));
++            }
++            transformsConsistent =
++                maxTranslationSpread <= params_.manual_hypothesis_max_translation_spread &&
++                maxRotationSpreadDeg <= params_.manual_hypothesis_max_rotation_spread_deg;
++        }
++
++        if (hypothesisAddedCount >= params_.manual_hypothesis_min_inliers &&
++            transformsConsistent)
++        {
++            MRPT_LOG_INFO_STREAM(
++                "Manual LC hypothesis " << currentHypothesis << " accepted atomically with "
++                                        << hypothesisAddedCount << " registration(s); correction "
++                                        << "spread=" << maxTranslationSpread << " m / "
++                                        << maxRotationSpreadDeg << " deg.");
++            return true;
++        }
++
++        state_.graphFG.resize(hypothesisGraphStart);
++        accepted_lc_edges_.resize(hypothesisEdgesStart);
++        state_.knownInlierFactorIndices.resize(hypothesisKnownStart);
++        addedCount -= hypothesisAddedCount;
++        MRPT_LOG_WARN_STREAM(
++            "Manual LC hypothesis "
++            << currentHypothesis << " rejected atomically: " << hypothesisAddedCount << " of "
++            << params_.manual_hypothesis_min_inliers
++            << " required registrations succeeded, correction spread="
++            << maxTranslationSpread << " m / " << maxRotationSpreadDeg
++            << " deg; rolled back its factors.");
++        hypothesisAddedCount = 0;
++        hypothesisCorrections.clear();
++        return false;
++    };
+ 
+     for (const auto& mlc : params_.manual_loop_constraints)
+     {
++        if (mlc.hypothesis_id != currentHypothesis)
++        {
++            if (finishHypothesis())
++            {
++                selectedHypothesis = true;
++                break;
++            }
++            currentHypothesis   = mlc.hypothesis_id;
++            hypothesisGraphStart = state_.graphFG.size();
++            hypothesisEdgesStart = accepted_lc_edges_.size();
++            hypothesisKnownStart = state_.knownInlierFactorIndices.size();
++        }
++
+         const auto fi_opt = findClosestFrame(mlc.timestamp_i);
+         const auto fj_opt = findClosestFrame(mlc.timestamp_j);
+ 
+@@ -889,8 +1227,11 @@ void FrameToFrameLoopClosure::add_manual_loop_closure_factors()
+ 
+             if (const auto km_result = process_loop_candidate(lc); km_result.has_value())
+             {
+-                if (mlc.trust_as_inlier) state_.knownInlierFactorIndices.push_back(*km_result);
++                if (mlc.trust_as_inlier)
++                    state_.knownInlierFactorIndices.push_back(km_result->factor_index);
+                 addedCount++;
++                hypothesisAddedCount++;
++                hypothesisCorrections.push_back(km_result->global_correction);
+                 MRPT_LOG_INFO_STREAM(
+                     "Manual LC (KISS-Matcher+ICP) added: frame "
+                     << fi << " (t=" << mlc.timestamp_i << ") <-> frame " << fj
+@@ -903,6 +1244,11 @@ void FrameToFrameLoopClosure::add_manual_loop_closure_factors()
+                 << " (ICP quality too low); falling back to identity constraint "
+                    "with sigma_xyz="
+                 << mlc.sigma_xyz << " m");
++            if (!params_.manual_lc_identity_fallback)
++            {
++                MRPT_LOG_WARN("Manual LC identity fallback disabled; skipping failed hint.");
++                continue;
++            }
+         }
+ #endif
+ 
+@@ -933,6 +1279,7 @@ void FrameToFrameLoopClosure::add_manual_loop_closure_factors()
+         // Track for 3D scene output
+         accepted_lc_edges_.emplace_back(fi, fj);
+         addedCount++;
++        hypothesisAddedCount++;
+ 
+         MRPT_LOG_INFO_STREAM(
+             "Manual LC (identity) added: frame "
+@@ -940,6 +1287,15 @@ void FrameToFrameLoopClosure::add_manual_loop_closure_factors()
+             << ")  sigma_xyz=" << mlc.sigma_xyz << " m");
+     }
+ 
++    if (!selectedHypothesis && !params_.manual_loop_constraints.empty())
++    {
++        selectedHypothesis = finishHypothesis();
++    }
++    if (!selectedHypothesis && params_.manual_hypothesis_min_inliers > 1)
++    {
++        MRPT_LOG_WARN("No manual loop-closure hypothesis met the atomic acceptance threshold.");
++    }
++
+     MRPT_LOG_INFO_STREAM("Added " << addedCount << " manual loop closure factor(s).");
+ }
+ 
+@@ -983,11 +1339,15 @@ auto FrameToFrameLoopClosure::
+     // STEP 1: Generate and score all candidates
+     // ========================================================================
+ 
+-    for (size_t i = 0; i < sm.size(); i++)
++    const size_t stride = params_.candidate_frame_stride;
++
++    for (size_t i = 0; i < sm.size(); i += stride)
+     {
+         const auto pose_i = state_.get_pose(i);
++        const size_t firstJ =
++            ((i + params_.min_frames_between_lc + stride - 1) / stride) * stride;
+ 
+-        for (size_t j = i + params_.min_frames_between_lc; j < sm.size(); j++)
++        for (size_t j = firstJ; j < sm.size(); j += stride)
+         {
+             // Check if already evaluated
+             const auto frameGroup_i = mrpt::round(static_cast<double>(i) / frameGroup);
+@@ -1290,7 +1650,8 @@ auto FrameToFrameLoopClosure::
+     return finalCandidates;
+ }
+ 
+-std::optional<size_t> FrameToFrameLoopClosure::process_loop_candidate(const LoopCandidate& lc)
++std::optional<FrameToFrameLoopClosure::LoopClosureResult>
++FrameToFrameLoopClosure::process_loop_candidate(const LoopCandidate& lc)
+ {
+     using gtsam::symbol_shorthand::X;
+ 
+@@ -1300,9 +1661,11 @@ std::optional<size_t> FrameToFrameLoopClosure::process_loop_candidate(const Loop
+                              state_.perThreadState_.size();
+     ASSERT_(threadIdx < state_.perThreadState_.size());
+ 
+-    // Get point clouds for both frames (using LRU cache)
+-    auto pc_i = get_cached_pointcloud(lc.frame_i, threadIdx);
+-    auto pc_j = get_cached_pointcloud(lc.frame_j, threadIdx);
++    // Get a single keyframe cloud or an accumulated local submap centered at
++    // each candidate frame. Neighbouring clouds are expressed in the center
++    // frame, so global trajectory drift does not enter the registration.
++    auto pc_i = build_loop_submap(lc.frame_i, threadIdx);
++    auto pc_j = build_loop_submap(lc.frame_j, threadIdx);
+ 
+     if (!pc_i || !pc_j)
+     {
+@@ -1427,7 +1790,11 @@ std::optional<size_t> FrameToFrameLoopClosure::process_loop_candidate(const Loop
+ 
+     accepted_lc_edges_.emplace_back(lc.frame_i, lc.frame_j);
+ 
+-    return newFactorIdx;
++    const auto currentPoseI = mrpt::gtsam_wrappers::toPose3(state_.get_pose(lc.frame_i));
++    const auto currentPoseJ = mrpt::gtsam_wrappers::toPose3(state_.get_pose(lc.frame_j));
++    const auto predictedPoseJ = currentPoseI.compose(deltaPose);
++    const auto globalCorrection = predictedPoseJ.compose(currentPoseJ.inverse());
++    return LoopClosureResult{newFactorIdx, globalCorrection};
+ }
+ 
+ mp2p_icp::metric_map_t::Ptr FrameToFrameLoopClosure::generate_frame_pointcloud(
+@@ -1556,6 +1923,158 @@ mp2p_icp::metric_map_t::Ptr FrameToFrameLoopClosure::get_cached_pointcloud(
+     return pc;
+ }
+ 
++mp2p_icp::metric_map_t::Ptr FrameToFrameLoopClosure::build_loop_submap(
++    frame_id_t centerId, size_t threadIdx)
++{
++    if (params_.loop_submap_half_window == 0 && params_.loop_submap_half_length_m <= 0.0)
++    {
++        return get_cached_pointcloud(centerId, threadIdx);
++    }
++
++    ASSERT_(state_.sm);
++    const auto frameCount = state_.sm->size();
++    if (frameCount == 0 || centerId >= frameCount)
++    {
++        return {};
++    }
++
++    size_t first = centerId > params_.loop_submap_half_window
++                       ? centerId - params_.loop_submap_half_window
++                       : 0;
++    size_t last = std::min(
++        frameCount - 1, static_cast<size_t>(centerId) + params_.loop_submap_half_window);
++    if (params_.loop_submap_half_length_m > 0.0)
++    {
++        first = centerId;
++        double travelled = 0.0;
++        while (first > 0 && travelled < params_.loop_submap_half_length_m)
++        {
++            travelled +=
++                (frame_pose_in_simplemap(first).translation() -
++                 frame_pose_in_simplemap(first - 1).translation()).norm();
++            --first;
++        }
++        last = centerId;
++        travelled = 0.0;
++        while (last + 1 < frameCount && travelled < params_.loop_submap_half_length_m)
++        {
++            travelled +=
++                (frame_pose_in_simplemap(last + 1).translation() -
++                 frame_pose_in_simplemap(last).translation()).norm();
++            ++last;
++        }
++    }
++
++    auto       submap     = mp2p_icp::metric_map_t::Create();
++    const auto centerPose = frame_pose_in_simplemap(centerId);
++    size_t     merged     = 0;
++
++    for (size_t id = first; id <= last; id++)
++    {
++        auto framePc = get_cached_pointcloud(static_cast<frame_id_t>(id), threadIdx);
++        if (!framePc)
++        {
++            continue;
++        }
++
++        const auto relativePose =
++            (frame_pose_in_simplemap(static_cast<frame_id_t>(id)) - centerPose).asTPose();
++        submap->merge_with(*framePc, relativePose);
++        merged++;
++    }
++
++    if (merged == 0)
++    {
++        return {};
++    }
++
++    // Build a dedicated ordinary point layer for KISS + point-to-point ICP.
++    // Estimate the dominant horizontal Z band (normally ground), discard that
++    // band and everything below it, then optionally voxel-decimate.
++    if (params_.registration_remove_ground || params_.registration_voxel_size > 0)
++    {
++        const auto it = submap->layers.find(params_.kiss_matcher_layer);
++        if (it != submap->layers.end())
++        {
++            const auto input = std::dynamic_pointer_cast<mrpt::maps::CPointsMap>(it->second);
++            if (input && !input->empty())
++            {
++                constexpr double Z_BIN = 0.10;
++                std::unordered_map<int, size_t> zHistogram;
++                const auto& zs = input->getPointsBufferRef_z();
++                for (const float z : zs)
++                {
++                    zHistogram[static_cast<int>(std::floor(z / Z_BIN))]++;
++                }
++
++                const auto groundIt = std::max_element(
++                    zHistogram.begin(), zHistogram.end(),
++                    [](const auto& a, const auto& b) { return a.second < b.second; });
++                const double groundZ =
++                    groundIt == zHistogram.end() ? 0.0 : (groundIt->first + 0.5) * Z_BIN;
++
++                struct VoxelKey
++                {
++                    int x = 0, y = 0, z = 0;
++                    bool operator==(const VoxelKey& o) const
++                    {
++                        return x == o.x && y == o.y && z == o.z;
++                    }
++                };
++                struct VoxelHash
++                {
++                    size_t operator()(const VoxelKey& k) const
++                    {
++                        size_t h = std::hash<int>{}(k.x);
++                        h ^= std::hash<int>{}(k.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
++                        h ^= std::hash<int>{}(k.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
++                        return h;
++                    }
++                };
++
++                std::unordered_set<VoxelKey, VoxelHash> occupied;
++                auto output = mrpt::maps::CSimplePointsMap::Create();
++                output->reserve(input->size());
++
++                const auto& xs = input->getPointsBufferRef_x();
++                const auto& ys = input->getPointsBufferRef_y();
++                for (size_t k = 0; k < input->size(); k++)
++                {
++                    if (params_.registration_remove_ground &&
++                        zs[k] <= groundZ + params_.registration_ground_band)
++                    {
++                        continue;
++                    }
++                    if (params_.registration_voxel_size > 0)
++                    {
++                        const double v = params_.registration_voxel_size;
++                        const VoxelKey key{
++                            static_cast<int>(std::floor(xs[k] / v)),
++                            static_cast<int>(std::floor(ys[k] / v)),
++                            static_cast<int>(std::floor(zs[k] / v))};
++                        if (!occupied.insert(key).second)
++                        {
++                            continue;
++                        }
++                    }
++                    output->insertPointFast(xs[k], ys[k], zs[k]);
++                }
++
++                submap->layers[params_.kiss_matcher_layer] = output;
++                MRPT_LOG_INFO_STREAM(
++                    "Prepared non-ground registration cloud for frame " << centerId
++                    << ": ground_z=" << groundZ << " m, points " << input->size() << " -> "
++                    << output->size());
++            }
++        }
++    }
++    submap->id = static_cast<uint64_t>(centerId);
++    MRPT_LOG_INFO_STREAM(
++        "Built loop submap centered at frame " << centerId << " from " << merged
++                                                << " keyframes [" << first << ", " << last
++                                                << "]");
++    return submap;
++}
+ void FrameToFrameLoopClosure::evict_pc_cache()
+ {
+     while (state_.pcCacheTotalBytes > params_.pc_cache_max_bytes && !state_.pcLruOrder.empty())
+@@ -2048,4 +2567,4 @@ void FrameToFrameLoopClosure::save_trajectory_as_tum(
+     lc_common::save_trajectory_as_tum(
+         filename, *state_.sm, [this](size_t id) { return state_.get_pose(id); },
+         saveCovariancesToo ? &covOf : nullptr, const_cast<FrameToFrameLoopClosure*>(this));
+-}
+\ No newline at end of file
++}
+diff --git a/pipelines/loop-closure-f2f-lidar3d-gicp.yaml b/pipelines/loop-closure-f2f-lidar3d-gicp.yaml
+index c375b5f..bfef09d 100644
+--- a/pipelines/loop-closure-f2f-lidar3d-gicp.yaml
++++ b/pipelines/loop-closure-f2f-lidar3d-gicp.yaml
+@@ -22,6 +22,7 @@ params:
+   max_distance_for_lc_candidate: "${MAX_LC_DISTANCE|50.0}" # [m] Max distance to consider
+   max_lc_candidates: "${MAX_LC_CANDIDATES|20}" # Maximum candidates per iteration
+   min_frames_between_lc: "${MIN_FRAMES_BETWEEN_LC|20}" # Minimum frame index separation
++  candidate_frame_stride: "${LC_FRAME_STRIDE|1}" # Compare every Nth frame; 1 checks all frames
+   max_lc_optimization_rounds: "${MAX_LC_OPTIMIZATION_ROUNDS|5}" # Maximum LC+optimization rounds to run
+   lc_optimize_every_n: "${LC_OPTIMIZE_EVERY_N|5}" # Re-optimize after N accepted LCs (0=disable, closes inner loops first)
+ 
+@@ -55,8 +56,8 @@ params:
+ 
+   # ===== Output and Profiling =====
+   profiler_enabled: true
+-  save_trajectory_files: true
+-  save_trajectory_files_with_cov: true
++  save_trajectory_files: "${SAVE_TRAJECTORY_FILES|false}"
++  save_trajectory_files_with_cov: "${SAVE_TRAJECTORY_FILES_WITH_COV|false}"
+   debug_files_prefix: "f2f_lc_"
+   min_icp_goodness_to_save_icplog: ${MIN_ICP_QUALITY_TO_SAVE_ICPLOG|0.50}
+ 
+@@ -90,6 +91,21 @@ params:
+   use_kiss_matcher: "${USE_KISS_MATCHER|false}"
+   kiss_matcher_resolution: "${KISS_MATCHER_RESOLUTION|1.0}" # [m] voxel size for feature extraction
+   kiss_matcher_layer: "${KISS_MATCHER_LAYER|points_to_register_points}" # metric-map layer to feed KISS-Matcher
++  loop_submap_half_window: "${LC_SUBMAP_HALF_WINDOW|0}" # 0=single frame; 5=±5 keyframes
++  loop_submap_half_length_m: "${LC_SUBMAP_HALF_LENGTH_M|7.5}"
++  manual_hypothesis_min_inliers: "${MANUAL_HYPOTHESIS_MIN_INLIERS|1}"
++  manual_hypothesis_max_translation_spread: "${MANUAL_HYPOTHESIS_MAX_TRANSLATION_SPREAD|2.5}"
++  manual_hypothesis_max_rotation_spread_deg: "${MANUAL_HYPOTHESIS_MAX_ROTATION_SPREAD_DEG|5.0}"
++  scan_context_endpoint_search: "${SCAN_CONTEXT_ENDPOINT_SEARCH|false}"
++  scan_context_start_window_percent: "${SCAN_CONTEXT_START_WINDOW_PERCENT|5.0}"
++  scan_context_end_window_percent: "${SCAN_CONTEXT_END_WINDOW_PERCENT|15.0}"
++  scan_context_num_rings: "${SCAN_CONTEXT_NUM_RINGS|20}"
++  scan_context_num_sectors: "${SCAN_CONTEXT_NUM_SECTORS|60}"
++  scan_context_max_radius: "${SCAN_CONTEXT_MAX_RADIUS|80.0}"
++  scan_context_ringkey_candidates: "${SCAN_CONTEXT_RINGKEY_CANDIDATES|20}"
++  scan_context_max_hypotheses: "${SCAN_CONTEXT_MAX_HYPOTHESES|12}"
++  scan_context_pairs_per_hypothesis: "${SCAN_CONTEXT_PAIRS_PER_HYPOTHESIS|3}"
++  scan_context_pair_frame_stride: "${SCAN_CONTEXT_PAIR_FRAME_STRIDE|6}"
+ 
+   # ===== Planar World Annealing =====
+   # When enabled, a planarity constraint (z≈0, roll≈0, pitch≈0) is added for
+diff --git a/pipelines/loop-closure-lidar3d-gicp.yaml b/pipelines/loop-closure-lidar3d-gicp.yaml
+index 1e99ef6..fd189b2 100644
+--- a/pipelines/loop-closure-lidar3d-gicp.yaml
++++ b/pipelines/loop-closure-lidar3d-gicp.yaml
+@@ -40,14 +40,14 @@ params:
+   gnss_max_uncertainty_vert: ${LC_GNSS_MAX_UNCERTAINTY_VERT|40.0} # [m] Reject reading if vertical uncertainty > this
+ 
+   # IMU-derived gravity-alignment factors (added in stage 1, alongside GNSS).
+-  use_imu_gravity: true
++  use_imu_gravity: "${USE_IMU_GRAVITY|true}"
+   imu_gravity_sigma_deg: 3.0
+ 
+   # Sigmas for the submap-graph odometry edges used in Dijkstra candidate search.
+   # Defaults match the legacy hard-coded values [m, m, m, rad, rad, rad].
+   # submap_graph_edge_sigmas: [0.10, 0.10, 0.15, 0.01745, 0.02618, 0.01745]
+ 
+-  assume_planar_world: false
++  assume_planar_world: "${ASSUME_PLANAR_WORLD|false}"
+   # Planar-world annealing (opt-in): soft z/roll/pitch constraints that decay over LC rounds.
+   # Only active when assume_planar_world: true. Set planar_world_hard_flatten: true to use
+   # the legacy hard-flattening behaviour instead.

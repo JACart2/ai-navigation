@@ -1,119 +1,77 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, TimerAction, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
-from ament_index_python.packages import get_package_share_directory 
-import os
-import launch_ros
-import launch_ros.actions
-import launch_ros.events
 
 
 def generate_launch_description():
+    default_cart = os.environ.get("CART_ID", "james").strip().lower()
+    if default_cart not in {"james", "madison"}:
+        default_cart = "james"
 
-    console_start_delay_s = LaunchConfiguration("console_start_delay_s")
-    cart_config_path = LaunchConfiguration("cart_config_path")
-
-    declare_console_start_delay_s = DeclareLaunchArgument(
-        "console_start_delay_s",
-        default_value="5.0",
-        description="Delay (seconds) before launching the rest of the stack, to let swri_console start first.",
-    )
-    declare_cart_config_path = DeclareLaunchArgument(
-        "cart_config_path",
-        default_value=os.path.join(
-            get_package_share_directory("cart_launch"), "config", "cart_james.yaml"
-        ),
-        description="Path to cart-specific YAML config (must contain zed_front_serial and zed_rear_serial)",
-    )
-    declare_enable_aad = DeclareLaunchArgument(
-        "enable_aad",
-        default_value="true",
-        description="Enable anomaly logging",
+    mola_autonomy_launch = os.path.join(
+        get_package_share_directory("cart_launch"),
+        "launch",
+        "mola_autonomy.launch.py",
     )
 
-    swri_console_node = Node(
-        package="swri_console",
-        executable="swri_console",
-        name="swri_console",
-        output="screen",
-    )
-
-    # Launch the localization launcher
-    localization_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [
-                FindPackageShare("localization_launch"),
-                "/launch/localization_full_launcher.launch.py",
-            ]
-        ),
-        launch_arguments={
-            "cart_config_path": cart_config_path,
-        }.items(),
-    )
-
-    # Launch the navigation launcher
-    navigation_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [FindPackageShare("navigation"), "/launch/navigation.launch.py"]
-        ),
-        launch_arguments={
-            "enable_aad": LaunchConfiguration("enable_aad"),
-        }.items(),
-    )
-
-    # Launch the motor control launcher
-    motor_control_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [FindPackageShare("motor_control"), "/launch/motor.launch.py"]
-        ),
-        launch_arguments={
-            "enable_aad": LaunchConfiguration("enable_aad"),
-        }.items(),
-    )
-
-    # Execute the RViz2 command with the specified configuration file
-    rviz2_command = ExecuteProcess(
-        cmd=[
-            "rviz2",
-            "-d",
-            os.path.join(
-                get_package_share_directory("cart_launch"), "rviz", "localization.rviz"
-            ),
-        ],
-        shell=True,
-    )
-
-    #start rosbridge
-    rosbridge_node = Node(
-        package='rosbridge_server',
-        executable='rosbridge_websocket',
-        name='rosbridge_websocket_server',
-        output='screen',
-        parameters=[],
-    )
-
-    delayed_stack = TimerAction(
-        period=console_start_delay_s,
-        actions=[
-            localization_launch,
-            navigation_launch,
-            motor_control_launch,
-            rviz2_command,
-            rosbridge_node,
-        ],
-    )
-
-    # Combine all the above components into a single launch description
     return LaunchDescription(
         [
-            SetEnvironmentVariable("FASTDDS_BUILTIN_TRANSPORTS", "UDPv4"),
-            declare_console_start_delay_s,
-            declare_cart_config_path,
-            declare_enable_aad,
-            swri_console_node,
-            delayed_stack,
+            DeclareLaunchArgument(
+                "cart",
+                default_value=default_cart,
+                description="Cart-specific sensor configuration: james or madison.",
+            ),
+            DeclareLaunchArgument(
+                "cart_config_path",
+                default_value=os.path.join(
+                    get_package_share_directory("cart_launch"),
+                    "config",
+                    f"cart_{default_cart}.yaml",
+                ),
+                description="Path to cart-specific YAML configuration.",
+            ),
+            DeclareLaunchArgument(
+                "enable_aad",
+                default_value="true",
+                description="Enable anomaly logging.",
+            ),
+            DeclareLaunchArgument(
+                "enable_aad_camera_capture",
+                default_value="true",
+                description=(
+                    "Optionally subscribe to raw cameras for bounded AAD "
+                    "stop-event context."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "start_cameras",
+                default_value="true",
+                description="Optionally start the front and rear ZED camera nodes.",
+            ),
+            DeclareLaunchArgument(
+                "launch_aad_node",
+                default_value="false",
+                description=(
+                    "Launch anomaly detection in this container. Leave false when "
+                    "using the dedicated anomaly_detection compose service."
+                ),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(mola_autonomy_launch),
+                launch_arguments={
+                    "cart": LaunchConfiguration("cart"),
+                    "cart_config_path": LaunchConfiguration("cart_config_path"),
+                    "enable_aad": LaunchConfiguration("enable_aad"),
+                    "enable_aad_camera_capture": LaunchConfiguration(
+                        "enable_aad_camera_capture"
+                    ),
+                    "start_cameras": LaunchConfiguration("start_cameras"),
+                    "launch_aad_node": LaunchConfiguration("launch_aad_node"),
+                }.items(),
+            ),
         ]
     )

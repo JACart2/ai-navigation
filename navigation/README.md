@@ -71,7 +71,7 @@ Subscribes to:
 - /vehicle_state [VehicleState](../navigation_interface/msg/VehicleState.msg)
 - /clicked_point [PointStamped](https://docs.ros.org/en/lunar/api/geometry_msgs/html/msg/PointStamped.html)
 - /gps_request [LatLongPoint](../navigation_interface/msg/LatLongPoint.msg)
-- /estimated_vel_mps Float32
+- /estimated_vel_mps Float32 (m/s)
 
 
 Publishes to: 
@@ -83,13 +83,13 @@ Publishes to:
 #### Local Planner
 Subscribes to:
 - /global_path [LocalPointsArray](../navigation_interface/msg/LocalPointsArray.msg)
-- /estimate_twist [TwistStamped]
+- /estimate_twist [TwistStamped] (linear velocity in m/s)
 - /ndt_pose [PoseStamped]
-- /estimated_vel_mps Float32
+- /estimated_vel_mps Float32 (m/s)
 - /stop [Stop]
-- /speed Float32
+- /speed Float32 (target speed in m/s)
 
 Publishes to: 
 - /vehicle_state [VehicleState](../navigation_interface/msg/VehicleState.msg)
-- /nav_cmd [VelAngle]
+- /nav_cmd [VelAngle] (`vel` in m/s)
 - ...todo

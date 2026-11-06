@@ -8,6 +8,7 @@ Authors: Martin Nester
 # ROS based imports
 import tf2_geometry_msgs  #  Import is needed, even though not used explicitly
 import rclpy
+import rclpy.qos
 from navigation_interface.msg import LocalPointsArray
 from visualization_msgs.msg import MarkerArray, Marker
 
@@ -17,7 +18,15 @@ class DisplayGlobalPath(rclpy.node.Node):
     def __init__(self):
         super().__init__("display_global_path")
 
-        self.rviz_path_pub = self.create_publisher(MarkerArray, "/visual_path", 10)
+        latching_qos = rclpy.qos.QoSProfile(
+            depth=1,
+            durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.rviz_path_pub = self.create_publisher(
+            MarkerArray,
+            "/visual_path",
+            qos_profile=latching_qos,
+        )
 
         # ROS2 subscribers
         self.path_sub = self.create_subscription(

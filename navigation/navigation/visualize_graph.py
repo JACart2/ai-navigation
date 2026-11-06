@@ -27,15 +27,18 @@ class GraphVisual(rclpy.node.Node):
             "graph_dir",
             "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
-        self.declare_parameter("graph_file", "main_shift3.gml")
-        self.declare_parameter("graph_coordinate_format", "ros")
+        self.declare_parameter(
+            "graph_file",
+            "main_shift3_gps_final_candidate_v8.gml",
+        )
+        self.declare_parameter("graph_coordinate_format", "gps")
         self.declare_parameter(
             "calibration_config_dir",
-            "/maps",
+            "/root/dev_ws/src/ai-navigation/navigation/maps",
         )
         self.declare_parameter(
             "calibration_config_file",
-            "SpeedBoiMap.yaml",
+            "with_gps2_route_calibration.yaml",
         )
 
         latching_qos = rclpy.qos.QoSProfile(

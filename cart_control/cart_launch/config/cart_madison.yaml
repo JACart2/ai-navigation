@@ -1,2 +1,5 @@
 zed_front_serial: 38667373
 zed_rear_serial: 34733362
+
+zed_front_flip: false
+zed_rear_flip: true
